@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@448e783d00c1">
+<meta name="dos-source" content="docs/reference/skills.md@84395e90d064">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -311,6 +311,17 @@ vault (active or superseded notes of the slug it does not link, links to notes t
 summary or status that no longer fits). A drifted code fact is usually replaced by a link to the
 repository doc, since the hub keeps only what outlives the repository. A claim it cannot check is
 listed as unchecked, not changed.</p>
+    <h3 id="brain-import-memory">brain-import-memory</h3>
+    <p><a href="../../skills/brain-import-memory.html">Source</a>. Finds the current repository's
+auto-memory folder (<code>&lt;config&gt;/projects/&lt;path with every non-alphanumeric character as -&gt;/memory/</code>,
+or <code>autoMemoryDirectory</code> from <code>settings.json</code>), or asks which project when it is missing. Reads every
+topic file, searches the vault for each one and labels it: <code>new</code> (an inbox note in brain-capture's
+format; files on one topic make one note), <code>add</code> (sentences for an existing note, as a diff),
+<code>preference</code> (a line for the user-level <code>CLAUDE.md</code>), <code>project-rule</code> (a line for the repository's
+instruction file), <code>covered</code> or <code>skip</code> (with the reason). A file that contradicts a note shows both
+claims; the newer, better-evidenced one is proposed, otherwise the note stays. Secrets, account IDs,
+IP addresses and private contact details are redacted. Applies only the numbers the user names,
+never touches the memory files, and ends by offering <code>autoMemoryEnabled: false</code>.</p>
     <h2 id="conventions">Conventions</h2>
     <p>The model loads these when the file or task matches; they write nothing. Each rule is what the
 agent follows when it writes code and what project-init probes for when it audits a repository.</p>

@@ -46,13 +46,13 @@ In Done, write each check that ran as `<command>: <result> at <short SHA>`, the 
 
 At most 3 items per heading; omit empty headings.
 
-Label every candidate `persistent` (true in the next task) or `this-task` (a temporary path, a limit of this task, a one-off workaround). Only `persistent` items go to the vault, auto-memory or instruction files; a `this-task` item goes at most to the plan.
+Label every candidate `persistent` (true in the next task) or `this-task` (a temporary path, a limit of this task, a one-off workaround). Only `persistent` items go to the vault or instruction files; a `this-task` item goes at most to the plan.
 
 Route each item by this table:
 
 | What | Where |
 |---|---|
-| user preferences and style corrections | auto-memory or `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md` |
+| user preferences and style corrections | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md` (never auto memory, D24) |
 | lessons and decisions that apply beyond this project | vault, via brain-capture |
 | facts about this project (commands, stack, conventions) | the project's `AGENTS.md`/`CLAUDE.md` or an ADR |
 
@@ -66,7 +66,7 @@ Route each item by this table:
 
 ## 5. Apply
 
-Ask which items to apply, by number. Apply only those: lessons through brain-capture, rule and plan changes as a shown diff, auto-memory as one fact per file. When the destination repository keeps a rules history (in developer-os, the Rules history table in `docs/product/decisions.md`), add one row for each approved rule change: `date | change | target | reason`.
+Ask which items to apply, by number. Apply only those: lessons through brain-capture, rule, preference and plan changes as a shown diff. When the destination repository keeps a rules history (in developer-os, the Rules history table in `docs/product/decisions.md`), add one row for each approved rule change: `date | change | target | reason`.
 
 ## Stop point
 

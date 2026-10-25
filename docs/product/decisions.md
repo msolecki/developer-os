@@ -279,6 +279,24 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   items); `--dangerously-skip-permissions` (rejected for the reason above); `nohup` alone (the lane
   stays in the harness's process group, which kills background jobs after about 29 minutes).
 
+## D24. The vault is the one long-term store; auto memory is off by recommendation
+
+- **Date:** 2026-10-26
+- **Decision:** developer-os recommends `"autoMemoryEnabled": false` in the user's `settings.json`.
+  brain-setup offers it as a separate yes/no; session-retro no longer routes anything to auto memory
+  (user preferences go to the user-level `CLAUDE.md`); the brain-import-memory skill moves an existing
+  auto-memory folder into the vault item by item (new inbox notes, additions to notes the user names,
+  preference and project-rule lines) and never edits or deletes the memory files.
+- **Why:** auto memory is a second store per project and machine that the agent writes without
+  review, with its index loaded into every session. It duplicated vault notes and drifted from them,
+  could not be searched across projects or read by other agents, and bypassed the approval step D4
+  puts on vault knowledge. On the author's machine it held more than 500 files across 20 projects
+  when this was decided.
+- **Alternatives:** keeping both stores with a routing table (the 0.2 behaviour; facts still landed in
+  both); pointing `autoMemoryDirectory` at the vault (one shared folder for every project, written
+  without review, outside the vault's note format); copying all memory files into `_inbox/` in one go
+  (skips brain-capture's gate and floods the inbox).
+
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change
@@ -302,3 +320,5 @@ here before reversing a rule.
 | 2026-10-16 | The hook input-normalization rule moves to defensive-coding-conventions and the TypeScript `strict` rule to typescript-conventions; a lesson goes to the vault when other projects can use it | `core.md`, `defensive-coding-conventions`, `typescript-conventions` | core.md had 48 bytes left and held two stack-specific rules it says belong in skills; "project history" sent repository facts to the vault, against brain-capture and session-retro |
 | 2026-10-20 | docs-sync writes `Reason not recorded` for a decision whose reason is in neither history nor docs, and reports conflicting decision records as drift before a broad change; ADRs gain Status and Revisit when | `docs-sync` | An agent reconstructing a rationale from the code records a guess as a decision (flaviocopes.com/project-decisions) |
 | 2026-10-20 | A regression test is seen red before the fix; the boundary that could be wrong is not faked; failure messages show the missing record or response, and retries never hide a flaky test | `testing-conventions` | A test seen only green, a fake database or a raised retry count each lets a fix ship unverified (flaviocopes.com/fast-tests-for-agents) |
+| 2026-10-26 | User preferences route to the user-level `CLAUDE.md` only; auto memory is no longer a destination | `session-retro` | D24: the vault and instruction files are the only long-term stores |
+| 2026-10-26 | brain-setup offers `"autoMemoryEnabled": false` as a separate yes/no and points to brain-import-memory when memory files exist | `brain-setup` | D24 |

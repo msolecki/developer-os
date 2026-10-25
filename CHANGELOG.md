@@ -4,6 +4,25 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-26
+
+### Added
+- brain-import-memory moves one project's Claude Code auto memory into the vault: it reads every
+  topic file, checks it against the vault and proposes, by number, a new inbox note, an addition to
+  an existing note, a line for the user-level `CLAUDE.md`, a line for the project's instruction file,
+  or a skip with its reason. Conflicts with a note show both claims. It applies only the numbers you
+  name, never edits or deletes a memory file, and ends by offering `"autoMemoryEnabled": false`.
+  New eval case `brain-import-memory-no-apply`. Decision D24.
+- docs/workflow.md has a Recommended configuration section: the user-level `settings.json` and
+  `CLAUDE.md`, the project files, and how to turn auto memory off for one project or everywhere.
+
+### Changed
+- The vault is the one long-term store (D24). brain-setup asks, as a separate yes/no, whether to set
+  `"autoMemoryEnabled": false`, and points to brain-import-memory when auto-memory files exist.
+- session-retro no longer routes anything to auto memory: user preferences go to the user-level
+  `CLAUDE.md` as a shown diff.
+- The Vault paragraph stage of `scripts/check.sh` also covers brain-import-memory.
+
 ## [0.2.5] - 2026-10-25
 
 ### Added

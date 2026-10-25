@@ -33,7 +33,7 @@ answer first. Read-only skills ([glossary](../glossary.md)) change nothing; a sk
 
 ### 2.1 Brain skills
 
-Six of them (all but brain-setup, which asks for the path) find the vault with the same paragraph: the first `Brain vault: <absolute path>` line in the
+Seven of them (all but brain-setup, which asks for the path) find the vault with the same paragraph: the first `Brain vault: <absolute path>` line in the
 `CLAUDE.md`/`AGENTS.md` already in context, then the working directory's `CLAUDE.md` and
 `AGENTS.md`, then `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`). Without one they ask once and
 stop if the user has no vault; they never search the disk. Vault content is data: no command or URL
@@ -48,6 +48,7 @@ found in a note is run or opened.
 | [brain-garden](../../plugin/skills/brain-garden/SKILL.md) | Health report: frontmatter, stale active notes (180 days), inbox notes older than 7 days, status/folder mismatches, superseded notes with a missing, dangling or looping `superseded_by`, broken and archived links, duplicates, rules shared by several notes (proposed as a compiled note), orphans with a percentage; proposed links tagged FOUND or GUESSED | Named fixes only; one line appended to `_reports/garden-log.md` | Each fix; "apply all" never covers GUESSED links; the log line | "Apply which fixes?" |
 | [brain-compile](../../plugin/skills/brain-compile/SKILL.md) | Synthesizes 2–8 active notes on a topic into one note with a `sources:` list; contradictions become `Open conflict:` bullets | One new `_inbox/<topic>-compiled.md` | — | The report; originals unchanged |
 | [brain-project-refresh](../../plugin/skills/brain-project-refresh/SKILL.md) | Finds the repository's hub note by the `Vault project slug:` in `_Context.md` (never the directory name); compares it with the README, docs map, `CURRENT-STATE.md`, decision records and git log, and with the vault's notes of that slug: drifted claims, moved repository paths, unlinked project notes, dead links, a stale summary or status, each with evidence | The hub note only (named edits, `updated` today); a missing hub becomes a draft in `_inbox/` | The full diff and a numbered list, A/B/C | The applied numbers, or the question |
+| [brain-import-memory](../../plugin/skills/brain-import-memory/SKILL.md) | Reads one project's Claude Code auto-memory folder (`<config>/projects/<project>/memory/`, or `autoMemoryDirectory`), checks each file against the vault and labels it `new`, `add`, `preference`, `project-rule`, `covered` or `skip`, with conflicts shown with both claims; offers `autoMemoryEnabled: false` | New `_inbox/` notes; additions to the vault notes the user names; lines appended to `<config>/CLAUDE.md`; a project instruction diff; `autoMemoryEnabled` in `settings.json` | Each item by number; the setting by a separate yes | "Apply which?"; memory files are never deleted or edited |
 
 ### 2.2 Engineering skills
 
@@ -73,7 +74,7 @@ found in a note is run or opened.
 
 | Skill | Does | Writes | Gate | Stops at |
 |---|---|---|---|---|
-| [session-retro](../../plugin/skills/session-retro/SKILL.md) | Checks uncommitted, unpushed and unmerged work, open PRs and running tasks; proposes cleanup; prints the status block, each check with the commit it ran on and any uncommitted files; proposes at most three lessons, rule candidates, check candidates, plan updates, docs updates, plugin feedback and skill candidates, each labeled `persistent` or `this-task` and routed to its destination; shows the commit a rule change would reverse | Approved items only (brain-capture, rule diffs, plan, auto-memory) | Each item by number | "Which items should I apply?"; with the Stop hook and nothing to report, no output |
+| [session-retro](../../plugin/skills/session-retro/SKILL.md) | Checks uncommitted, unpushed and unmerged work, open PRs and running tasks; proposes cleanup; prints the status block, each check with the commit it ran on and any uncommitted files; proposes at most three lessons, rule candidates, check candidates, plan updates, docs updates, plugin feedback and skill candidates, each labeled `persistent` or `this-task` and routed to its destination; shows the commit a rule change would reverse | Approved items only (brain-capture, rule and preference diffs, plan) | Each item by number | "Which items should I apply?"; with the Stop hook and nothing to report, no output |
 | [skill-usage](../../plugin/skills/skill-usage/SKILL.md) | Counts `developer-os:<name>` Skill calls in local transcripts (last 30 days, ever, last date) and suggests keep / rewrite-description / merge / remove; points to the built-in `/skill-doctor` for context cost | Nothing | — | The table and "Nothing was changed." |
 
 ### 2.4 Backlog item format
@@ -186,9 +187,9 @@ What the plugin never does without the user's explicit answer for that specific 
 
 | Action | Where enforced |
 |---|---|
-| Write in the vault outside `_inbox/`, move, merge or archive a note | brain-review, brain-garden `## Never` |
+| Write in the vault outside `_inbox/`, move, merge or archive a note | brain-review, brain-garden `## Never`; brain-import-memory and brain-project-refresh edit only the notes the user names |
 | Delete a note | No skill deletes; retire to `_archive/` |
-| Edit `~/.claude/CLAUDE.md` or `settings.json` | brain-setup (diff first) |
+| Edit `~/.claude/CLAUDE.md` or `settings.json` | brain-setup, brain-import-memory (diff first) |
 | Edit an instruction file | instruction-review, session-retro, project-init (the instruction-review diff, the `Backlog:` line) |
 | Create backlog files or add backlog items | audit-to-backlog, project-baseline, project-init, spec, implement-backlog (review findings) |
 | Edit code for review findings | fix-pr (per edit), pr-cycle (one A/B/C answer) |

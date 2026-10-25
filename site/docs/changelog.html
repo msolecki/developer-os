@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@2922c4c64e6c">
+<meta name="dos-source" content="CHANGELOG.md@0a1ac0f0e2c8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -49,6 +49,26 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h2 id="030---2026-10-26">[0.3.0] - 2026-10-26</h2>
+    <h3 id="030-added">Added</h3>
+    <ul>
+<li>brain-import-memory moves one project's Claude Code auto memory into the vault: it reads every
+topic file, checks it against the vault and proposes, by number, a new inbox note, an addition to
+an existing note, a line for the user-level <code>CLAUDE.md</code>, a line for the project's instruction file,
+or a skip with its reason. Conflicts with a note show both claims. It applies only the numbers you
+name, never edits or deletes a memory file, and ends by offering <code>"autoMemoryEnabled": false</code>.
+New eval case <code>brain-import-memory-no-apply</code>. Decision D24.</li>
+<li>docs/workflow.md has a Recommended configuration section: the user-level <code>settings.json</code> and
+<code>CLAUDE.md</code>, the project files, and how to turn auto memory off for one project or everywhere.</li>
+    </ul>
+    <h3 id="030-changed">Changed</h3>
+    <ul>
+<li>The vault is the one long-term store (D24). brain-setup asks, as a separate yes/no, whether to set
+<code>"autoMemoryEnabled": false</code>, and points to brain-import-memory when auto-memory files exist.</li>
+<li>session-retro no longer routes anything to auto memory: user preferences go to the user-level
+<code>CLAUDE.md</code> as a shown diff.</li>
+<li>The Vault paragraph stage of <code>scripts/check.sh</code> also covers brain-import-memory.</li>
+    </ul>
     <h2 id="025---2026-10-25">[0.2.5] - 2026-10-25</h2>
     <h3 id="025-added">Added</h3>
     <ul>

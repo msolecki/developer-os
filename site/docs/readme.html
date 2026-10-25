@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@7c335dbd7f25">
+<meta name="dos-source" content="README.md@f5d84931f79c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -59,7 +59,7 @@ nothing to install beyond <code>python3</code>.</p>
     <p>The marketplace serves <code>main</code>, which moves only on a release; <code>claude plugin update
 developer-os@developer-os</code> installs the next one. Releases are listed in <a href="changelog.html">CHANGELOG.md</a>.
 Auto-update is off for this marketplace unless you turn it on under <code>/plugin</code> → Marketplaces. To hold
-one release, add the marketplace at its tag: <code>/plugin marketplace add msolecki/developer-os#v0.2.5</code>.</p>
+one release, add the marketplace at its tag: <code>/plugin marketplace add msolecki/developer-os#v0.3.0</code>.</p>
     <h2 id="requirements">Requirements</h2>
     <ul>
 <li>Claude Code on macOS or Linux, with Python 3.8+ on <code>PATH</code> for the hooks.</li>
@@ -75,7 +75,12 @@ engineering skills work without one.</li>
 approve. The two edits are one line in <code>~/.claude/CLAUDE.md</code>:</p>
     <pre><code>Brain vault: /absolute/path/to/your/vault</code></pre>
     <p>and the vault path in <code>permissions.additionalDirectories</code> in <code>~/.claude/settings.json</code>, so Claude Code
-may read and write it from any project. Then open the vault folder in Obsidian (&ldquo;Open folder as
+may read and write it from any project. It also asks, separately, whether to set
+<code>"autoMemoryEnabled": false</code>: recommended, because Claude Code's auto memory is a second, unreviewed
+store per project that drifts from the vault. If you already have auto memory, run the
+<code>brain-import-memory</code> skill in each project to move it into the vault; the memory files are not
+touched. The full recommended configuration is in
+<a href="workflow.html#recommended-configuration">docs/workflow.md</a>. Then open the vault folder in Obsidian (&ldquo;Open folder as
 vault&rdquo;) and enable the <strong>Bases</strong> and <strong>Templates</strong> core plugins, with <code>templates</code> as the Templates
 folder.</p>
     <p>For project repositories, start from the files in <a href="https://github.com/msolecki/developer-os/tree/development/templates/project"><code>templates/project/</code></a>. The
@@ -123,7 +128,8 @@ without it the core rules still load and the other hooks do not run.</p>
     <h2 id="whats-inside">What's inside</h2>
     <ul>
 <li><strong>Brain skills:</strong> brain-setup, brain-search, brain-capture, brain-review, brain-garden,
-brain-compile, brain-project-refresh (bring the repository's project hub note up to date). They read and write the vault with the agent's own file tools.</li>
+brain-compile, brain-project-refresh (bring the repository's project hub note up to date),
+brain-import-memory (move a project's Claude Code auto memory into the vault, item by item). They read and write the vault with the agent's own file tools.</li>
 <li><strong>Engineering skills:</strong> code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
 bug-triage, deploy-checklist, instruction-review (add <code>--prune</code> for a periodic cut), plan-status,
 client-reply, docs-sync, project-baseline, project-init (adopt developer-os in a repository in one

@@ -1,6 +1,6 @@
 ---
 name: brain-setup
-description: Create the user's Obsidian knowledge vault from the developer-os template, or connect an existing vault by adding only the missing pieces, then point Claude Code at it (`Brain vault:` line and `permissions.additionalDirectories`) after the user approves the diff. Use when the user sets up developer-os, has no `Brain vault:` line yet, or says "set up the vault", "create a vault", "connect my vault", "setup brain".
+description: Create the user's Obsidian knowledge vault from the developer-os template, or connect an existing vault by adding only the missing pieces, then point Claude Code at it (`Brain vault:` line and `permissions.additionalDirectories`, optionally auto memory off) after the user approves the diff. Use when the user sets up developer-os, has no `Brain vault:` line yet, or says "set up the vault", "create a vault", "connect my vault", "setup brain".
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -43,16 +43,17 @@ fi
 
 ## 3. Point Claude Code at the vault
 
-Show both edits as a diff and apply them only after the user approves:
+Show the edits as a diff and apply them only after the user approves:
 
 - `$C/CLAUDE.md`: append `Brain vault: <V>` (skip if the line is already there).
 - `$C/settings.json`: add `<V>` to `permissions.additionalDirectories` (skip if present).
+- Recommended, asked as a separate yes/no: `$C/settings.json`: `"autoMemoryEnabled": false` (skip if already `false`). Say why in one line: Claude Code's auto memory keeps a second, unreviewed store per project and machine, and developer-os keeps long-term knowledge in the vault (D24). Ask it before building the preview and set `AM=true` on a yes, `AM=false` on a no (or when it is already `false`); if the answer changes after the preview, build the preview again before applying.
 
 Bash calls do not keep variables: set `C`, `S` and `V` at the top of each call. Preview:
 
 ```bash
-C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; S="$C/settings.json"; V="/abs/path/to/vault"
-{ cat "$S" 2>/dev/null || echo '{}'; } | jq --arg p "$V" '.permissions.additionalDirectories //= [] | if any(.permissions.additionalDirectories[]; . == $p) then . else .permissions.additionalDirectories += [$p] end' > "$S.brain-setup" && diff -N "$S" "$S.brain-setup"
+C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; S="$C/settings.json"; V="/abs/path/to/vault"; AM=true
+{ cat "$S" 2>/dev/null || echo '{}'; } | jq --arg p "$V" --argjson am "$AM" '.permissions.additionalDirectories //= [] | if any(.permissions.additionalDirectories[]; . == $p) then . else .permissions.additionalDirectories += [$p] end | if $am then .autoMemoryEnabled = false else . end' > "$S.brain-setup" && diff -N "$S" "$S.brain-setup"
 ```
 
 After approval, in a new call:
@@ -70,11 +71,11 @@ If `jq` is missing or `settings.json` is not valid JSON, remove `$S.brain-setup`
 
 ## 4. Smoke test
 
-Run the `developer-os:brain-search` skill and give it the vault path `<V>` explicitly (the line just written is not in this session's context): in a new vault search for "webhooks" (it must find `_inbox/process-webhooks-once-per-event-id.md`); in a connected vault search for the topic of one existing note. Then tell the user to open the vault in Obsidian and enable the **Bases** and **Templates** core plugins, with `templates` as the Templates folder. Tell them too that vault upkeep does not run on its own: they run brain-review weekly and brain-garden monthly, and a one-line notice at the start of a new session reminds them when either is due (`DEVELOPER_OS_NOTICES=off` turns it off).
+Run the `developer-os:brain-search` skill and give it the vault path `<V>` explicitly (the line just written is not in this session's context): in a new vault search for "webhooks" (it must find `_inbox/process-webhooks-once-per-event-id.md`); in a connected vault search for the topic of one existing note. Then tell the user to open the vault in Obsidian and enable the **Bases** and **Templates** core plugins, with `templates` as the Templates folder. If `"$C"/projects/*/memory/` (or a configured `autoMemoryDirectory`) holds `.md` files, give the count per project and offer the `developer-os:brain-import-memory` skill to move them into the vault; turning auto memory off does not delete them. Tell them too that vault upkeep does not run on its own: they run brain-review weekly and brain-garden monthly, and a one-line notice at the start of a new session reminds them when either is due (`DEVELOPER_OS_NOTICES=off` turns it off).
 
 ## Stop point
 
-Stop after the smoke test. Report the mode, the vault path, what was created or appended, which config edits were applied or declined, the old vault path still in `permissions.additionalDirectories` (if the path changed; the user removes it by hand), the smoke-test result, and the upkeep cadence.
+Stop after the smoke test. Report the mode, the vault path, what was created or appended, which config edits were applied or declined (auto memory on or off), the old vault path still in `permissions.additionalDirectories` (if the path changed; the user removes it by hand), the smoke-test result, and the upkeep cadence.
 
 ## Never
 

@@ -23,6 +23,7 @@ skill audit-to-backlog
 skill brain-capture
 skill brain-compile
 skill brain-garden
+skill brain-import-memory
 skill brain-project-refresh
 skill brain-review
 skill brain-search

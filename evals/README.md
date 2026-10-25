@@ -5,7 +5,7 @@ Each case starts a real agent session in a scratch workspace, once with the plug
 (the baseline arm), and grades what the agent did. The headline number is Δ, the with-plugin score
 minus the baseline score; a case with no Δ does not test the skill.
 
-**Cost:** every run spends your plan usage (47 cases × 3 runs × 2 arms = 282 agent sessions, plus judge
+**Cost:** every run spends your plan usage (48 cases × 3 runs × 2 arms = 288 agent sessions, plus judge
 calls). Run it by hand before a release or after changing a tested skill. Never run it in CI.
 
 ## Run
@@ -48,6 +48,7 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `brain-review-no-promotion` | inbox notes are summarized, nothing is moved or edited before approval | detected −0.12 |
 | `brain-garden-no-apply` | the report finds the planted defects (stale, old inbox, broken and archived links, missing summary, duplicate, a rule stated by three notes), gives the `totals:` header and changes nothing; the judge checks that a quoted recent date is not old and that links to `rsync-flags.md` (written `[[Rsync-Flags]]`) and `Git-Hooks.MD` are not broken, and that a `[[link]]` inside inline code is not reported | detected −0.14 |
 | `brain-project-refresh-no-apply` | the refresh finds the planted drift in `PROJECTS/demo-shop.md` (Heroku against the README's Fly.io, `docs/adr/` moved to `docs/decisions/`, the unlinked `demo-shop-cart-rounding` note, the dead `demo-shop-launch-plan` link), asks which edits to apply and changes nothing | not run yet |
+| `brain-import-memory-no-apply` | four auto-memory files are labelled covered (the vault's `webhook-event-id-dedupe`), new (the prune-tags lesson), preference and skip; nothing is written and the memory files stay | not run yet |
 | `brain-garden-superseded` | a dangling `superseded_by`, a cycle and a superseded note without the field are reported; superseded notes are not orphans | detected −0.11 |
 | `brain-compile-originals` | two active notes compile into exactly one `_inbox/` note with `sources:`; no original is edited or moved, the archived note is not a source | detected −0.38 |
 | `code-review-finds-bug` | `REQUEST_CHANGES` with the off-by-one at `src/cart.js:4` | survived: not attributed at 1 run |

@@ -48,8 +48,10 @@ index, binary, background job or network call in the plugin itself.
 4. **Evidence over declaration.** Findings carry a file and line, reviews rate on one P0–P3 scale,
    blocking findings go to a fresh verifier, and "works" needs test output.
 5. **One fact in one place.** Code facts and plans stay in the repository; lessons that outlive a
-   repository go to the vault; user preferences go to auto-memory or `~/.claude/CLAUDE.md`
-   ([workflow.md, Where knowledge belongs](../workflow.md#where-knowledge-belongs)).
+   repository go to the vault; user preferences go to `~/.claude/CLAUDE.md`. Claude Code's auto memory is
+   a second, unreviewed store, so the recommended setup turns it off and brain-import-memory moves
+   what it holds into the vault (D24;
+   [workflow.md, Where knowledge belongs](../workflow.md#where-knowledge-belongs)).
 6. **Small fixed cost per session.** The core rules are capped at 8192 bytes and the skill
    descriptions at 12000 characters in total, because both load into every session.
 7. **No runtime.** Anything that would need a process, a schedule or the network is either left to
@@ -62,13 +64,13 @@ In scope for the first release:
 
 | Component | Count | Source |
 |---|---|---|
-| Brain skills | 7 | `plugin/skills/brain-*` |
-| Engineering skills | 14 | `plugin/skills/` |
+| Brain skills | 8 | `plugin/skills/brain-*` |
+| Engineering skills | 15 | `plugin/skills/` |
 | Session skills | 2 (session-retro, skill-usage) | `plugin/skills/` |
 | Conventions skills | 7 (`*-conventions`) | `plugin/skills/` |
 | Agents | 10 | `plugin/agents/` |
 | Output styles | 4 | `plugin/output-styles/` |
-| Hooks | 4 (two on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash) | `plugin/hooks/hooks.json` |
+| Hooks | 5 (three on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash) | `plugin/hooks/hooks.json` |
 | Core rules | 1 file | `plugin/rules/core.md` |
 | Vault template | 1 | `plugin/vault-template/` |
 | Project template | 1 | `templates/project/` (in the repository, not in the installed plugin) |
@@ -96,7 +98,7 @@ Out of scope, on purpose:
 
 ## Status
 
-Release 0.2.5; installs follow `main`, which moves only on a release. See [CHANGELOG.md](../../CHANGELOG.md) for what each
+Release 0.3.0; installs follow `main`, which moves only on a release. See [CHANGELOG.md](../../CHANGELOG.md) for what each
 release changed.
 
 ## Primary risks
