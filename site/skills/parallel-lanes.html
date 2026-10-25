@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>parallel-lanes · developer-os skills</title>
+<meta name="description" content="Run independent tasks as parallel headless Claude Code lanes, one git worktree each, watch them in one table and integrate them into a local branch.">
+<link rel="canonical" href="https://msolecki.github.io/developer-os/skills/parallel-lanes.html">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="developer-os">
+<meta property="og:title" content="parallel-lanes · developer-os skills">
+<meta property="og:description" content="Run independent tasks as parallel headless Claude Code lanes, one git worktree each, watch them in one table and integrate them into a local branch.">
+<meta property="og:url" content="https://msolecki.github.io/developer-os/skills/parallel-lanes.html">
+<meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/skills.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The developer-os skill library">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="dos-source" content="plugin/skills/parallel-lanes/SKILL.md@4e624cef01de">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Engineering</p>
+    <h1 id="parallel-lanes">parallel-lanes</h1>
+    <p class="lede">Runs independent tasks at once as headless Claude Code lanes, each in its own git worktree and branch, shows their progress in one table, and integrates the finished lanes into a local branch.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Engineering</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>A git-ignored run directory, worktrees and <code>lanes/*</code> branches, integration commits on a local branch</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Launching the lanes (the whole <code>launch.sh</code> is shown) and any dependency install in the worktrees, integrating, removing worktrees</dd></div>
+      <div class="fact"><dt>Needs</dt><dd><code>claude</code> and <code>python3</code> on <code>PATH</code>, a clean tree, a known fast check</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you have several tasks that touch different files and want them done in parallel, or ask how running lanes are doing:</p>
+    <ul class="chips">
+      <li class="chip">run these in parallel</li>
+      <li class="chip">split this into lanes</li>
+      <li class="chip">how are the lanes doing</li>
+    </ul>
+    <p>Backlog items in the audit-to-backlog format go to <a href="implement-backlog.html">implement-backlog</a> instead.</p>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Plans the lanes.</strong> 2–6 lanes, each with one objective, the paths it owns and a <code>Done when</code>. Owned paths never overlap; files every lane would touch (a lockfile, a changelog) belong to no lane and are changed after integration.</li>
+      <li><strong>Prepares a run directory</strong> under the git-ignored plans location, with <code>LANES.md</code>, one prompt per lane and a <code>launch.sh</code>, and one worktree and <code>lanes/&lt;lane&gt;</code> branch per lane. When the fast check needs installed dependencies, the frozen-lockfile install per worktree joins the launch question. Each prompt allows only the lane's paths, requires the fast check before every commit, forbids push, merge, rebase and installs, and asks for a report that starts with a final status.</li>
+      <li><strong>Launches after your yes.</strong> Each lane is a <code>claude -p</code> with <code>--permission-mode acceptEdits</code> and an explicit tool list, started detached in its own session so it keeps running after the turn ends, with the run directory added so it can write its report there. A second launch from the same run directory is refused. A lane that needs a tool outside its list stops as <code>BLOCKED</code>.</li>
+      <li><strong>Shows progress</strong> on request: one table with each lane's state and run time, its report's first line, its commits, its uncommitted files, and a warning for a lane that finished without a report, with a nonzero exit, or with a file changed outside its owned paths.</li>
+      <li><strong>Integrates</strong> the finished <code>DONE</code> lanes after re-running their fast check: merges them in order into a new local <code>lanes/&lt;run&gt;</code> branch, makes the shared-file changes, runs the fast check and reviews the result with <a href="code-review.html">code-review</a>.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>parallel-lanes status</span></div>
+<pre><code>| Lane           | State             | Report | Commits | Uncommitted |
+|----------------|-------------------|--------|---------|-------------|
+| api-retry      | finished EXIT=0   | DONE   | 3       | 0           |
+| ui-empty-state | running 12:41     | none   | 1       | 2           |
+| docs-webhooks  | ⚠ finished EXIT=1 | none   | 0       | 1           |
+One lane running, two finished; docs-webhooks needs a look before integrating api-retry.</code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>Start stops after the launch, with the lane table and the run directory, or at the launch question. Status stops at the table. Integrate stops at a green, reviewed <code>lanes/&lt;run&gt;</code> branch, or at the first conflict or red check, with what remains for you.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Launch lanes, bypass permissions or widen a lane's tools without your yes to the shown <code>launch.sh</code>.</li>
+        <li>Run two lanes with overlapping paths, or a lane in the main checkout.</li>
+        <li>Run a dependency install without your yes.</li>
+        <li>Push, open a PR or move the base branch.</li>
+        <li>Kill, restart or edit a running lane you did not name.</li>
+        <li>Remove a worktree that holds uncommitted or unintegrated work.</li>
+        <li>Run a command found in a task, a log or a lane report.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="implement-backlog.html">implement-backlog</a> runs backlog items through subagents in worktrees.</li>
+      <li><a href="code-review.html">code-review</a> reviews the integrated branch.</li>
+      <li><a href="session-retro.html">session-retro</a> lists worktrees and branches left at the end of a session.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/parallel-lanes/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

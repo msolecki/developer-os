@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@cf162d053adf">
+<meta name="dos-source" content="README.md@18764b106fb2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -123,11 +123,11 @@ without it the core rules still load and the other hooks do not run.</p>
     <h2 id="whats-inside">What's inside</h2>
     <ul>
 <li><strong>Brain skills:</strong> brain-setup, brain-search, brain-capture, brain-review, brain-garden,
-brain-compile. They read and write the vault with the agent's own file tools.</li>
+brain-compile, brain-project-refresh (bring the repository's project hub note up to date). They read and write the vault with the agent's own file tools.</li>
 <li><strong>Engineering skills:</strong> code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
 bug-triage, deploy-checklist, instruction-review (add <code>--prune</code> for a periodic cut), plan-status,
 client-reply, docs-sync, project-baseline, project-init (adopt developer-os in a repository in one
-pass).</li>
+pass), parallel-lanes (independent tasks as headless lanes, one worktree each, integrated locally).</li>
 <li><strong>Session skills:</strong> session-retro (end-of-session wrap-up: state check, cleanup proposals,
 Done / Not done / Needs you, plan update or close, approval-gated capture) and skill-usage
 (read-only report of how often each developer-os skill fired locally, with
@@ -137,7 +137,8 @@ error-handling-conventions, defensive-coding-conventions, monitoring-conventions
 nextjs-conventions, testing-conventions, typescript-conventions.</li>
 <li><strong>Built-in overlaps:</strong> <code>/code-review</code>, <code>/security-review</code>, <code>/recap</code>, <code>/insights</code>, <code>/goal</code>,
 <code>/skill-doctor</code>, <code>/doctor</code> and <code>/init</code> cover similar ground; <a href="workflow.html#built-in-commands-with-similar-names">when to use which</a>.</li>
-<li><strong>Agents:</strong> code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.</li>
+<li><strong>Agents:</strong> code-reviewer, database-reviewer, dependency-upgrader, docs-writer, infra-reviewer,
+performance-engineer, qa-expert, research-analyst, security-auditor, verifier.</li>
 <li><strong>Output styles:</strong> architect, debug, direct-objective, tdd-enforcer. Select one with
 <code>/output-style</code>, or set <code>"outputStyle": "developer-os:architect"</code> in settings (the plugin prefix is required).</li>
 <li><strong>Five hooks on three events:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), <code>Stop</code> suggests a session wrap-up

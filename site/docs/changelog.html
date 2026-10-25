@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@1857cf1badb3">
+<meta name="dos-source" content="CHANGELOG.md@2a7784c14ad3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -51,6 +51,27 @@
     <h2 id="unreleased">[Unreleased]</h2>
     <h3 id="unreleased-added">Added</h3>
     <ul>
+<li>parallel-lanes runs independent tasks as headless <code>claude -p</code> lanes, one git worktree and branch
+each, launched detached only after the user approves the shown <code>launch.sh</code> (<code>acceptEdits</code> and an
+explicit tool list, never a permission bypass). It shows lane progress as one table and integrates
+finished <code>DONE</code> lanes into a local <code>lanes/&lt;run&gt;</code> branch, reviewed with code-review. Decision D23.</li>
+<li>brain-project-refresh compares the repository's project hub note in the vault with the code:
+drifted claims, moved repository paths, project notes the hub does not link, dead links and a
+stale summary, each with evidence, shown as a diff and applied only for the numbers the user names.
+Without a hub it drafts one in <code>_inbox/</code>.</li>
+<li>Agents database-reviewer (migrations, locks, indexes, constraints, transactions and deploy order,
+rated P0–P3, read-only), dependency-upgrader (a cited upgrade plan for one dependency; installs and
+edits nothing) and docs-writer (writes the docs a change needs, checking each claim against the
+code; edits documentation only and never commits).</li>
+<li>Agent infra-reviewer: IaC and CI workflows (over-broad IAM, public exposure, secrets in config,
+replacements of stateful resources, unpinned actions and images, missing alerts), rated P0–P3,
+read-only, never calls a cloud API.</li>
+<li>The new agents are wired in: audit-to-backlog has <code>data</code> (database-reviewer) and <code>infra</code>
+(infra-reviewer) perspectives; code-review adds them for migration, schema, query, IaC or CI diffs
+(not on an untrusted head); docs-sync may hand approved items spanning more than three docs to
+docs-writer and keeps a hunk no item covers only on a yes; project-baseline probes a 13th practice,
+runtime dependencies two or more majors behind, and on a yes uses dependency-upgrader's plan as the Fix for
+the three furthest behind.</li>
 <li>Superseded vault notes: a note replaced by a newer one gets <code>status: superseded</code> and
 <code>superseded_by: "[[note]]"</code> and stays in its topic folder. brain-search follows the chain to the
 current note and cites the old ones as history; a chain that breaks or loops is incomplete history,

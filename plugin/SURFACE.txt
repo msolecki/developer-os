@@ -1,4 +1,8 @@
 agent code-reviewer
+agent database-reviewer
+agent dependency-upgrader
+agent docs-writer
+agent infra-reviewer
 agent performance-engineer
 agent qa-expert
 agent research-analyst
@@ -19,6 +23,7 @@ skill audit-to-backlog
 skill brain-capture
 skill brain-compile
 skill brain-garden
+skill brain-project-refresh
 skill brain-review
 skill brain-search
 skill brain-setup
@@ -35,6 +40,7 @@ skill implement-backlog
 skill instruction-review
 skill monitoring-conventions
 skill nextjs-conventions
+skill parallel-lanes
 skill plan-status
 skill pr-cycle
 skill project-baseline

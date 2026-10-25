@@ -1,6 +1,6 @@
 ---
 name: project-baseline
-description: Check a repository against a baseline of engineering practices (validated env module, secret deny-list and scanning, coverage ratchet, migration and boundary guards, real-database tests, safe error responses, changelog, docs consistency, design system file, gate exit codes) and propose each missing one as a backlog item in the audit-to-backlog format, after approval. Use when starting work in a repository or when the user asks what the project is missing; for example "what is the repo missing", "check the project standard", "project baseline".
+description: Check a repository against a baseline of engineering practices (validated env module, secret deny-list and scanning, coverage ratchet, migration and boundary guards, real-database tests, safe error responses, changelog, docs consistency, design system file, gate exit codes, dependencies behind by majors) and propose each missing one as a backlog item in the audit-to-backlog format, after approval. Use when starting work in a repository or when the user asks what the project is missing; for example "what is the repo missing", "check the project standard", "project baseline".
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -30,6 +30,7 @@ A presence check, not a code review: each practice has a probe, and a missing pr
 | CHANGELOG | `CHANGELOG.md` in Keep a Changelog format | P3 |
 | Docs-vs-code consistency check | a script or CI step checks docs against code (commands, paths, versions) | P3 |
 | Design system file | a project with a UI (components, pages or stylesheets in app code) has a root `DESIGN.md` in the DESIGN.md format (YAML tokens, then Overview … Do's and Don'ts) | P3; skip without a UI. When present, suggest `npx @google/design.md lint DESIGN.md` for the user to run; never run or install it |
+| No runtime dependency two majors behind | the package manager's outdated report (`pnpm outdated --prod`, `npm outdated --omit=dev`, `yarn outdated`, `uv pip list --outdated` limited to the `pyproject.toml` dependencies, `bundle outdated`) lists no runtime dependency two or more major versions behind its latest release | P2 for a framework or runtime dependency, otherwise P3; skip when the report needs credentials or the network is unavailable, and say so; a nonzero exit from the outdated command alone is not a failure. Each item's `Done when` names the target version; its Check fails until the lockfile resolves that major, written for the lockfile's format (for example `rg -q '/next@15\.' pnpm-lock.yaml`). Dispatch nothing during the probe: the report offers upgrade plans (step 5) |
 | Gate verdict in the exit code | every CI and validation script exits non-zero on failure (no `\|\| true`, no `continue-on-error` on gates) | P2 |
 
 Record each probe and its result as the evidence: the command or file checked, and what it found. Unsure counts as unsure, not missing: list it under questions.
@@ -67,7 +68,10 @@ Present: 6   Missing: 4 (P1 1, P2 2, P3 1)   Deliberate: 1   Not applicable: 1
 Needs your decision: test runner — package.json has both jest and vitest
 
 Write the 4 items to TODO.md? A: all (recommended)  B: list IDs  C: none
+Plan the 2 upgrades with dependency-upgrader first (reads changelogs on the web)? yes / no
 ```
+
+The second question appears only when the dependency probe found items. On a yes, dispatch `developer-os:dependency-upgrader` once per dependency, for at most the three furthest behind, and put its steps into the item's Fix and its estimate into its Size before writing; mark its `ASSUMPTION:` lines as such in the item. The install commands in a plan are text for the user to run, never commands this skill runs.
 
 If the backlog files do not exist yet, ask for the paths and record them as a `Backlog: <todo path>, <done path>` line in `AGENTS.md` (or `CLAUDE.md`), with its git-ignored path warning, as audit-to-backlog does.
 

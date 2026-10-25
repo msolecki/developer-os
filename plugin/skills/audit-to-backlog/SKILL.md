@@ -3,7 +3,7 @@ name: audit-to-backlog
 description: Run parallel specialist reviews of a repository, require file-and-line evidence, deduplicate findings, and write an implementation-ready backlog. Use when the user invokes audit-to-backlog or asks for a broad codebase audit that should produce a task backlog, for example "audit this repo", "audit the code", "scan the repo and build a backlog".
 license: MIT
 compatibility: "Claude Code"
-argument-hint: "[path | --diff <ref>] [--perspectives security,correctness,types,performance,tests,arch,ui,a11y]"
+argument-hint: "[path | --diff <ref>] [--perspectives security,correctness,types,performance,tests,data,infra,arch,ui,a11y]"
 ---
 
 # Audit to backlog
@@ -28,6 +28,8 @@ Run the requested perspectives in parallel:
 | performance | `developer-os:performance-engineer` |
 | tests | `developer-os:qa-expert`, assessment only: tell it to write nothing |
 | correctness | `developer-os:code-reviewer` |
+| data (migrations, schema, queries; skip without a database) | `developer-os:database-reviewer` |
+| infra (IaC and CI workflows; skip without either) | `developer-os:infra-reviewer` |
 | types | inline pass or a general-purpose agent |
 | arch (architecture, dead code) | inline pass or a general-purpose agent |
 | ui | inline pass or a general-purpose agent |

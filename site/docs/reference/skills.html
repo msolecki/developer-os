@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@b5a3d9fe7430">
+<meta name="dos-source" content="docs/reference/skills.md@448e783d00c1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -86,7 +86,7 @@ records reject on purpose is reported as <code>deliberate</code>, never proposed
 A/B/C question.</li>
     </ul>
     <h3 id="project-baseline">project-baseline</h3>
-    <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 12 engineering
+    <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 13 engineering
 practices; each one has a probe, and a missing one becomes a <code>BASE-NN</code> backlog item.</p>
     <div class="table-wrap">
 <table>
@@ -103,6 +103,7 @@ practices; each one has a probe, and a missing one becomes a <code>BASE-NN</code
 <tr><td>CHANGELOG</td><td><code>CHANGELOG.md</code> in Keep a Changelog format</td></tr>
 <tr><td>Docs-vs-code check</td><td>a script or CI step checks docs against code</td></tr>
 <tr><td>Design system file</td><td>a UI project has a root <code>DESIGN.md</code> (skipped without a UI)</td></tr>
+<tr><td>No runtime dependency two majors behind</td><td>the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from <code>dependency-upgrader</code> as their Fix</td></tr>
 <tr><td>Gate verdict in the exit code</td><td>no <code>|| true</code> or <code>continue-on-error</code> on a gate</td></tr>
 </tbody>
 </table>
@@ -128,6 +129,8 @@ sources.</li>
 commit, as a diff.</li>
 <li><strong>Likely agent mistakes:</strong> at most three, from reverts and repeated fix commits in git history
 and from corrections in the current conversation, each with a commit or session as evidence.</li>
+<li><strong>Applying:</strong> approved items that span more than three docs without uncommitted changes may go
+to the <code>docs-writer</code> agent; any hunk no approved item covers is listed and kept only on a yes.</li>
     </ul>
     <h3 id="instruction-review">instruction-review</h3>
     <p><a href="../../skills/instruction-review.html">Source</a>. Reviews <code>CLAUDE.md</code>/<code>AGENTS.md</code> (the
@@ -145,7 +148,8 @@ a truthfulness rule; lists every check it did not run under <code>NOT RUN</code>
     <h3 id="audit-to-backlog">audit-to-backlog</h3>
     <p><a href="../../skills/audit-to-backlog.html">Source</a>. A broad code audit by parallel
 specialists: security (<code>security-auditor</code>), performance (<code>performance-engineer</code>), tests
-(<code>qa-expert</code>, assessment only), correctness (<code>code-reviewer</code>), and inline passes for types,
+(<code>qa-expert</code>, assessment only), correctness (<code>code-reviewer</code>), data (<code>database-reviewer</code>, skipped without a database), infra
+(<code>infra-reviewer</code>, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs <code>file:line</code>, current-code
 evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. Each P0 and
 P1 goes to a fresh verifier (the <code>verifier</code> agent); refuted ones are listed
@@ -163,6 +167,9 @@ and type, route and links, state map and transitions); a mismatch is P1.</li>
 scoping, soft-delete filters, query ownership, breaking API changes, missing tests, error
 handling, Server Component defaults, loading and error states, accessibility; a weakened
 <code>Done when</code> without an <code>Amended</code> line (P1); a doc the diff makes false (P2, no verdict change).</li>
+<li><strong>Specialists:</strong> a diff that touches a migration, a schema or the query layer also goes to
+<code>database-reviewer</code>, one that touches IaC or a CI workflow to <code>infra-reviewer</code> (never on an
+untrusted head); their findings merge into the review.</li>
 <li><strong>Verification:</strong> each P0 and P1 goes to a fresh verifier that tries to disprove it.</li>
 <li><strong>Output:</strong> <code>APPROVE</code>, <code>COMMENT</code> or <code>REQUEST_CHANGES</code>, findings P0–P3 with <code>file:line</code>, Disputed,
 and Evidence checked for a clean <code>APPROVE</code>.</li>
@@ -229,6 +236,16 @@ passed.</li>
 <li><strong>Post-deploy:</strong> error rate and latency against the thresholds, new exceptions, a critical-flow
 smoke test, the recorded result.</li>
     </ul>
+    <h3 id="parallel-lanes">parallel-lanes</h3>
+    <p><a href="../../skills/parallel-lanes.html">Source</a>. For free-form tasks that can run at once;
+backlog items go to implement-backlog. Before a launch: a clean tree, <code>claude</code> and <code>python3</code> on
+<code>PATH</code>, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
+lockfile belong to no lane), and a git-ignored run directory and <code>.worktrees/</code>. Each lane is a
+detached <code>claude -p</code> in its own worktree and session, so it outlives the turn; its prompt allows
+only the lane's paths and commits in the worktree, and its report starts with a final status. The
+status table reads the PIDs, the <code>EXIT=</code> line in each log, the report's first line, the lane's
+commits and any changed file outside its owned paths. Integration takes only finished <code>DONE</code> lanes
+whose fast check passes when re-run.</p>
     <h2 id="communication">Communication</h2>
     <h3 id="client-reply">client-reply</h3>
     <p><a href="../../skills/client-reply.html">Source</a>. Lists every technical term in the input (code
@@ -285,6 +302,15 @@ proposed link is tagged FOUND or GUESSED.</p>
 archived or compiled notes), stops if a compiled note for the topic is still in the inbox, links
 every statement to its source note, and records contradictions as <code>Open conflict:</code> instead of
 choosing a side.</p>
+    <h3 id="brain-project-refresh">brain-project-refresh</h3>
+    <p><a href="../../skills/brain-project-refresh.html">Source</a>. Finds the hub by the
+<code>Vault project slug:</code> line in <code>_Context.md</code> and a <code>type: project</code> note with that slug. Checks the
+hub against the README, the docs map, <code>CURRENT-STATE.md</code>, the decision records and the last 30
+commits (claims the repository contradicts, repository paths that no longer exist) and against the
+vault (active or superseded notes of the slug it does not link, links to notes that do not exist, a
+summary or status that no longer fits). A drifted code fact is usually replaced by a link to the
+repository doc, since the hub keeps only what outlives the repository. A claim it cannot check is
+listed as unchecked, not changed.</p>
     <h2 id="conventions">Conventions</h2>
     <p>The model loads these when the file or task matches; they write nothing. Each rule is what the
 agent follows when it writes code and what project-init probes for when it audits a repository.</p>

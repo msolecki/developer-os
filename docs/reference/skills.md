@@ -50,7 +50,7 @@ and audit skills below in one pass.
 
 ### project-baseline
 
-[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 12 engineering
+[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 13 engineering
 practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog item.
 
 | Practice | Present when |
@@ -66,6 +66,7 @@ practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog i
 | CHANGELOG | `CHANGELOG.md` in Keep a Changelog format |
 | Docs-vs-code check | a script or CI step checks docs against code |
 | Design system file | a UI project has a root `DESIGN.md` (skipped without a UI) |
+| No runtime dependency two majors behind | the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from `dependency-upgrader` as their Fix |
 | Gate verdict in the exit code | no `\|\| true` or `continue-on-error` on a gate |
 
 It never picks a default for the package manager, test runner, auth library, monitoring stack or
@@ -91,6 +92,8 @@ standard.
   commit, as a diff.
 - **Likely agent mistakes:** at most three, from reverts and repeated fix commits in git history
   and from corrections in the current conversation, each with a commit or session as evidence.
+- **Applying:** approved items that span more than three docs without uncommitted changes may go
+  to the `docs-writer` agent; any hunk no approved item covers is listed and kept only on a yes.
 
 ### instruction-review
 
@@ -110,7 +113,8 @@ standard.
 
 [Source](../../plugin/skills/audit-to-backlog/SKILL.md). A broad code audit by parallel
 specialists: security (`security-auditor`), performance (`performance-engineer`), tests
-(`qa-expert`, assessment only), correctness (`code-reviewer`), and inline passes for types,
+(`qa-expert`, assessment only), correctness (`code-reviewer`), data (`database-reviewer`, skipped without a database), infra
+(`infra-reviewer`, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs `file:line`, current-code
 evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. Each P0 and
 P1 goes to a fresh verifier (the `verifier` agent); refuted ones are listed
@@ -131,6 +135,9 @@ its done file.
   scoping, soft-delete filters, query ownership, breaking API changes, missing tests, error
   handling, Server Component defaults, loading and error states, accessibility; a weakened
   `Done when` without an `Amended` line (P1); a doc the diff makes false (P2, no verdict change).
+- **Specialists:** a diff that touches a migration, a schema or the query layer also goes to
+  `database-reviewer`, one that touches IaC or a CI workflow to `infra-reviewer` (never on an
+  untrusted head); their findings merge into the review.
 - **Verification:** each P0 and P1 goes to a fresh verifier that tries to disprove it.
 - **Output:** `APPROVE`, `COMMENT` or `REQUEST_CHANGES`, findings P0–P3 with `file:line`, Disputed,
   and Evidence checked for a clean `APPROVE`.
@@ -209,6 +216,18 @@ Proposes mitigation, root-cause fix, regression test and rollback criteria; appl
 - **Post-deploy:** error rate and latency against the thresholds, new exceptions, a critical-flow
   smoke test, the recorded result.
 
+### parallel-lanes
+
+[Source](../../plugin/skills/parallel-lanes/SKILL.md). For free-form tasks that can run at once;
+backlog items go to implement-backlog. Before a launch: a clean tree, `claude` and `python3` on
+`PATH`, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
+lockfile belong to no lane), and a git-ignored run directory and `.worktrees/`. Each lane is a
+detached `claude -p` in its own worktree and session, so it outlives the turn; its prompt allows
+only the lane's paths and commits in the worktree, and its report starts with a final status. The
+status table reads the PIDs, the `EXIT=` line in each log, the report's first line, the lane's
+commits and any changed file outside its owned paths. Integration takes only finished `DONE` lanes
+whose fast check passes when re-run.
+
 ## Communication
 
 ### client-reply
@@ -285,6 +304,17 @@ proposed link is tagged FOUND or GUESSED.
 archived or compiled notes), stops if a compiled note for the topic is still in the inbox, links
 every statement to its source note, and records contradictions as `Open conflict:` instead of
 choosing a side.
+
+### brain-project-refresh
+
+[Source](../../plugin/skills/brain-project-refresh/SKILL.md). Finds the hub by the
+`Vault project slug:` line in `_Context.md` and a `type: project` note with that slug. Checks the
+hub against the README, the docs map, `CURRENT-STATE.md`, the decision records and the last 30
+commits (claims the repository contradicts, repository paths that no longer exist) and against the
+vault (active or superseded notes of the slug it does not link, links to notes that do not exist, a
+summary or status that no longer fits). A drifted code fact is usually replaced by a link to the
+repository doc, since the hub keeps only what outlives the repository. A claim it cannot check is
+listed as unchecked, not changed.
 
 ## Conventions
 
