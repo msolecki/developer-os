@@ -20,7 +20,7 @@ nothing to install beyond `python3`.
 The marketplace serves `main`, which moves only on a release; `claude plugin update
 developer-os@developer-os` installs the next one. Releases are listed in [CHANGELOG.md](CHANGELOG.md).
 Auto-update is off for this marketplace unless you turn it on under `/plugin` → Marketplaces. To hold
-one release, add the marketplace at its tag: `/plugin marketplace add msolecki/developer-os#v0.2.4`.
+one release, add the marketplace at its tag: `/plugin marketplace add msolecki/developer-os#v0.2.5`.
 
 ## Requirements
 
