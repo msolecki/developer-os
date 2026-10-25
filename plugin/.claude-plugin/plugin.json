@@ -1,6 +1,6 @@
 {
   "name": "developer-os",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Long-term memory in an Obsidian vault for Claude Code, plus engineering rules, skills, agents and output styles: plan-first work, evidence-backed reviews, no commit without a known validation command.",
   "author": {
     "name": "Mateusz Solecki"

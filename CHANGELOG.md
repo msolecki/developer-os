@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-10-25
+
 ### Added
 - parallel-lanes runs independent tasks as headless `claude -p` lanes, one git worktree and branch
   each, launched detached only after the user approves the shown `launch.sh` (`acceptEdits` and an
