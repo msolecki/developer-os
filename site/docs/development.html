@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@2508c9d317be">
+<meta name="dos-source" content="docs/development.md@2d0c726043a7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -152,7 +152,7 @@
     </ul>
     <p>Release, by hand:</p>
     <ol>
-      <li>On a branch from <code>development</code>: bump <code>version</code> in both manifests, rename <code>[Unreleased]</code> in <code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request.</li>
+      <li>On a branch from <code>development</code>: bump <code>version</code> in both manifests, rename <code>[Unreleased]</code> in <code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request. In <code>site/docs/changelog.html</code>, add the version&#8217;s <code>&lt;h2&gt;</code> under <code>[Unreleased]</code> and rename that section&#8217;s <code>unreleased-*</code> heading ids to <code>&lt;version&gt;-*</code> (e.g. <code>025-added</code>); the Site stage checks only the hash.</li>
       <li>When <code>check</code> is green on <code>development</code>: <code>git push origin origin/development:main</code>. Only a fast-forward is accepted; the <code>main</code> ruleset lets the repository admin push without a pull request (bypass mode "Always"), so <code>main</code> keeps the same SHAs as <code>development</code>.</li>
       <li><code>git tag -a v&lt;version&gt; -m v&lt;version&gt; origin/main &amp;&amp; git push origin v&lt;version&gt;</code> at once (a fetch prunes an unpushed tag; a lightweight <code>git tag</code> stops with "no tag message?" where <code>tag.gpgSign</code> is set), then <code>gh release create v&lt;version&gt; --notes-file &lt;the changelog section&gt;</code>. The <code>release-tags</code> ruleset forbids moving or deleting a <code>v*</code> tag.</li>
       <li>Pushing <code>main</code> publishes <code>site/</code> to GitHub Pages.</li>
