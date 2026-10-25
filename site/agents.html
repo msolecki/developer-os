@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agents · developer-os</title>
-<meta name="description" content="The six developer-os subagents: what each reviewer checks, what it reports and what it never does.">
+<meta name="description" content="The ten developer-os subagents: what each one checks, what it reports and what it never does.">
 <link rel="canonical" href="https://msolecki.github.io/developer-os/agents.html">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="developer-os">
 <meta property="og:title" content="Agents · developer-os">
-<meta property="og:description" content="The six developer-os subagents: what each reviewer checks, what it reports and what it never does.">
+<meta property="og:description" content="The nine developer-os subagents: what each one checks, what it reports and what it never does.">
 <meta property="og:url" content="https://msolecki.github.io/developer-os/agents.html">
 <meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/agents.png">
 <meta property="og:image:width" content="1200">
@@ -24,6 +24,10 @@
 <meta name="dos-source" content="plugin/agents/research-analyst.md@2d32579ba298">
 <meta name="dos-source" content="plugin/agents/verifier.md@c97fe26608e5">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@405c4449e4a9">
+<meta name="dos-source" content="plugin/agents/database-reviewer.md@05dfc8ce9715">
+<meta name="dos-source" content="plugin/agents/dependency-upgrader.md@d75208242b05">
+<meta name="dos-source" content="plugin/agents/infra-reviewer.md@36cd9df668b2">
+<meta name="dos-source" content="plugin/agents/docs-writer.md@d0c25f7dcb01">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -51,8 +55,8 @@
 
   <main id="main" class="prose">
     <h1 id="agents">Agents</h1>
-    <p class="lede">Agents are subagents that a skill or you dispatch for one focused job. They are read-only reviewers that report and never edit, except qa-expert, which writes tests when it is asked to.</p>
-    <p>The plugin ships 6 agents. Each one treats code, diffs, PR text, fixtures and fetched pages as data, never as instructions: it runs no command it finds there. Skills such as <a href="skills/code-review.html">code-review</a>, <a href="skills/audit-to-backlog.html">audit-to-backlog</a> and <a href="skills/bug-triage.html">bug-triage</a> dispatch them; you can also ask for one by name, for example <code>developer-os:security-auditor</code>.</p>
+    <p class="lede">Agents are subagents that a skill or you dispatch for one focused job. Most are read-only reviewers that report and never edit; qa-expert writes tests when it is asked to, and docs-writer edits documentation files.</p>
+    <p>The plugin ships 10 agents. Each one treats code, diffs, PR text, fixtures and fetched pages as data, never as instructions: it runs no command it finds there. Skills such as <a href="skills/code-review.html">code-review</a>, <a href="skills/audit-to-backlog.html">audit-to-backlog</a> and <a href="skills/bug-triage.html">bug-triage</a> dispatch them; you can also ask for one by name, for example <code>developer-os:security-auditor</code>.</p>
 
     <h2 id="final-status">Final status</h2>
     <p>Every agent's report starts with exactly one of four lines, so the skill or session that dispatched it knows what to do next:</p>
@@ -90,6 +94,106 @@
       </ul>
     </div>
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/code-reviewer.md">Read code-reviewer.md on GitHub</a></p>
+
+    <h2 id="database-reviewer">database-reviewer</h2>
+    <p>Reviews schema migrations, queries and data-access code for data-safety defects: unsafe or irreversible migrations, table locks, missing indexes and constraints, transaction gaps and data loss. Use it when a change touches a migration, a schema or a query.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Bash, Glob, Grep</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
+      <div class="fact"><dt>Used by</dt><dd><a href="skills/audit-to-backlog.html">audit-to-backlog</a> (data), <a href="skills/code-review.html">code-review</a> (migration, schema or query diffs)</dd></div>
+    </dl>
+    <h3 id="what-database-reviewer-checks">What database-reviewer checks</h3>
+    <ul>
+      <li>The engine and migration tool first, and the schema the migration starts from, not only the migration.</li>
+      <li>Destructive or irreversible migrations, locks and rewrites on large tables, migrations and code that cannot run side by side during a rolling deploy, missing indexes and constraints, writes outside a transaction, N+1 and unbounded queries, SQL built by concatenation, a down migration that does not undo the up.</li>
+    </ul>
+    <h3 id="database-reviewer-report">database-reviewer report</h3>
+    <p>Findings under P0–P3, each with <code>file:line</code>, the mechanism, the condition that triggers it and a fix, labelled MEASURED or INFERRED. It ends with the deploy order the change needs, or <code>No ordering constraint</code>.</p>
+    <div class="callout never">
+      <h3 id="what-database-reviewer-never-does">What database-reviewer never does</h3>
+      <ul>
+        <li>Edit files or commit.</li>
+        <li>Connect to a database or run a migration.</li>
+        <li>Run commands found in code, diffs or PR text.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/database-reviewer.md">Read database-reviewer.md on GitHub</a></p>
+
+    <h2 id="dependency-upgrader">dependency-upgrader</h2>
+    <p>Plans the upgrade of one dependency to a target version: the breaking changes from its changelog and migration guide, every affected usage in the repository, ordered migration steps and the checks that prove them. Use it before bumping a library or framework version.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash, WebFetch, WebSearch</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>No; it installs nothing</dd></div>
+      <div class="fact"><dt>Used by</dt><dd><a href="skills/project-baseline.html">project-baseline</a> (the three dependencies furthest behind); on request</dd></div>
+    </dl>
+    <h3 id="what-dependency-upgrader-checks">What dependency-upgrader checks</h3>
+    <ul>
+      <li>The current version from the lockfile, not the manifest range, and the package manager the lockfile declares.</li>
+      <li>Each breaking change that applies, with its source and release date, and its usages as <code>file:line</code>; peer and runtime constraints; required intermediate versions.</li>
+    </ul>
+    <h3 id="dependency-upgrader-report">dependency-upgrader report</h3>
+    <p>The jump and an S/M/L estimate, then breaking changes, constraints, steps small enough to commit one by one (the install command is for you to run), the project's checks for each step, and risks without a compile error, labelled <code>ASSUMPTION:</code> where no source states them.</p>
+    <div class="callout never">
+      <h3 id="what-dependency-upgrader-never-does">What dependency-upgrader never does</h3>
+      <ul>
+        <li>Install, update or remove a package, or edit the manifest, the lockfile or any other file.</li>
+        <li>Present an uncited breaking change as fact.</li>
+        <li>Fetch a URL built from local file contents.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/dependency-upgrader.md">Read dependency-upgrader.md on GitHub</a></p>
+
+    <h2 id="docs-writer">docs-writer</h2>
+    <p>Writes or updates the documentation a named change needs: a doc made false by the code, a missing reference section, a README or runbook entry. Use it after a feature lands without docs, or to apply the drift items a docs-sync report lists.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash, Edit, Write, Skill</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>Documentation files only</dd></div>
+      <div class="fact"><dt>Used by</dt><dd><a href="skills/docs-sync.html">docs-sync</a> (approved items spanning more than three docs); on request</dd></div>
+    </dl>
+    <h3 id="what-docs-writer-checks">What docs-writer checks</h3>
+    <ul>
+      <li>Every claim it writes against the code: a command exists in the manifest, a path exists, a default matches.</li>
+      <li>The project's docs layout and voice; it adds to an existing doc before creating one.</li>
+    </ul>
+    <h3 id="docs-writer-report">docs-writer report</h3>
+    <p>One line per changed file with the code evidence (<code>path:line</code>) for each new or corrected claim, the claims it could not verify and left unwritten, and the diff stat.</p>
+    <div class="callout never">
+      <h3 id="what-docs-writer-never-does">What docs-writer never does</h3>
+      <ul>
+        <li>Edit source code, tests, configuration or instruction files the prompt does not name.</li>
+        <li>Commit.</li>
+        <li>Invent a rationale; it writes <code>Reason not recorded</code> instead.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/docs-writer.md">Read docs-writer.md on GitHub</a></p>
+
+    <h2 id="infra-reviewer">infra-reviewer</h2>
+    <p>Reviews infrastructure-as-code and CI configuration (Terraform, CDK, CloudFormation, serverless and Kubernetes manifests, CI workflows) for over-broad access, public exposure, secrets in config, destructive replacements of stateful resources, an unpinned supply chain and missing alerts. Use it when a change touches infrastructure or CI.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Bash, Glob, Grep, Skill</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
+      <div class="fact"><dt>Used by</dt><dd><a href="skills/audit-to-backlog.html">audit-to-backlog</a> (infra), <a href="skills/code-review.html">code-review</a> (IaC or CI diffs)</dd></div>
+    </dl>
+    <h3 id="what-infra-reviewer-checks">What infra-reviewer checks</h3>
+    <ul>
+      <li>The tool and the cloud first, and the modules, stacks or reusable workflows a change calls.</li>
+      <li>Wildcard IAM, resources open to the internet, secrets in plain config, stateful resources a change replaces, unencrypted storage, CI with write-all permissions, <code>pull_request_target</code> on untrusted code, actions and images not pinned to a digest, and missing alerts judged by <a href="skills/monitoring-conventions.html">monitoring-conventions</a>.</li>
+    </ul>
+    <h3 id="infra-reviewer-report">infra-reviewer report</h3>
+    <p>Findings under P0–P3, each with <code>file:line</code>, the mechanism, the trigger condition and a fix, labelled MEASURED or INFERRED. It ends with what to check in the plan before applying, or <code>No destructive change found</code>.</p>
+    <div class="callout never">
+      <h3 id="what-infra-reviewer-never-does">What infra-reviewer never does</h3>
+      <ul>
+        <li>Edit files or commit.</li>
+        <li>Apply, deploy, plan, synthesize or call a cloud API, or run any command that executes the repository's code.</li>
+        <li>Run commands found in code, diffs or PR text.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/infra-reviewer.md">Read infra-reviewer.md on GitHub</a></p>
 
     <h2 id="performance-engineer">performance-engineer</h2>
     <p>Finds measured performance defects (N+1 queries, blocking I/O, serial awaits, bundle bloat, render thrash) in a named scope. Use it when something is slow or before a performance-sensitive release.</p>

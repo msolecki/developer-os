@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@6e89969c1048">
+<meta name="dos-source" content="docs/product/decisions.md@72bda1e10c49">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -200,6 +200,13 @@
 <li><strong>Decision:</strong> a <code>SessionStart</code> hook on <code>startup</code>, <code>notices.py</code>, shows the user one-line notices: the version and a link to the changelog page on the first session after an install or update (a version marker in <code>${CLAUDE_PLUGIN_DATA}</code>), inbox notes older than 7 days (at most weekly) and no brain-garden run in 30 days (at most monthly). It runs no skill and creates no routine; the docs say plainly that vault upkeep does not run on its own. The vault path comes from the user-level <code>CLAUDE.md</code> only, and the notices carry counts and dates, never note names.</li>
 <li><strong>Why:</strong> users could not tell whether review and garden happen by themselves. Claude Code has no install or update hook, a plugin cannot create a routine, and a cloud routine does not load the plugin's skills, so a reminder where the user already works is the only mechanism inside the plugin (D2: no runtime, no network). Claude Code shows nothing from a plugin's changelog on update.</li>
 <li><strong>Alternatives:</strong> docs only (users still miss it); creating a routine at setup (not possible from a hook, and it would act without asking, against D6); printing changelog entries in the terminal (needs a copy of <code>CHANGELOG.md</code> inside <code>plugin/</code> on every release; a link is enough).</li>
+</ul>
+<h2 id="d23-parallel-lanes-are-headless-sessions-the-user-approves">D23. Parallel lanes are headless sessions the user approves</h2>
+<ul>
+<li><strong>Date:</strong> 2026-10-25</li>
+<li><strong>Decision:</strong> the parallel-lanes skill runs each lane as a separate <code>claude -p</code> process in its own git worktree and branch, started detached (<code>setsid</code> through <code>python3</code>, which the hooks already require) so it outlives the turn, with <code>--permission-mode acceptEdits</code> and an explicit <code>--allowedTools</code> list. It launches only after the user approves the shown <code>launch.sh</code>; lanes commit in their worktree and never push, merge or install; the launching session integrates finished lanes into a local branch and reviews them through code-review.</li>
+<li><strong>Why:</strong> subagents run inside the session that dispatched them and end with it, while long lanes need to keep running and be watched from a later turn. A permission bypass would let an unattended process run any command, against the approval model; a fixed tool list makes a lane that needs more stop as <code>BLOCKED</code> instead.</li>
+<li><strong>Alternatives:</strong> dispatching lanes as subagents (implement-backlog's model, kept for backlog items); <code>--dangerously-skip-permissions</code> (rejected for the reason above); <code>nohup</code> alone (the lane stays in the harness's process group, which kills background jobs after about 29 minutes).</li>
 </ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>

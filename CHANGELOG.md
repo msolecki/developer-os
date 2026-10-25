@@ -5,6 +5,27 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- parallel-lanes runs independent tasks as headless `claude -p` lanes, one git worktree and branch
+  each, launched detached only after the user approves the shown `launch.sh` (`acceptEdits` and an
+  explicit tool list, never a permission bypass). It shows lane progress as one table and integrates
+  finished `DONE` lanes into a local `lanes/<run>` branch, reviewed with code-review. Decision D23.
+- brain-project-refresh compares the repository's project hub note in the vault with the code:
+  drifted claims, moved repository paths, project notes the hub does not link, dead links and a
+  stale summary, each with evidence, shown as a diff and applied only for the numbers the user names.
+  Without a hub it drafts one in `_inbox/`.
+- Agents database-reviewer (migrations, locks, indexes, constraints, transactions and deploy order,
+  rated P0–P3, read-only), dependency-upgrader (a cited upgrade plan for one dependency; installs and
+  edits nothing) and docs-writer (writes the docs a change needs, checking each claim against the
+  code; edits documentation only and never commits).
+- Agent infra-reviewer: IaC and CI workflows (over-broad IAM, public exposure, secrets in config,
+  replacements of stateful resources, unpinned actions and images, missing alerts), rated P0–P3,
+  read-only, never calls a cloud API.
+- The new agents are wired in: audit-to-backlog has `data` (database-reviewer) and `infra`
+  (infra-reviewer) perspectives; code-review adds them for migration, schema, query, IaC or CI diffs
+  (not on an untrusted head); docs-sync may hand approved items spanning more than three docs to
+  docs-writer and keeps a hunk no item covers only on a yes; project-baseline probes a 13th practice,
+  runtime dependencies two or more majors behind, and on a yes uses dependency-upgrader's plan as the Fix for
+  the three furthest behind.
 - Superseded vault notes: a note replaced by a newer one gets `status: superseded` and
   `superseded_by: "[[note]]"` and stays in its topic folder. brain-search follows the chain to the
   current note and cites the old ones as history; a chain that breaks or loops is incomplete history,

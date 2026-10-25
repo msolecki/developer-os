@@ -34,7 +34,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
-| Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden` or `brain-review` differs from `brain-search`'s |
+| Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden`, `brain-project-refresh` or `brain-review` differs from `brain-search`'s |
 | Docs standard | A `## ` heading or bold field of `templates/project/docs/decisions/0001-template.md`, a bold field of `templates/project/docs/pitfalls.md`, or a `## ` heading of `templates/project/docs/CURRENT-STATE.md` is missing from `## The standard` in `docs-sync` (the plugin does not ship `templates/`, so the skill restates them) |
 | Severity | A skill or agent that writes out the P0–P3 scale (inline `P0 = …` or four `- **P0:**` bullets) words it differently from the others |
 | Local paths | A file under `plugin/` or `site/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
@@ -138,7 +138,7 @@ the README lists the mutation checks that prove it.
    checked only during a rename: the Stale names stage fails, before the rename is committed, on any
    name removed from `SURFACE.txt`.
 5. A brain skill starts with the shared vault lookup: the check compares the first paragraph under
-   `## 1. Locate the vault` across the five brain skills that have it, so change all five together.
+   `## 1. Locate the vault` across the six brain skills that have it, so change all six together.
 6. Add an eval case when the skill has a behavior worth protecting (a gate, a refusal, a trigger).
 7. Add the name to `plugin/SURFACE.txt` (the check prints the line), and update the README component list,
    `CHANGELOG.md`, and [product/functional-spec.md](product/functional-spec.md). Counts written as digits are

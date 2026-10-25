@@ -72,7 +72,7 @@ Apply which? A: all (recommended)  B: list numbers  C: none
 
 ## Stop point
 
-Stop after the report and the question. After approval, apply exactly the approved items, show `git diff --stat`, and stop; the user commits.
+Stop after the report and the question. After approval, apply exactly the approved items, show `git diff --stat`, and stop; the user commits. When the approved items span more than three docs and none of those docs has uncommitted changes, you may hand them to `developer-os:docs-writer` instead: the brief holds only the approved items with their `path:line` and evidence, and this skill's Never rules. Then compare its `git diff` with the approved items hunk by hunk; list any hunk no item covers in the report and ask whether to keep it. Never discard it yourself.
 
 ## Never
 

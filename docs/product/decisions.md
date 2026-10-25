@@ -262,6 +262,23 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   hook, and it would act without asking, against D6); printing changelog entries in the terminal
   (needs a copy of `CHANGELOG.md` inside `plugin/` on every release; a link is enough).
 
+## D23. Parallel lanes are headless sessions the user approves
+
+- **Date:** 2026-10-25
+- **Decision:** the parallel-lanes skill runs each lane as a separate `claude -p` process in its own
+  git worktree and branch, started detached (`setsid` through `python3`, which the hooks already
+  require) so it outlives the turn, with `--permission-mode acceptEdits` and an explicit
+  `--allowedTools` list. It launches only after the user approves the shown `launch.sh`; lanes commit
+  in their worktree and never push, merge or install; the launching session integrates finished lanes
+  into a local branch and reviews them through code-review.
+- **Why:** subagents run inside the session that dispatched them and end with it, while long lanes
+  need to keep running and be watched from a later turn. A permission bypass would let an unattended
+  process run any command, against the approval model; a fixed tool list makes a lane that needs more
+  stop as `BLOCKED` instead.
+- **Alternatives:** dispatching lanes as subagents (implement-backlog's model, kept for backlog
+  items); `--dangerously-skip-permissions` (rejected for the reason above); `nohup` alone (the lane
+  stays in the harness's process group, which kills background jobs after about 29 minutes).
+
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change

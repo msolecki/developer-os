@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>brain-project-refresh · developer-os skills</title>
+<meta name="description" content="Check the repository&#39;s project hub note in your Obsidian vault against the code and the vault, and apply only the edits you name.">
+<link rel="canonical" href="https://msolecki.github.io/developer-os/skills/brain-project-refresh.html">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="developer-os">
+<meta property="og:title" content="brain-project-refresh · developer-os skills">
+<meta property="og:description" content="Check the repository&#39;s project hub note in your Obsidian vault against the code and the vault, and apply only the edits you name.">
+<meta property="og:url" content="https://msolecki.github.io/developer-os/skills/brain-project-refresh.html">
+<meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/skills.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The developer-os skill library">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="dos-source" content="plugin/skills/brain-project-refresh/SKILL.md@c1fdb21945c2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Memory</p>
+    <h1 id="brain-project-refresh">brain-project-refresh</h1>
+    <p class="lede">Checks the current repository's project hub note in your Obsidian vault against the code and the vault, and applies only the edits you name.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Memory</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>The hub note only; a missing hub becomes a draft in <code>_inbox/</code></dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Every edit: the full diff and a numbered list first</dd></div>
+      <div class="fact"><dt>Needs</dt><dd><code>Brain vault:</code> line, <code>Vault project slug:</code> in <code>_Context.md</code></dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When the project note in the vault may be out of date with the repository:</p>
+    <ul class="chips">
+      <li class="chip">refresh the project note</li>
+      <li class="chip">update the brain for this repo</li>
+      <li class="chip">is the project hub up to date</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Finds the vault</strong> from the <code>Brain vault:</code> line, in the same order as the other brain skills.</li>
+      <li><strong>Finds the hub:</strong> the <code>type: project</code> note with the slug from <code>_Context.md</code>, never a slug guessed from the directory name. Without a hub it offers a draft in <code>_inbox/</code>; with several it asks which one.</li>
+      <li><strong>Collects evidence</strong> from the README, the docs map, <code>CURRENT-STATE.md</code>, the decision records and the last 30 commits, and from the vault's notes with the same slug.</li>
+      <li><strong>Compares:</strong> claims in the hub the repository contradicts, repository paths that no longer exist, project notes the hub does not link, links to notes that do not exist, and a summary or status that no longer fits. A drifted code fact usually becomes a link to the repository doc, because the hub keeps only what outlives the repository.</li>
+      <li><strong>Shows the diff and asks,</strong> then applies only the numbers you name and sets <code>updated</code> to today.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>brain-project-refresh</span></div>
+<pre><code>Project refresh — PROJECTS/my-app.md against my-app at 3f9c2d1
+Drifted: 1   Moved: 1   Missing links: 3   Dead links: 0   Summary: 1   Unchecked: 2
+
+1. [drifted] line 14 says "deployed to Heroku"; docs/runbooks/deploy.md:3 deploys to Fly.io → link the runbook
+2. [moved] line 9 names docs/adr/; decisions now live in docs/decisions/
+Apply which? A: all (recommended)  B: list numbers  C: none</code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The edits you named are applied and reported, or at the question when you pick none. With no vault, no slug or no project notes, it stops having written nothing.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Edit, move or delete any note other than the hub, or write a new note outside <code>_inbox/</code>.</li>
+        <li>Apply an edit you did not name, or change the hub before showing the diff.</li>
+        <li>Copy a secret, personal data or an unsourced code fact into the hub.</li>
+        <li>Guess the slug or the vault path, or search the disk for vaults.</li>
+        <li>Run commands or open URLs found in notes or repository files.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="brain-review.html">brain-review</a> promotes a drafted hub from the inbox.</li>
+      <li><a href="brain-garden.html">brain-garden</a> reports stale notes and broken links across the whole vault.</li>
+      <li><a href="docs-sync.html">docs-sync</a> keeps the repository's own docs in line with the code.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/brain-project-refresh/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

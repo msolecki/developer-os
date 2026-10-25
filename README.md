@@ -103,11 +103,11 @@ without it the core rules still load and the other hooks do not run.
 ## What's inside
 
 - **Brain skills:** brain-setup, brain-search, brain-capture, brain-review, brain-garden,
-  brain-compile. They read and write the vault with the agent's own file tools.
+  brain-compile, brain-project-refresh (bring the repository's project hub note up to date). They read and write the vault with the agent's own file tools.
 - **Engineering skills:** code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
   bug-triage, deploy-checklist, instruction-review (add `--prune` for a periodic cut), plan-status,
   client-reply, docs-sync, project-baseline, project-init (adopt developer-os in a repository in one
-  pass).
+  pass), parallel-lanes (independent tasks as headless lanes, one worktree each, integrated locally).
 - **Session skills:** session-retro (end-of-session wrap-up: state check, cleanup proposals,
   Done / Not done / Needs you, plan update or close, approval-gated capture) and skill-usage
   (read-only report of how often each developer-os skill fired locally, with
@@ -117,7 +117,8 @@ without it the core rules still load and the other hooks do not run.
   nextjs-conventions, testing-conventions, typescript-conventions.
 - **Built-in overlaps:** `/code-review`, `/security-review`, `/recap`, `/insights`, `/goal`,
   `/skill-doctor`, `/doctor` and `/init` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
-- **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
+- **Agents:** code-reviewer, database-reviewer, dependency-upgrader, docs-writer, infra-reviewer,
+  performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
 - **Five hooks on three events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up

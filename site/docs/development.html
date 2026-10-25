@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@c02591d1768e">
+<meta name="dos-source" content="docs/development.md@2508c9d317be">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -67,7 +67,7 @@
           <tr><td>Skill fields</td><td>A skill lacks <code>license</code> or <code>compatibility</code>, or its name does not match <code>^[a-z0-9-]{1,64}$</code></td></tr>
           <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or all together exceed 12000</td></tr>
           <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>)</td></tr>
-          <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>
+          <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code>, <code>brain-project-refresh</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>
           <tr><td>Docs standard</td><td>A <code>## </code> heading or bold field of <code>templates/project/docs/decisions/0001-template.md</code>, a bold field of <code>templates/project/docs/pitfalls.md</code>, or a <code>## </code> heading of <code>templates/project/docs/CURRENT-STATE.md</code> is missing from <code>## The standard</code> in <code>docs-sync</code> (the plugin does not ship <code>templates/</code>, so the skill restates them)</td></tr>
           <tr><td>Severity</td><td>A skill or agent that writes out the P0–P3 scale (inline <code>P0 = …</code> or four <code>- **P0:**</code> bullets) words it differently from the others</td></tr>
           <tr><td>Local paths</td><td>A file under <code>plugin/</code> or <code>site/</code> contains <code>/Users&#47;</code>, <code>/home&#47;</code>, <code>~&#47;www</code> or <code>.claude&#50;</code></td></tr>
@@ -137,7 +137,7 @@
       <li>If it can write, send or change git state, end with <code>## Stop point</code> and <code>## Never</code>. If it is read-only and should be exempt, add it to <code>read_only</code> in <code>scripts/check.sh</code>.</li>
       <li>Use synthetic examples only; no local paths, client names or real vault notes.</li>
       <li>Reference other parts as <code>developer-os:&lt;name&gt;</code>; the check resolves them. A bare name in <code>plugin/</code> is checked only during a rename: the Stale names stage fails, before the rename is committed, on any name removed from <code>SURFACE.txt</code>.</li>
-      <li>A brain skill starts with the shared vault lookup: the check compares the first paragraph under <code>## 1. Locate the vault</code> across the five brain skills that have it, so change all five together.</li>
+      <li>A brain skill starts with the shared vault lookup: the check compares the first paragraph under <code>## 1. Locate the vault</code> across the six brain skills that have it, so change all six together.</li>
       <li>Add an eval case when the skill has a behavior worth protecting (a gate, a refusal, a trigger).</li>
       <li>Add the name to <code>plugin/SURFACE.txt</code> (the check prints the line), and update the README component list, <code>CHANGELOG.md</code>, and <a href="product/functional-spec.html">product/functional-spec.md</a>. Counts written as digits are checked; fix any the check reports.</li>
     </ol>
