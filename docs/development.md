@@ -162,7 +162,9 @@ Release, by hand:
 
 1. On a branch from `development`: bump `version` in both manifests, rename `[Unreleased]` in
    `CHANGELOG.md` to `[<version>] - <date>` under a new empty `[Unreleased]`, refresh the site pages
-   the Site stage names, run `bash scripts/check.sh`, and merge the pull request.
+   the Site stage names, run `bash scripts/check.sh`, and merge the pull request. In
+   `site/docs/changelog.html`, add the version's `<h2>` under `[Unreleased]` and rename that section's
+   `unreleased-*` heading ids to `<version>-*` (e.g. `025-added`); the Site stage checks only the hash.
 2. When `check` is green on `development`: `git push origin origin/development:main`. Only a fast-forward
    is accepted; the `main` ruleset lets the repository admin push without a pull request (bypass mode "Always"), so `main`
    keeps the same SHAs as `development`.
