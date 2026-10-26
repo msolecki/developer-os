@@ -108,7 +108,9 @@ done
 run "skill descriptions over 12000 characters in total" fail "limit 12000"
 
 mkdir "$r/plugin/skills/zzz-new"
-sed 's/^name: spec$/name: zzz-new/' "$r/plugin/skills/spec/SKILL.md" > "$r/plugin/skills/zzz-new/SKILL.md"
+# a short description, so the skill-descriptions budget does not fail first
+sed -e 's/^name: spec$/name: zzz-new/' -e 's/^description: .*/description: A placeholder skill that exists only so the check can see one missing from SURFACE.txt./' \
+  "$r/plugin/skills/spec/SKILL.md" > "$r/plugin/skills/zzz-new/SKILL.md"
 run "a new skill missing from SURFACE.txt" fail "surface: plugin/SURFACE.txt: differs from the plugin"
 
 printf 'exit 1\n' > "$r/tests/guard.test.sh"
