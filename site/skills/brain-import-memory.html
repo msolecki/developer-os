@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-import-memory/SKILL.md@3afec5b06adf">
+<meta name="dos-source" content="plugin/skills/brain-import-memory/SKILL.md@1074fd790615">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -73,7 +73,7 @@
       <li><strong>Reads and checks each file</strong> except <code>MEMORY.md</code>, which it reads only to report an index line whose file is missing. It searches the vault for each file's topic, reads the matching notes and gives the file one label: <code>covered</code> (a note, the user-level <code>CLAUDE.md</code>, its <code>rules/</code> or the project's instruction file already says it), <code>add</code> (sentences for an existing note), <code>new</code> (an inbox note in brain-capture's format; files on one topic make one note), <code>preference</code> (a line for the user-level <code>CLAUDE.md</code>), <code>project-rule</code> (a line for the repository's instruction file) or <code>skip</code> (with the reason). A file that contradicts a note shows both claims; the newer, better-evidenced one is proposed, otherwise the note stays. Secrets, account IDs, IP addresses and private contact details become <code>[REDACTED]</code>.</li>
       <li><strong>Shows the list and asks,</strong> with each new note in full and each addition as a diff.</li>
       <li><strong>Applies the numbers you name:</strong> new notes in <code>_inbox/</code> after brain-capture's secret scan, with an ASCII file name that is free across the vault and <code>status: inbox</code>; additions to the named notes with <code>updated</code> set to today; preference lines appended to <code>CLAUDE.md</code>; the project diff. The memory files stay where they are.</li>
-      <li><strong>Turning auto memory off is one of the numbers:</strong> while <code>autoMemoryEnabled</code> is not <code>false</code>, the list ends with a <code>setting</code> item, previewed as a diff without writing anything. On approval it validates the new <code>settings.json</code> before copying it over the original; on invalid JSON or without <code>jq</code> it changes nothing and shows the key. <code>CLAUDE_CODE_DISABLE_AUTO_MEMORY=1</code> in the environment also turns it off and wins over the setting.</li>
+      <li><strong>Turning auto memory off is one of the numbers:</strong> while <code>autoMemoryEnabled</code> is not <code>false</code>, the list ends with a <code>setting</code> item, previewed as a diff without writing anything. On approval it validates the new <code>settings.json</code> before copying it over the original; on invalid JSON or without <code>jq</code> it changes nothing and shows the key. <code>CLAUDE_CODE_DISABLE_AUTO_MEMORY=1</code> in the environment also turns it off and wins over the setting, so the item is left out when it is set. After writing, it re-checks: when a project settings file still turns auto memory on, it names that file.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>
@@ -94,7 +94,7 @@ Apply which? A: all (recommended)  B: list numbers  C: none</code></pre>
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>At the numbered list with "Apply which?". After you answer, it applies only those numbers and reports each file it created or changed, the conflicts left open, the memory folder (untouched) and whether auto memory is now off.</p>
+      <p>At the numbered list with "Apply which?". After you answer, it applies only those numbers and reports each file it created or changed, the conflicts left open, the memory folder (untouched) and whether auto memory is now off, from that re-check.</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>

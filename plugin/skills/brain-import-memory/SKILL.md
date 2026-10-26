@@ -22,10 +22,12 @@ P=$(g=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && cd
 M=$(cat "$P/.claude/settings.local.json" "$P/.claude/settings.json" "$C/settings.json" 2>/dev/null | jq -rs 'map(.autoMemoryDirectory // empty) | first // empty' 2>/dev/null)
 case $M in "~/"*) M="$HOME/${M#\~/}";; esac
 [ -n "$M" ] || M="$C/projects/$(printf '%s' "$P" | LC_ALL=C.UTF-8 sed 's/[^A-Za-z0-9]/-/g')/memory"
-ls -la "$M" 2>/dev/null; cat "$P/.claude/settings.local.json" "$P/.claude/settings.json" "$C/settings.json" 2>/dev/null | jq -s 'map(.autoMemoryEnabled | select(. != null)) | first'
+ls -la "$M" 2>/dev/null; [ "${CLAUDE_CODE_DISABLE_AUTO_MEMORY:-}" = 1 ] && echo false || cat "$P/.claude/settings.local.json" "$P/.claude/settings.json" "$C/settings.json" 2>/dev/null | jq -s 'map(.autoMemoryEnabled | select(. != null)) | first'
 ```
 
 - `CLAUDE_CODE_PROJECT_DIR_NAME` changes the folder name; if the user names another folder, use it.
+- The last command prints `false` when `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` is set: the environment wins over every setting.
+- In a git submodule the common dir sits under the superproject's `.git/modules/`, so the derived folder is wrong; treat it as missing (next bullet).
 - The folder is missing or empty (also when the path has characters the name conversion maps differently): list `"$C"/projects/*/memory` with the number of `.md` files in each, ask which project to import, and stop if the user names none.
 - The user asks for all projects: process one folder at a time, each with its own steps 3–6, never one combined list.
 
@@ -76,8 +78,10 @@ Apply which? A: all (recommended)  B: list numbers  C: none
 Show each `new` note in full and each `add` as a diff before asking. `covered` and `skip` lines need no answer. When auto memory is still on (the last command in step 2 did not print `false`), the list ends with the `setting` item; preview it without writing anything:
 
 ```bash
-S="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"; jq '.autoMemoryEnabled = false' "$S" | diff "$S" -
+S="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"; if jq -e . "$S" >/dev/null 2>&1; then jq '.autoMemoryEnabled = false' "$S" | diff "$S" -; else echo "no valid $S"; fi
 ```
+
+When it prints `no valid …`, the `setting` item shows the key to add by hand instead of a diff, as step 5 does.
 
 ## 5. Apply the approved numbers
 
@@ -86,13 +90,13 @@ S="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"; jq '.autoMemoryEnabled = 
 - `preference`: append the lines to `<config>/CLAUDE.md` in place (`printf '\n%s\n' … >> "$C/CLAUDE.md"`), never with `mv` or a full rewrite; run the same secret scan on them first.
 - `project-rule`: show the diff to the project file and apply it; when the repository says its instruction files change only on the owner's request, give the lines to the user instead.
 
-- `setting`: in one call, write and validate a temporary copy, then copy it over the original in place: `S=…; t="$S.import-memory"; jq '.autoMemoryEnabled = false' "$S" > "$t" && jq -e . "$t" >/dev/null && cat "$t" > "$S"; rm -f "$t"`. If `settings.json` is missing, not valid JSON or `jq` is absent, change nothing and show the key to add by hand. `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the environment also turns it off and wins over the setting.
+- `setting`: in one call, write and validate a temporary copy, then copy it over the original in place: `S=…; t="$S.import-memory"; jq '.autoMemoryEnabled = false' "$S" > "$t" && jq -e . "$t" >/dev/null && cat "$t" > "$S"; rm -f "$t"`. If `settings.json` is missing, not valid JSON or `jq` is absent, change nothing and show the key to add by hand. `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the environment also turns it off and wins over the setting. Then run the last command of step 2 again: when it does not print `false`, a project settings file (`.claude/settings.local.json` or `.claude/settings.json`) still sets it, so name that file and say auto memory stays on in this project.
 
 Leave every memory file where it is: the import copies knowledge, it does not move files.
 
 ## Stop point
 
-Stops after the numbered list with "Apply which?". After the user answers, it applies only those numbers and reports each file it created or changed, the conflicts left open, the memory folder (untouched) and whether auto memory is now off.
+Stops after the numbered list with "Apply which?". After the user answers, it applies only those numbers and reports each file it created or changed, the conflicts left open, the memory folder (untouched) and whether auto memory is now off, from the re-check in step 5.
 
 ## Never
 

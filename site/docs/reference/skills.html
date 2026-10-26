@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@84395e90d064">
+<meta name="dos-source" content="docs/reference/skills.md@14fb7e68e7e0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -321,7 +321,8 @@ format; files on one topic make one note), <code>add</code> (sentences for an ex
 instruction file), <code>covered</code> or <code>skip</code> (with the reason). A file that contradicts a note shows both
 claims; the newer, better-evidenced one is proposed, otherwise the note stays. Secrets, account IDs,
 IP addresses and private contact details are redacted. Applies only the numbers the user names,
-never touches the memory files, and ends by offering <code>autoMemoryEnabled: false</code>.</p>
+never touches the memory files; while auto memory is still on, <code>autoMemoryEnabled: false</code> is one more
+numbered item, re-checked after it is written.</p>
     <h2 id="conventions">Conventions</h2>
     <p>The model loads these when the file or task matches; they write nothing. Each rule is what the
 agent follows when it writes code and what project-init probes for when it audits a repository.</p>

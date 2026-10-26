@@ -327,7 +327,8 @@ format; files on one topic make one note), `add` (sentences for an existing note
 instruction file), `covered` or `skip` (with the reason). A file that contradicts a note shows both
 claims; the newer, better-evidenced one is proposed, otherwise the note stays. Secrets, account IDs,
 IP addresses and private contact details are redacted. Applies only the numbers the user names,
-never touches the memory files, and ends by offering `autoMemoryEnabled: false`.
+never touches the memory files; while auto memory is still on, `autoMemoryEnabled: false` is one more
+numbered item, re-checked after it is written.
 
 ## Conventions
 
