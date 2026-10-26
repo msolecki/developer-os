@@ -33,7 +33,9 @@ The [README](../README.md) has the short version; this is the full one.
    ```
 2. Ask Claude Code to run `brain-setup`; it creates or connects the vault and, after your approval,
    adds the `Brain vault:` line to `~/.claude/CLAUDE.md` and the vault path to
-   `permissions.additionalDirectories` in `~/.claude/settings.json`. Connecting an existing vault adds
+   `permissions.additionalDirectories` in `~/.claude/settings.json`, and asks separately whether to
+   turn Claude Code's auto memory off (`"autoMemoryEnabled": false`, recommended; see
+   [Recommended configuration](#recommended-configuration)). Connecting an existing vault adds
    only the missing pieces and never overwrites your `.obsidian/` folder. Brain skills ask once for the vault path when the line is missing, and stop if you have none; the core
    rules run brain-search only when the line exists.
 3. Open the vault folder in Obsidian ("Open folder as vault"; Bases needs Obsidian 1.9.10 or
@@ -42,6 +44,8 @@ The [README](../README.md) has the short version; this is the full one.
 4. Start a session and ask: "brain-search webhooks". It should find the example inbox note.
 5. Put review and garden in your calendar, or rely on the reminders: nothing in the vault is
    maintained on its own (see [The daily loop](#the-daily-loop)).
+6. If you used Claude Code before, run `brain-import-memory` in each project that has auto memory:
+   it moves what is worth keeping into the vault and leaves the memory files untouched.
 
 For each project repository, copy the whole of `templates/project/` (`AGENTS.md`, `CLAUDE.md`,
 `_Context.md`, `DESIGN.md`, `TODO.md`, `.gitignore`, `docs/`) into its root and fill in `AGENTS.md`
@@ -56,6 +60,51 @@ them and, with `-n`, skips every file the project already has.
 `pitfalls.md`, `decisions/` and `runbooks/`. The docs-sync skill scaffolds missing pieces, refreshes
 `CURRENT-STATE.md` and reports docs-vs-code drift; project-baseline proposes missing engineering
 practices as backlog items.
+
+## Recommended configuration
+
+developer-os is built around one long-term store: the vault. Claude Code's auto memory is a second
+one (a folder per project and machine, written without review, its index loaded into every session),
+so the same fact ends up in two places that drift apart. The recommended setup turns it off and keeps
+everything else in plain files you can read and review (decision D24 in
+[product/decisions.md](product/decisions.md)).
+
+`~/.claude/settings.json` (merge into your file; brain-setup writes the first two keys for you):
+
+```json
+{
+  "autoMemoryEnabled": false,
+  "permissions": { "additionalDirectories": ["/absolute/path/to/vault"] },
+  "enabledPlugins": { "developer-os@developer-os": true }
+}
+```
+
+`~/.claude/CLAUDE.md`, short, loaded in every project:
+
+```
+Brain vault: /absolute/path/to/vault
+
+<your preferences: language, tone, what never to do; one line each>
+```
+
+Keep longer personal rules in files under `~/.claude/rules/` (Claude Code loads them at user level
+next to `CLAUDE.md`), or import a file with `@~/path/to/file.md`; do not import whole vault notes,
+because every imported line loads into every session.
+
+Each project repository: `AGENTS.md` with the project's commands and rules, `CLAUDE.md` containing only
+`@AGENTS.md`, and `_Context.md` with the `Vault project slug:` line (from
+[`templates/project/`](../templates/project/)).
+
+| Want | How |
+|---|---|
+| Auto memory off for one project only | `"autoMemoryEnabled": false` in that project's `.claude/settings.json` |
+| Off regardless of settings | `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the environment; it wins over the setting |
+| Check what loads | `/memory` lists the instruction files and shows the auto-memory toggle; `/context` shows what loaded |
+| Move existing auto memory into the vault | `brain-import-memory`, once per project; the files stay where they are |
+| Fewer reminders | `DEVELOPER_OS_NOTICES=off`, `DEVELOPER_OS_CAPTURE_NUDGE=off` ([hooks](reference/hooks.md#environment-variables)) |
+
+Turning auto memory off does not delete anything: the files stay in
+`~/.claude/projects/<project>/memory/` until you remove them.
 
 ## Vault layout
 
@@ -322,15 +371,17 @@ not already in the code or the repository's plan or ADR?
 
 ### Where knowledge belongs
 
-Claude Code also keeps its own auto-memory. To keep one fact in one place:
+Claude Code also has its own auto memory; with the
+[recommended configuration](#recommended-configuration) it is off, so each fact has one place:
 
 | What | Where |
 |---|---|
-| user preferences and style corrections | auto-memory or `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md` |
+| user preferences and style corrections | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md` (or a file under its `rules/`) |
 | lessons and decisions that apply beyond this project | vault, via brain-capture |
 | facts about this project (commands, stack, conventions) | the project's `AGENTS.md`/`CLAUDE.md` or an ADR |
 
-`session-retro` routes findings by this table.
+`session-retro` routes findings by this table, and `brain-import-memory` sorts existing auto-memory
+files by it.
 
 ## How project repositories link to the vault
 

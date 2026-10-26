@@ -15,6 +15,8 @@ the user already has, which the skills read. This page lists every one of them.
 |---|---|---|---|
 | `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`/`AGENTS.md`) | All brain skills; the core rule that runs brain-search before large tasks; the notices hook, from the user-level file only | brain-setup, after approval |
 | Vault in `permissions.additionalDirectories` | `~/.claude/settings.json` | Claude Code, so the vault can be read from any project | brain-setup, after approval |
+| `"autoMemoryEnabled": false` (recommended, D24) | `~/.claude/settings.json`; `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the environment wins over it | Claude Code: no auto-memory files are created or loaded; existing ones stay on disk | brain-setup, after a separate yes; brain-import-memory, as one of its numbered items; the `/memory` toggle writes the same key |
+| Auto-memory folder | `~/.claude/projects/<project>/memory/`, or `autoMemoryDirectory` | brain-import-memory, which never edits or deletes it | Claude Code, while auto memory is on |
 | `"outputStyle": "developer-os:<name>"` | Claude Code settings | Claude Code; a bare name silently falls back to the default style | The user |
 | Rule overrides | `~/.claude/CLAUDE.md` | The model, alongside the core rules | The user |
 | `DEVELOPER_OS_CAPTURE_NUDGE`, `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | Shell environment | The `Stop` hook ([hooks.md](hooks.md#environment-variables)) | The user |

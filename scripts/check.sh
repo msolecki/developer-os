@@ -72,7 +72,7 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
 
 # The brain skills share one "Locate the vault" paragraph (the first after that heading); it must stay identical.
 para() { awk '/^## 1\. Locate the vault$/ { f = 1; next } f && NF { p = 1; print; next } p { exit }' "$1"; }
-for s in brain-capture brain-compile brain-garden brain-project-refresh brain-review; do
+for s in brain-capture brain-compile brain-garden brain-import-memory brain-project-refresh brain-review; do
   if ! para plugin/skills/brain-search/SKILL.md | diff -u - <(para "plugin/skills/$s/SKILL.md") >&2; then
     fail vault "plugin/skills/$s/SKILL.md" "\"Locate the vault\" paragraph differs from brain-search's above"
   fi

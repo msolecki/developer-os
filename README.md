@@ -20,7 +20,7 @@ nothing to install beyond `python3`.
 The marketplace serves `main`, which moves only on a release; `claude plugin update
 developer-os@developer-os` installs the next one. Releases are listed in [CHANGELOG.md](CHANGELOG.md).
 Auto-update is off for this marketplace unless you turn it on under `/plugin` → Marketplaces. To hold
-one release, add the marketplace at its tag: `/plugin marketplace add msolecki/developer-os#v0.2.5`.
+one release, add the marketplace at its tag: `/plugin marketplace add msolecki/developer-os#v0.2.6`.
 
 ## Requirements
 
@@ -42,7 +42,12 @@ Brain vault: /absolute/path/to/your/vault
 ```
 
 and the vault path in `permissions.additionalDirectories` in `~/.claude/settings.json`, so Claude Code
-may read and write it from any project. Then open the vault folder in Obsidian ("Open folder as
+may read and write it from any project. It also asks, separately, whether to set
+`"autoMemoryEnabled": false`: recommended, because Claude Code's auto memory is a second, unreviewed
+store per project that drifts from the vault. If you already have auto memory, run the
+`brain-import-memory` skill in each project to move it into the vault; the memory files are not
+touched. The full recommended configuration is in
+[docs/workflow.md](docs/workflow.md#recommended-configuration). Then open the vault folder in Obsidian ("Open folder as
 vault") and enable the **Bases** and **Templates** core plugins, with `templates` as the Templates
 folder.
 
@@ -103,7 +108,8 @@ without it the core rules still load and the other hooks do not run.
 ## What's inside
 
 - **Brain skills:** brain-setup, brain-search, brain-capture, brain-review, brain-garden,
-  brain-compile, brain-project-refresh (bring the repository's project hub note up to date). They read and write the vault with the agent's own file tools.
+  brain-compile, brain-project-refresh (bring the repository's project hub note up to date),
+  brain-import-memory (move a project's Claude Code auto memory into the vault, item by item). They read and write the vault with the agent's own file tools.
 - **Engineering skills:** code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
   bug-triage, deploy-checklist, instruction-review (add `--prune` for a periodic cut), plan-status,
   client-reply, docs-sync, project-baseline, project-init (adopt developer-os in a repository in one

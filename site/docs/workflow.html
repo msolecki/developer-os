@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@0df0d18e7724">
+<meta name="dos-source" content="docs/workflow.md@1019f3277fb5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -70,7 +70,9 @@ review it and set <code>status: active</code>. An unreviewed agent note is a dra
 /plugin install developer-os@developer-os</code></pre></li>
 <li>Ask Claude Code to run <code>brain-setup</code>; it creates or connects the vault and, after your approval,
 adds the <code>Brain vault:</code> line to <code>~/.claude/CLAUDE.md</code> and the vault path to
-<code>permissions.additionalDirectories</code> in <code>~/.claude/settings.json</code>. Connecting an existing vault adds
+<code>permissions.additionalDirectories</code> in <code>~/.claude/settings.json</code>, and asks separately whether to
+turn Claude Code's auto memory off (<code>"autoMemoryEnabled": false</code>, recommended; see
+<a href="#recommended-configuration">Recommended configuration</a>). Connecting an existing vault adds
 only the missing pieces and never overwrites your <code>.obsidian/</code> folder. Brain
 skills ask once for the vault path when the line is missing, and stop if you have none; the core
 rules run brain-search only when the line exists.</li>
@@ -80,6 +82,8 @@ to <code>templates</code>.</li>
 <li>Start a session and ask: "brain-search webhooks". It should find the example inbox note.</li>
 <li>Put review and garden in your calendar, or rely on the reminders: nothing in the vault is
 maintained on its own (see <a href="#the-daily-loop">The daily loop</a>).</li>
+<li>If you used Claude Code before, run <code>brain-import-memory</code> in each project that has auto memory:
+it moves what is worth keeping into the vault and leaves the memory files untouched.</li>
 </ol>
     <p>For each project repository, copy the whole of <code>templates/project/</code> (<code>AGENTS.md</code>, <code>CLAUDE.md</code>,
 <code>_Context.md</code>, <code>DESIGN.md</code>, <code>TODO.md</code>, <code>.gitignore</code>, <code>docs/</code>) into its root and fill in <code>AGENTS.md</code>
@@ -94,6 +98,42 @@ them and, with <code>-n</code>, skips every file the project already has.
 <code>pitfalls.md</code>, <code>decisions/</code> and <code>runbooks/</code>. The docs-sync skill scaffolds missing pieces, refreshes
 <code>CURRENT-STATE.md</code> and reports docs-vs-code drift; project-baseline proposes missing engineering
 practices as backlog items.</p>
+    <h2 id="recommended-configuration">Recommended configuration</h2>
+    <p>developer-os is built around one long-term store: the vault. Claude Code's auto memory is a second
+one (a folder per project and machine, written without review, its index loaded into every session),
+so the same fact ends up in two places that drift apart. The recommended setup turns it off and keeps
+everything else in plain files you can read and review (decision D24 in
+<a href="product/decisions.html">product/decisions.md</a>).</p>
+    <p><code>~/.claude/settings.json</code> (merge into your file; brain-setup writes the first two keys for you):</p>
+    <pre><code>{
+  "autoMemoryEnabled": false,
+  "permissions": { "additionalDirectories": ["/absolute/path/to/vault"] },
+  "enabledPlugins": { "developer-os@developer-os": true }
+}</code></pre>
+    <p><code>~/.claude/CLAUDE.md</code>, short, loaded in every project:</p>
+    <pre><code>Brain vault: /absolute/path/to/vault
+
+&lt;your preferences: language, tone, what never to do; one line each&gt;</code></pre>
+    <p>Keep longer personal rules in files under <code>~/.claude/rules/</code> (Claude Code loads them at user level
+next to <code>CLAUDE.md</code>), or import a file with <code>@~/path/to/file.md</code>; do not import whole vault notes,
+because every imported line loads into every session.</p>
+    <p>Each project repository: <code>AGENTS.md</code> with the project's commands and rules, <code>CLAUDE.md</code> containing only
+<code>@AGENTS.md</code>, and <code>_Context.md</code> with the <code>Vault project slug:</code> line (from
+<a href="https://github.com/msolecki/developer-os/tree/development/templates/project"><code>templates/project/</code></a>).</p>
+    <div class="table-wrap">
+<table>
+<thead><tr><th scope="col">Want</th><th scope="col">How</th></tr></thead>
+<tbody>
+<tr><td>Auto memory off for one project only</td><td><code>"autoMemoryEnabled": false</code> in that project's <code>.claude/settings.json</code></td></tr>
+<tr><td>Off regardless of settings</td><td><code>CLAUDE_CODE_DISABLE_AUTO_MEMORY=1</code> in the environment; it wins over the setting</td></tr>
+<tr><td>Check what loads</td><td><code>/memory</code> lists the instruction files and shows the auto-memory toggle; <code>/context</code> shows what loaded</td></tr>
+<tr><td>Move existing auto memory into the vault</td><td><code>brain-import-memory</code>, once per project; the files stay where they are</td></tr>
+<tr><td>Fewer reminders</td><td><code>DEVELOPER_OS_NOTICES=off</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE=off</code> (<a href="reference/hooks.html#environment-variables">hooks</a>)</td></tr>
+</tbody>
+</table>
+</div>
+    <p>Turning auto memory off does not delete anything: the files stay in
+<code>~/.claude/projects/&lt;project&gt;/memory/</code> until you remove them.</p>
     <h2 id="vault-layout">Vault layout</h2>
     <div class="table-wrap">
 <table>
@@ -319,18 +359,20 @@ short vault note links to it and says what the lesson is for other projects.</p>
     <p>brain-capture enforces this list as a three-question gate: useful beyond this task? why written?
 not already in the code or the repository's plan or ADR?</p>
     <h3 id="where-knowledge-belongs">Where knowledge belongs</h3>
-    <p>Claude Code also keeps its own auto-memory. To keep one fact in one place:</p>
+    <p>Claude Code also has its own auto memory; with the
+<a href="#recommended-configuration">recommended configuration</a> it is off, so each fact has one place:</p>
     <div class="table-wrap">
 <table>
 <thead><tr><th scope="col">What</th><th scope="col">Where</th></tr></thead>
 <tbody>
-<tr><td>user preferences and style corrections</td><td>auto-memory or <code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md</code></td></tr>
+<tr><td>user preferences and style corrections</td><td><code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md</code> (or a file under its <code>rules/</code>)</td></tr>
 <tr><td>lessons and decisions that apply beyond this project</td><td>vault, via brain-capture</td></tr>
 <tr><td>facts about this project (commands, stack, conventions)</td><td>the project's <code>AGENTS.md</code>/<code>CLAUDE.md</code> or an ADR</td></tr>
 </tbody>
 </table>
 </div>
-    <p><code>session-retro</code> routes findings by this table.</p>
+    <p><code>session-retro</code> routes findings by this table, and <code>brain-import-memory</code> sorts existing auto-memory
+files by it.</p>
     <h2 id="how-project-repositories-link-to-the-vault">How project repositories link to the vault</h2>
     <ul>
 <li>Each project has a slug, for example <code>example-shop</code>. It is written once in the repository's

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/overview.md@49d338e1c637">
+<meta name="dos-source" content="docs/product/overview.md@dfd47d4ebe18">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -66,7 +66,7 @@
 <li><strong>Archive, never delete.</strong> Retired, merged and rejected notes move to <code>_archive/</code> with <code>status: archived</code>.</li>
 <li><strong>Propose, then act on a named yes.</strong> Every skill that changes files, git state or anything outside the machine stops at a defined point and asks; silence or "looks good" is not approval. Each action skill states its <code>## Stop point</code> and <code>## Never</code> sections, and <code>scripts/check.sh</code> fails without them.</li>
 <li><strong>Evidence over declaration.</strong> Findings carry a file and line, reviews rate on one P0–P3 scale, blocking findings go to a fresh verifier, and "works" needs test output.</li>
-<li><strong>One fact in one place.</strong> Code facts and plans stay in the repository; lessons that outlive a repository go to the vault; user preferences go to auto-memory or <code>~/.claude/CLAUDE.md</code> (<a href="../workflow.html#where-knowledge-belongs">workflow.md, Where knowledge belongs</a>).</li>
+<li><strong>One fact in one place.</strong> Code facts and plans stay in the repository; lessons that outlive a repository go to the vault; user preferences go to <code>~/.claude/CLAUDE.md</code>. Claude Code's auto memory is a second, unreviewed store, so the recommended setup turns it off and brain-import-memory moves what it holds into the vault (D24; <a href="../workflow.html#where-knowledge-belongs">workflow.md, Where knowledge belongs</a>).</li>
 <li><strong>Small fixed cost per session.</strong> The core rules are capped at 8192 bytes and the skill descriptions at 12000 characters in total, because both load into every session.</li>
 <li><strong>No runtime.</strong> Anything that would need a process, a schedule or the network is either left to Claude Code itself (routines, the marketplace) or not built. Vault upkeep is not scheduled: a startup hook reminds you when it is due, and you run it (D22).</li>
 </ol>
@@ -76,13 +76,13 @@
 <table>
 <thead><tr><th scope="col">Component</th><th scope="col">Count</th><th scope="col">Source</th></tr></thead>
 <tbody>
-<tr><td>Brain skills</td><td>7</td><td><code>plugin/skills/brain-*</code></td></tr>
-<tr><td>Engineering skills</td><td>14</td><td><code>plugin/skills/</code></td></tr>
+<tr><td>Brain skills</td><td>8</td><td><code>plugin/skills/brain-*</code></td></tr>
+<tr><td>Engineering skills</td><td>15</td><td><code>plugin/skills/</code></td></tr>
 <tr><td>Session skills</td><td>2 (session-retro, skill-usage)</td><td><code>plugin/skills/</code></td></tr>
 <tr><td>Conventions skills</td><td>7 (<code>*-conventions</code>)</td><td><code>plugin/skills/</code></td></tr>
 <tr><td>Agents</td><td>10</td><td><code>plugin/agents/</code></td></tr>
 <tr><td>Output styles</td><td>4</td><td><code>plugin/output-styles/</code></td></tr>
-<tr><td>Hooks</td><td>4 (two on <code>SessionStart</code>, one on <code>Stop</code>, one on <code>PreToolUse</code> for Bash)</td><td><code>plugin/hooks/hooks.json</code></td></tr>
+<tr><td>Hooks</td><td>5 (three on <code>SessionStart</code>, one on <code>Stop</code>, one on <code>PreToolUse</code> for Bash)</td><td><code>plugin/hooks/hooks.json</code></td></tr>
 <tr><td>Core rules</td><td>1 file</td><td><code>plugin/rules/core.md</code></td></tr>
 <tr><td>Vault template</td><td>1</td><td><code>plugin/vault-template/</code></td></tr>
 <tr><td>Project template</td><td>1</td><td><code>templates/project/</code> (in the repository, not in the installed plugin)</td></tr>
@@ -106,7 +106,7 @@
 <li>License: MIT. No paid tier, no telemetry.</li>
 </ul>
 <h2 id="status">Status</h2>
-<p>Release 0.2.5; installs follow <code>main</code>, which moves only on a release. See <a href="../changelog.html">CHANGELOG.md</a> for what each
+<p>Release 0.2.6; installs follow <code>main</code>, which moves only on a release. See <a href="../changelog.html">CHANGELOG.md</a> for what each
 release changed.</p>
 <h2 id="primary-risks">Primary risks</h2>
 <div class="table-wrap">

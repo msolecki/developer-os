@@ -316,6 +316,20 @@ summary or status that no longer fits). A drifted code fact is usually replaced 
 repository doc, since the hub keeps only what outlives the repository. A claim it cannot check is
 listed as unchecked, not changed.
 
+### brain-import-memory
+
+[Source](../../plugin/skills/brain-import-memory/SKILL.md). Finds the current repository's
+auto-memory folder (`<config>/projects/<path with every non-alphanumeric character as ->/memory/`,
+or `autoMemoryDirectory` from `settings.json`), or asks which project when it is missing. Reads every
+topic file, searches the vault for each one and labels it: `new` (an inbox note in brain-capture's
+format; files on one topic make one note), `add` (sentences for an existing note, as a diff),
+`preference` (a line for the user-level `CLAUDE.md`), `project-rule` (a line for the repository's
+instruction file), `covered` or `skip` (with the reason). A file that contradicts a note shows both
+claims; the newer, better-evidenced one is proposed, otherwise the note stays. Secrets, account IDs,
+IP addresses and private contact details are redacted. Applies only the numbers the user names,
+never touches the memory files; while auto memory is still on, `autoMemoryEnabled: false` is one more
+numbered item, re-checked after it is written.
+
 ## Conventions
 
 The model loads these when the file or task matches; they write nothing. Each rule is what the

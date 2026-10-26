@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@72bda1e10c49">
+<meta name="dos-source" content="docs/product/decisions.md@32cf6ae16f09">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -208,6 +208,13 @@
 <li><strong>Why:</strong> subagents run inside the session that dispatched them and end with it, while long lanes need to keep running and be watched from a later turn. A permission bypass would let an unattended process run any command, against the approval model; a fixed tool list makes a lane that needs more stop as <code>BLOCKED</code> instead.</li>
 <li><strong>Alternatives:</strong> dispatching lanes as subagents (implement-backlog's model, kept for backlog items); <code>--dangerously-skip-permissions</code> (rejected for the reason above); <code>nohup</code> alone (the lane stays in the harness's process group, which kills background jobs after about 29 minutes).</li>
 </ul>
+<h2 id="d24-the-vault-is-the-one-long-term-store-auto-memory-is-off-by-recommendation">D24. The vault is the one long-term store; auto memory is off by recommendation</h2>
+<ul>
+<li><strong>Date:</strong> 2026-10-26</li>
+<li><strong>Decision:</strong> developer-os recommends <code>"autoMemoryEnabled": false</code> in the user's <code>settings.json</code>. brain-setup offers it as a separate yes/no; session-retro no longer routes anything to auto memory (user preferences go to the user-level <code>CLAUDE.md</code>); the brain-import-memory skill moves an existing auto-memory folder into the vault item by item (new inbox notes, additions to notes the user names, preference and project-rule lines) and never edits or deletes the memory files.</li>
+<li><strong>Why:</strong> auto memory is a second store per project and machine that the agent writes without review, with its index loaded into every session. It duplicated vault notes and drifted from them, could not be searched across projects or read by other agents, and bypassed the approval step D4 puts on vault knowledge. On the author's machine it held more than 500 files across 20 projects when this was decided.</li>
+<li><strong>Alternatives:</strong> keeping both stores with a routing table (the 0.2 behaviour; facts still landed in both); pointing <code>autoMemoryDirectory</code> at the vault (one shared folder for every project, written without review, outside the vault's note format); copying all memory files into <code>_inbox/</code> in one go (skips brain-capture's gate and floods the inbox).</li>
+</ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>
 <div class="table-wrap">
@@ -229,6 +236,8 @@
 <tr><td>2026-10-16</td><td>The hook input-normalization rule moves to defensive-coding-conventions and the TypeScript <code>strict</code> rule to typescript-conventions; a lesson goes to the vault when other projects can use it</td><td><code>core.md</code>, <code>defensive-coding-conventions</code>, <code>typescript-conventions</code></td><td>core.md had 48 bytes left and held two stack-specific rules it says belong in skills; "project history" sent repository facts to the vault, against brain-capture and session-retro</td></tr>
 <tr><td>2026-10-20</td><td>docs-sync writes <code>Reason not recorded</code> for a decision whose reason is in neither history nor docs, and reports conflicting decision records as drift before a broad change; ADRs gain Status and Revisit when</td><td><code>docs-sync</code></td><td>An agent reconstructing a rationale from the code records a guess as a decision (flaviocopes.com/project-decisions)</td></tr>
 <tr><td>2026-10-20</td><td>A regression test is seen red before the fix; the boundary that could be wrong is not faked; failure messages show the missing record or response, and retries never hide a flaky test</td><td><code>testing-conventions</code></td><td>A test seen only green, a fake database or a raised retry count each lets a fix ship unverified (flaviocopes.com/fast-tests-for-agents)</td></tr>
+<tr><td>2026-10-26</td><td>User preferences route to the user-level <code>CLAUDE.md</code> only; auto memory is no longer a destination</td><td><code>session-retro</code></td><td>D24: the vault and instruction files are the only long-term stores</td></tr>
+<tr><td>2026-10-26</td><td>brain-setup offers <code>"autoMemoryEnabled": false</code> as a separate yes/no and points to brain-import-memory when memory files exist</td><td><code>brain-setup</code></td><td>D24</td></tr>
 </tbody>
 </table>
 </div>

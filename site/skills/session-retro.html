@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/session-retro/SKILL.md@bf5dab796bec">
+<meta name="dos-source" content="plugin/skills/session-retro/SKILL.md@acee6e9430f4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,7 +52,7 @@
     <dl class="facts">
       <div class="fact"><dt>Group</dt><dd>Session and communication</dd></div>
       <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
-      <div class="fact"><dt>Writes</dt><dd>Approved items only: brain notes, rule diffs, the plan, auto-memory</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Approved items only: brain notes, rule and preference diffs, the plan</dd></div>
       <div class="fact"><dt>Asks before</dt><dd>Each item, by number; every cleanup command</dd></div>
     </dl>
 
@@ -70,7 +70,7 @@
       <li><strong>Checks the state.</strong> Uncommitted changes, commits not pushed upstream, branches not merged into the base, your open PRs (skipped, and said so, without a working <code>gh</code>), and the background shells and agents it started that are still running. Outside a git repository it skips the git checks and says so.</li>
       <li><strong>Proposes cleanup.</strong> Worktrees and branches whose work is merged into the base branch, and stashes this session created, with the exact commands. It never proposes the current branch or the local base branch, and names the base it compared against; when <code>origin/HEAD</code> is unset it proposes no branch removal and suggests <code>git remote set-head origin -a</code>.</li>
       <li><strong>Prints the status block.</strong> Done (with evidence), Not done (and why), Needs you (decisions, credentials, manual steps, approvals). Each check in Done reads <code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus <code>+ uncommitted: &lt;changed files&gt;</code> when the tree was dirty, so a later commit visibly outdates it.</li>
-      <li><strong>Proposes findings.</strong> At most three per heading, each labelled <code>persistent</code> (true in the next task) or <code>this-task</code>; only persistent ones go to the vault, auto-memory or instruction files. Preferences go to auto-memory or the user-level <code>CLAUDE.md</code> of the active config directory (<code>$CLAUDE_CONFIG_DIR</code>, default <code>~/.claude</code>), lessons beyond the project to the vault through brain-capture, project facts to the project's <code>AGENTS.md</code>/<code>CLAUDE.md</code> or an ADR. The headings:
+      <li><strong>Proposes findings.</strong> At most three per heading, each labelled <code>persistent</code> (true in the next task) or <code>this-task</code>; only persistent ones go to the vault or instruction files. Preferences go to the user-level <code>CLAUDE.md</code> of the active config directory (<code>$CLAUDE_CONFIG_DIR</code>, default <code>~/.claude</code>), never to auto memory, lessons beyond the project to the vault through brain-capture, project facts to the project's <code>AGENTS.md</code>/<code>CLAUDE.md</code> or an ADR. The headings:
         <ul>
           <li><strong>Lessons</strong> that outlive the task, with their destination.</li>
           <li><strong>Rule candidates</strong> from corrections you made, as a minimal diff; it first searches the file's history and, if the change reverses an earlier commit, shows that commit and asks.</li>
@@ -81,7 +81,7 @@
           <li><strong>Skill or hook candidates</strong>: a request you made at least twice, with a name, trigger phrases (in your own wording) and the type.</li>
         </ul>
       </li>
-      <li><strong>Applies what you choose.</strong> You answer by number. Lessons go through brain-capture, rule and plan changes as a shown diff, auto-memory as one fact per file. Where the repository keeps a rules history table, each approved rule change gets a row.</li>
+      <li><strong>Applies what you choose.</strong> You answer by number. Lessons go through brain-capture, rule, preference and plan changes as a shown diff. Where the repository keeps a rules history table, each approved rule change gets a row.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>

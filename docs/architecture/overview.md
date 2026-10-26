@@ -22,7 +22,7 @@ plugin/                           the installed payload
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
   hooks/guard.py                  PreToolUse guard for Bash
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/<name>/SKILL.md          31 skills
+  skills/<name>/SKILL.md          32 skills
   agents/<name>.md                10 agents
   output-styles/<name>.md         4 output styles
   vault-template/                 copied by brain-setup
@@ -46,7 +46,7 @@ What occupies the context of a session, and when:
 |---|---|---|---|
 | `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
-| Skill names and descriptions | Every session, by Claude Code's skill listing | 11391 characters for 31 skills | 80–1024 each, 12000 total |
+| Skill names and descriptions | Every session, by Claude Code's skill listing | 11876 characters for 32 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
 | A skill's body | When the model or the user invokes it | 0.8–11.5 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
 | An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 1.9–4.0 KB per file | — |
@@ -120,6 +120,7 @@ flowchart LR
   project-baseline -. BASE items .-> implement-backlog
   session-retro --> brain-capture
   brain-setup --> brain-search
+  brain-setup -. offers .-> brain-import-memory
   bug-triage -. offers .-> brain-capture
   deploy-checklist -. offers .-> brain-capture
   code-reviewer -. checks .-> defensive-coding-conventions

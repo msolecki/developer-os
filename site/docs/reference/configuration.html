@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/configuration.md@b00b8afb0bff">
+<meta name="dos-source" content="docs/reference/configuration.md@b5e46c22682d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -56,6 +56,8 @@
         <tbody>
           <tr><td><code>Brain vault: &lt;absolute path&gt;</code></td><td><code>~/.claude/CLAUDE.md</code> (or a project's <code>CLAUDE.md</code>/<code>AGENTS.md</code>)</td><td>All brain skills; the core rule that runs brain-search before large tasks; the notices hook, from the user-level file only</td><td>brain-setup, after approval</td></tr>
           <tr><td>Vault in <code>permissions.additionalDirectories</code></td><td><code>~/.claude/settings.json</code></td><td>Claude Code, so the vault can be read from any project</td><td>brain-setup, after approval</td></tr>
+          <tr><td><code>"autoMemoryEnabled": false</code> (recommended, D24)</td><td><code>~/.claude/settings.json</code>; <code>CLAUDE_CODE_DISABLE_AUTO_MEMORY=1</code> in the environment wins over it</td><td>Claude Code: no auto-memory files are created or loaded; existing ones stay on disk</td><td>brain-setup, after a separate yes; brain-import-memory, as one of its numbered items; the <code>/memory</code> toggle writes the same key</td></tr>
+          <tr><td>Auto-memory folder</td><td><code>~/.claude/projects/&lt;project&gt;/memory/</code>, or <code>autoMemoryDirectory</code></td><td>brain-import-memory, which never edits or deletes it</td><td>Claude Code, while auto memory is on</td></tr>
           <tr><td><code>"outputStyle": "developer-os:&lt;name&gt;"</code></td><td>Claude Code settings</td><td>Claude Code; a bare name silently falls back to the default style</td><td>The user</td></tr>
           <tr><td>Rule overrides</td><td><code>~/.claude/CLAUDE.md</code></td><td>The model, alongside the core rules</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code></td><td>Shell environment</td><td>The <code>Stop</code> hook (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
