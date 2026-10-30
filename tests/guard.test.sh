@@ -3,12 +3,14 @@
 guard="$(dirname "$0")/../plugin/hooks/guard.py"
 fail=0
 
-check() { # expected (ask|pass), stdin, optional reason substring
+check() { # expected (ask|pass|ctx), stdin, optional reason substring
   out=$(printf '%s' "$2" | python3 "$guard"); code=$?
   case $1 in
     ask) printf '%s' "$out" | grep -q '"permissionDecision":"ask"' && [ $code -eq 0 ] &&
       { [ -z "$3" ] || printf '%s' "$out" | grep -qF "$3"; } && return ;;
     pass) [ -z "$out" ] && [ $code -eq 0 ] && return ;;
+    ctx) printf '%s' "$out" | grep -q '"additionalContext"' && ! printf '%s' "$out" | grep -q permissionDecision &&
+      [ $code -eq 0 ] && { [ -z "$3" ] || printf '%s' "$out" | grep -qF "$3"; } && return ;;
   esac
   fail=1; echo "FAIL: expected $1 (exit $code) for: $2"
 }
@@ -40,7 +42,7 @@ check pass "$(fx 'git push origin :x')"
 check ask "$(fx 'git commit --no-verify -m x')"
 check ask "$(fx 'git commit -n -m x')"
 check ask "$(fx 'git commit -anm x')"
-check pass "$(fx 'git commit -am x')"
+check ctx "$(fx 'git commit -am x')"
 check ask "$(fx 'pnpm \\\n add x')"
 check ask "$(fx 'sh -c \"pnpm add zod\"')"
 # Quotes are stripped: a quoted mention without a package passes, with one asks.
@@ -70,7 +72,7 @@ check ask "$(fx 'pnpm install\ngit status')"
 # A newline inside a quoted argument does not end the git command.
 check ask "$(fx 'git commit -m \"a\nb\" -n')"
 check ask "$(fx 'git push origin \"a\nb\" -f')"
-check pass "$(fx 'git commit -m \"a\nb\"')"
+check ctx "$(fx 'git commit -m \"a\nb\"')"
 # R2: the value of --filter, -F, --prefix, --dir or -C is not a package.
 check pass "$(fx 'pnpm install --filter web')"
 check pass "$(fx 'npm install --prefix dir')"
@@ -91,7 +93,7 @@ check ask "$(fx 'git commit --no-ver\"\"ify')"
 check ask "$(fx 'git config core.hooks\"\"Path /dev/null')"
 check ask "$(fx 'D=/dev/null git --config-env=core.hooksPath=D commit -m x')"
 check ask "$(fx 'git push --mirror')"
-check pass "$(fx 'git commit -m \"fix\n\nbody\"')"
+check ctx "$(fx 'git commit -m \"fix\n\nbody\"')"
 # Forms from the 2026-10-16 reviews: $-quoting, escaped quotes, stray apostrophes, backslashes.
 check ask "$(fx 'git push $'"'"'-f'"'"' origin main')"
 check ask "$(fx 'git push origin $'"'"'+main'"'"'')"
@@ -144,7 +146,7 @@ check ask "$(fx 'git push origin main $'"'"'-\\x66'"'"'')" 'Force push'
 check ask "$(fx 'git push origin main $'"'"'-\\146'"'"'')" 'Force push'
 check ask "$(fx 'git -c remote.origin.push=+refs/heads/main:refs/heads/main push')" 'Force push'
 check pass "$(fx 'echo ${HOME:-x} $IFS')"
-check pass "$(fx 'git commit -m \"$MSG\"')"
+check ctx "$(fx 'git commit -m \"$MSG\"')"
 # TEST-08: the other package-manager option values, and input that is not valid UTF-8.
 check pass "$(fx 'pnpm install -F web')"
 check pass "$(fx 'pnpm install --dir x')"
@@ -212,5 +214,12 @@ check pass "$(fa developer-os:code-reviewer 'git log --oneline -5')"
 check pass "$(fa developer-os:qa-expert 'echo x > a.ts')"
 check pass "$(fa other-plugin:code-reviewer 'echo x > a.ts')"
 check pass "$(fx 'echo x > a.ts')"
+# commit reminder: context, no decision
+check ctx "$(fx 'git commit -m x')" "Before this commit"
+check ctx "$(fx 'git add -A && git commit --amend --no-edit')"
+check ctx "$(fx 'git -C repo commit -m x')"
+check ask "$(fx 'git commit -n -m x')" "skips"
+check pass "$(fx 'git status')"
+check pass "$(fx 'git log --grep commit')"
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

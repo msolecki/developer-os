@@ -124,7 +124,13 @@ another user, the hook prints nothing, because without markers every notice woul
 ```
 
 or prints nothing and exits 0, which leaves Claude Code's normal permission flow in charge. It never
-answers `deny`. In `claude -p`, an `ask` resolves to a denial: the call is listed under `permission_denials` and the
+answers `deny`. A Bash `git commit` (`commit` as git's subcommand, after `-C`/`-c` and other global options)
+that hits no category prints only context, which reaches the model and leaves the permission flow as is:
+
+```json
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."}}
+```
+ In `claude -p`, an `ask` resolves to a denial: the call is listed under `permission_denials` and the
 command does not run, even when `--allowedTools Bash` allows it.
 
 | Category | Asks for | Passes |

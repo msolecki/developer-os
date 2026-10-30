@@ -86,6 +86,10 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-10-30:** a sixth category, a writing Bash call inside the five read-only review agents,
   keyed on the hook input's `agent_type`. They keep Bash for `git diff` and test runs; `permissionMode`
   is ignored for plugin agents, and `disallowedTools: Bash` would remove those reads.
+- **Amended 2026-10-30:** a `git commit` that hits no category gets `additionalContext` (no decision)
+  reminding the agent of the fast check; a rule loaded at session start fades in a long session, and a
+  reminder tied to the event it governs does not (harness-engineering-101, chapter 8). Checked in
+  `claude -p`: the text reaches the model and the command runs without a prompt.
 
 ## D7. One wrap-up nudge per long session
 

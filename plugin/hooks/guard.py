@@ -19,6 +19,9 @@ security-auditor; `agent_type` with or without the `developer-os:` prefix) a Bas
 writes: `sed -i`, `tee`, `rm`, `mv`, `cp`, `truncate`, a git command that changes the tree or history, or a
 `>`/`>>` redirect to anything but `/dev/null` or a temp directory.
 
+A `git commit` that passes every check gets no decision, only a one-line `additionalContext` reminding the
+agent to run the project's fast check first; the rule loaded at session start fades in a long session.
+
 Quotes are stripped before matching, so `sh -c "pnpm add zod"` asks, and so does a mention such as
 `git commit -m "pnpm add zod"`. An extra prompt costs one click; a missed install rewrites the lockfile.
 """
@@ -37,6 +40,7 @@ REASONS = {
 }
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
+COMMIT = "Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."
 READ_ONLY = {"code-reviewer", "database-reviewer", "infra-reviewer", "performance-engineer", "security-auditor"}
 GIT_WRITE = {"add", "apply", "checkout", "cherry-pick", "commit", "merge", "push", "rebase", "reset", "restore", "stash",
              "switch"}
@@ -168,6 +172,21 @@ def writes(line):
     return False
 
 
+def commits(line):
+    """`git commit` in any segment: `commit` is git's subcommand, after its global options."""
+    for seg in re.split(r"[;&|()`]", line):
+        words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+        for i, w in enumerate(words):
+            if not re.search(r"(^|/)git$", w):
+                continue
+            rest = words[i + 1:]
+            while rest and rest[0].startswith("-"):
+                rest = rest[2:] if rest[0] in ("-C", "-c") else rest[1:]
+            if rest[:1] == ["commit"]:
+                return True
+    return False
+
+
 def protected(path):
     """A secret file or the agent's own user-level config, after expanding `~` and normalizing."""
     p = os.path.normpath(os.path.expanduser(path))
@@ -208,6 +227,9 @@ def main():
             return
     if read_only(raw) and any(writes(v) for v in views):
         ask("readonly")
+    elif any(commits(v) for v in views):
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": COMMIT}},
+                         separators=(",", ":")))
 
 
 if __name__ == "__main__":

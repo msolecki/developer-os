@@ -105,7 +105,8 @@ that destroys uncommitted or untracked work: `rm` with both a recursive and a fo
 `.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/hooks` or
 `~/.claude/rules`, or is `~/.claude/settings.json` or `settings.local.json`. Inside the five read-only review agents, a Bash
 call that writes (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, a git command that changes the
-tree or history) asks too. `$IFS`
+tree or history) asks too. A `git commit` that asks for nothing gets a one-line reminder, as context for
+the agent, to run the fast check first. `$IFS`
 (also with an empty `$9` glued on), `${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
 
 The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
