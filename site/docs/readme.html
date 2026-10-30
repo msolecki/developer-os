@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@7afb7fa6771f">
+<meta name="dos-source" content="README.md@d77675f9ca04">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -122,8 +122,8 @@ to change the threshold.</p>
 also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of it such as <code>--no-veri</code>,
 <code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form, and a command
 that destroys uncommitted or untracked work: <code>rm</code> with both a recursive and a force flag (<code>rm -rf</code>),
-<code>git reset --hard</code>, <code>git clean -f</code>, or <code>git checkout</code>/<code>git restore</code> of <code>.</code>, <code>:/</code> or <code>*</code>
-(<code>git restore --staged .</code> passes). An Edit or Write asks when its file is a <code>.env</code> or <code>.env.*</code> (not
+<code>git reset --hard</code>, <code>git clean -f</code>, <code>git checkout</code>/<code>git restore</code> of <code>.</code>, <code>:/</code> or <code>*</code>, <code>git checkout -f</code>,
+<code>git switch --discard-changes</code> or <code>find … -delete</code> (<code>git restore --staged .</code> and <code>git clean -n</code> pass). An Edit or Write asks when its file is a <code>.env</code> or <code>.env.*</code> (not
 <code>.example</code>, <code>.sample</code>, <code>.template</code>, <code>.dist</code>), is under <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.claude/hooks</code> or
 <code>~/.claude/rules</code>, or is <code>~/.claude/settings.json</code> or <code>settings.local.json</code>. Inside the five read-only review agents, a Bash
 call that writes (<code>sed -i</code>, <code>tee</code>, <code>rm</code>, <code>mv</code>, <code>cp</code>, a redirect into a file, a git command that changes the

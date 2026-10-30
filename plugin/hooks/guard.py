@@ -5,7 +5,8 @@ Answers "ask" (never "deny") before a dependency install, update or removal with
 a force push (--force, -f, a +refspec or remote.<name>.push=+; a --force-with-lease alone passes),
 `git commit -n`, or any --no-verify, HUSKY=0, LEFTHOOK=0, SKIP= or core.hooksPath in any form, and before a
 command that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag,
-`git reset --hard`, `git clean -f`, and `git checkout` or `git restore` of `.`, `:/` or `*`. Branch
+`git reset --hard`, `git clean -f` (not a dry run), `git checkout -f`, `git switch --discard-changes`,
+`find -delete`, and `git checkout` or `git restore` of `.`, `:/` or `*` (an unstage-only restore passes). Branch
 deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
@@ -15,9 +16,9 @@ An Edit or Write asks when its `file_path` is a secret or the agent's own user-l
 `~/.claude/hooks` or `~/.claude/rules`.
 
 Inside the read-only agents (code-reviewer, database-reviewer, infra-reviewer, performance-engineer,
-security-auditor; `agent_type` with or without the `developer-os:` prefix) a Bash call also asks when it
-writes: `sed -i`, `tee`, `rm`, `mv`, `cp`, `truncate`, a git command that changes the tree or history, or a
-`>`/`>>` redirect to anything but `/dev/null` or a temp directory.
+security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
+file-changing binary or `sed -i` in command position, a git command that changes state, or a redirect to
+anything but `/dev/null` or a temp directory.
 
 A `git commit` that passes every check gets no decision, only a one-line `additionalContext` reminding the
 agent to run the project's fast check first; the rule loaded at session start fades in a long session.
@@ -42,9 +43,13 @@ INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnt
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
 COMMIT = "Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."
 READ_ONLY = {"code-reviewer", "database-reviewer", "infra-reviewer", "performance-engineer", "security-auditor"}
-GIT_WRITE = {"add", "apply", "checkout", "cherry-pick", "commit", "merge", "push", "rebase", "reset", "restore", "stash",
-             "switch"}
-TEMP = ("/dev/null", "/tmp/", "/private/tmp/", "/var/folders/")
+GIT_WRITE = {"add", "am", "apply", "checkout", "cherry-pick", "clean", "commit", "merge", "mv", "pull", "push", "rebase",
+             "reset", "restore", "revert", "rm", "switch", "update-ref"}
+WRITE_BIN = {"tee", "rm", "mv", "cp", "truncate", "touch", "mkdir", "dd"}
+# A word after one of these is a command name, as is the first word of a segment.
+PRECMD = {"sudo", "xargs", "command", "nohup", "time", "exec", "env", "-exec", "-execdir"}
+TEMP = ("/tmp/", "/private/tmp/", "/var/folders/")
+WHOLE_TREE = (".", "./", ":/", "*")
 PM_VALUE = {"--filter", "-F", "--prefix", "--dir", "-C"}
 
 
@@ -78,14 +83,45 @@ def view(cmd, newline, quotes_to_space=False, join_commas=False):
     return s.replace(",", "" if join_commas else " ")
 
 
-def destroys(x, reset, clean, restore, staged):
-    """`git reset --hard`, `git clean` with a force flag, or a `git checkout`/`git restore` of the whole
-    tree; `git restore --staged .` only unstages and passes."""
-    if reset and x == "--hard":
-        return True
-    if clean and (x == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x)):
-        return True
-    return restore and not staged and x in (".", ":/", "*", "./")
+def short(x, c):
+    """A short-flag cluster such as `-fdx` that contains the letter c."""
+    return re.fullmatch(r"-[a-zA-Z]*%s[a-zA-Z]*" % c, x) is not None
+
+
+def git_subs(words):
+    """(subcommand, the words after it) for each `git` in a segment, past its global options."""
+    for i, w in enumerate(words):
+        if not re.search(r"(^|/)git$", w):
+            continue
+        rest = words[i + 1:]
+        while rest and rest[0].startswith("-"):
+            takes = rest[0] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace")
+            rest = rest[2:] if takes else rest[1:]
+        if rest:
+            yield rest[0], rest[1:]
+
+
+def destroys(words):
+    """`git reset --hard`, a forced `git clean` that is not a dry run, `git checkout` of the whole tree or
+    with `-f`, `git switch -f`/`--discard-changes`, `git restore` of the whole tree unless it only
+    unstages (`--staged` without `--worktree`), or `find ... -delete`."""
+    for sub, rest in git_subs(words):
+        whole = any(x in WHOLE_TREE for x in rest)
+        force = any(x == "--force" or short(x, "f") for x in rest)
+        if sub == "reset" and "--hard" in rest:
+            return True
+        if sub == "clean" and force and not any(x == "--dry-run" or short(x, "n") for x in rest):
+            return True
+        if sub == "checkout" and (whole or force):
+            return True
+        if sub == "switch" and (force or "--discard-changes" in rest):
+            return True
+        if sub == "restore" and whole:
+            staged = any(x == "--staged" or short(x, "S") for x in rest)
+            worktree = any(x == "--worktree" or short(x, "W") for x in rest)
+            if worktree or not staged:
+                return True
+    return any(re.search(r"(^|/)find$", w) for w in words) and "-delete" in words
 
 
 def scan(line):
@@ -93,10 +129,10 @@ def scan(line):
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
         pm = sub = git = push = commit = force = skip = False
-        rm = rec = rmf = reset = clean = restore = staged = False
+        rm = rec = rmf = False
+        if destroys(words):
+            return "destroy"
         for i, x in enumerate(words):
-            if destroys(x, reset, clean, restore, staged):
-                return "destroy"
             if rm and (x == "--recursive" or re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", x)):
                 rec = True
             if rm and (x == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x)):
@@ -105,14 +141,6 @@ def scan(line):
                 return "destroy"
             if re.search(r"(^|/)rm$", x):
                 rm = True
-            if git and x == "reset":
-                reset = True
-            elif git and x == "clean":
-                clean = True
-            elif git and x in ("checkout", "restore"):
-                restore = True
-            elif restore and x in ("--staged", "-S"):
-                staged = True
             if re.fullmatch(r"--no-veri(f|fy)?", x) or x in ("HUSKY=0", "LEFTHOOK=0") or x.startswith("SKIP=") or re.search(r"core\.hookspath(=|$)", x.lower()):
                 return "noverify"
             if re.search(r"(^|/)git$", x):
@@ -147,50 +175,75 @@ def scan(line):
 
 
 def read_only(raw):
-    """True inside one of this plugin's read-only agents; the main session has no agent_type."""
-    m = re.search(r'"agent_type"\s*:\s*"([^"]*)"', raw)
-    name = m.group(1) if m else ""
-    return (name[len("developer-os:"):] if name.startswith("developer-os:") else name) in READ_ONLY
+    """True inside one of this plugin's read-only agents (`developer-os:<name>`); the main session has no
+    agent_type."""
+    m = re.search(r'"agent_type"\s*:\s*"developer-os:([^"]*)"', raw)
+    return bool(m) and m.group(1) in READ_ONLY
+
+
+def git_writes(sub, rest):
+    """A git subcommand that changes the tree, the index, refs or config; listing forms pass."""
+    if sub in GIT_WRITE:
+        return True
+    args = [x for x in rest if not x.startswith("-")]
+    if sub == "stash":
+        return rest[:1] not in (["list"], ["show"])
+    if sub == "worktree":
+        return rest[:1] in (["add"], ["remove"], ["move"], ["prune"], ["repair"])
+    if sub in ("branch", "tag"):
+        changes = {"-d", "-D", "-m", "-M", "-c", "-C", "-f", "-a", "-s", "--delete", "--move", "--copy", "--force"}
+        lists = {"-l", "--list", "-a", "-r", "--all", "--remotes", "--contains", "--no-contains", "--merged",
+                 "--no-merged", "--points-at", "-n", "-v", "-vv", "--show-current", "--sort"}
+        flags = [x.split("=")[0] for x in rest if x.startswith("-")]
+        return any(f in changes for f in flags if not (sub == "branch" and f == "-a")) or (
+            bool(args) and not any(f in lists for f in flags))
+    if sub == "config":
+        reads = ("--get", "--get-all", "--get-regexp", "--list", "-l", "--show-origin")
+        edits = ("--unset", "--unset-all", "--add", "--replace-all", "--rename-section", "--remove-section", "--edit", "-e")
+        return not any(x in reads for x in rest) and (len(args) >= 2 or any(x in edits for x in rest))
+    return False
 
 
 def writes(line):
-    """A write-shaped command in any segment: a file-changing binary, a tree- or history-changing git
-    subcommand, or a redirect into a file outside /dev/null and the temp directories."""
-    for target in re.findall(r"(?<!<)>>?\s*([^\s;&|()<>]*)", line):
-        if target and not target.startswith(TEMP):
+    """A write-shaped command in any segment: a file-changing binary or `sed -i`/`perl -i` in command
+    position, a git subcommand that changes state, or a redirect (`>`, `>>`, `>|`, `&>`, `>&file`) into a
+    file outside /dev/null and the temp directories. `=>` and `->` are not redirects."""
+    for m in re.finditer(r"(?<![<=-])>[>|]?\s*(&?)([^\s;&|()<>]*)", line):
+        target = m.group(2)
+        if not target or (m.group(1) and (target.isdigit() or target == "-")):
+            continue
+        t = os.path.normpath(target)
+        if t != "/dev/null" and not (t + "/").startswith(TEMP):
             return True
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
-        git = False
-        for x in words:
-            if re.search(r"(^|/)(tee|rm|mv|cp|truncate)$", x) or (git and x in GIT_WRITE):
+        for i, x in enumerate(words):
+            if i and words[i - 1] not in PRECMD:
+                continue
+            name = x.rsplit("/", 1)[-1]
+            if name in WRITE_BIN:
                 return True
-            if re.search(r"(^|/)sed$", x) and any(w == "--in-place" or re.match(r"(-i|--in-place=)", w) for w in words):
+            if name in ("sed", "perl") and any(
+                    w == "--in-place" or w.startswith("--in-place=") or re.match(r"-[a-zA-Z]*i", w) for w in words[i + 1:]):
                 return True
-            if re.search(r"(^|/)git$", x):
-                git = True
+        if any(git_writes(sub, rest) for sub, rest in git_subs(words)):
+            return True
     return False
 
 
 def commits(line):
     """`git commit` in any segment: `commit` is git's subcommand, after its global options."""
     for seg in re.split(r"[;&|()`]", line):
-        words = [w for w in re.split(r"[ \t\n]+", seg) if w]
-        for i, w in enumerate(words):
-            if not re.search(r"(^|/)git$", w):
-                continue
-            rest = words[i + 1:]
-            while rest and rest[0].startswith("-"):
-                rest = rest[2:] if rest[0] in ("-C", "-c") else rest[1:]
-            if rest[:1] == ["commit"]:
-                return True
+        if any(sub == "commit" for sub, _ in git_subs([w for w in re.split(r"[ \t\n]+", seg) if w])):
+            return True
     return False
 
 
 def protected(path):
-    """A secret file or the agent's own user-level config, after expanding `~` and normalizing."""
-    p = os.path.normpath(os.path.expanduser(path))
-    home = os.path.expanduser("~")
+    """A secret file or the agent's own user-level config, after expanding `~` and resolving links,
+    compared without case (macOS volumes ignore it)."""
+    p = os.path.realpath(os.path.expanduser(path)).lower()
+    home = os.path.realpath(os.path.expanduser("~")).lower()
     base = os.path.basename(p)
     if base == ".env" or (base.startswith(".env.") and base.rsplit(".", 1)[1] not in ("example", "sample", "template", "dist")):
         return True

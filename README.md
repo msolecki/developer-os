@@ -100,8 +100,8 @@ A `PreToolUse` hook on Bash, Edit and Write ([`plugin/hooks/guard.py`](plugin/ho
 also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `--no-veri`,
 `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form, and a command
 that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag (`rm -rf`),
-`git reset --hard`, `git clean -f`, or `git checkout`/`git restore` of `.`, `:/` or `*`
-(`git restore --staged .` passes). An Edit or Write asks when its file is a `.env` or `.env.*` (not
+`git reset --hard`, `git clean -f`, `git checkout`/`git restore` of `.`, `:/` or `*`, `git checkout -f`,
+`git switch --discard-changes` or `find … -delete` (`git restore --staged .` and `git clean -n` pass). An Edit or Write asks when its file is a `.env` or `.env.*` (not
 `.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/hooks` or
 `~/.claude/rules`, or is `~/.claude/settings.json` or `settings.local.json`. Inside the five read-only review agents, a Bash
 call that writes (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, a git command that changes the
