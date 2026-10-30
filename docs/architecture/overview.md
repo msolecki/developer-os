@@ -20,7 +20,7 @@ plugin/                           the installed payload
   hooks/hooks.json                5 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
-  hooks/guard.py                  PreToolUse guard for Bash
+  hooks/guard.py                  PreToolUse guard for Bash, Edit and Write
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/<name>/SKILL.md          32 skills
   agents/<name>.md                10 agents
@@ -71,7 +71,7 @@ sequenceDiagram
   SS-->>CC: stdout = state card
   CC->>NO: new session (startup)
   NO-->>CC: nothing or systemMessage (user) + additionalContext (agent)
-  CC->>G: every Bash call, JSON on stdin
+  CC->>G: every Bash, Edit and Write call, JSON on stdin
   G-->>CC: nothing (allow normal flow) or {"permissionDecision":"ask", reason}
   CC->>N: agent finishes a turn, JSON on stdin
   N-->>CC: exit 0, nothing or additionalContext "Run the developer-os:session-retro skill..."

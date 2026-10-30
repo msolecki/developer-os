@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@f70eb8440a80">
+<meta name="dos-source" content="CHANGELOG.md@e4cb026341d4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,6 +54,8 @@
 <li>The guard asks before commands that destroy uncommitted or untracked work: <code>rm</code> with a recursive
 and a force flag, <code>git reset --hard</code>, <code>git clean -f</code>, and <code>git checkout</code>/<code>git restore</code> of the whole
 tree (<code>git restore --staged .</code> passes). D6 amended.</li>
+<li>The guard also runs on Edit and Write and asks before a change to a <code>.env*</code> file, <code>~/.ssh</code>, <code>~/.aws</code>,
+<code>~/.gnupg</code>, <code>~/.claude/settings*.json</code>, <code>~/.claude/hooks</code> or <code>~/.claude/rules</code>. D6 amended.</li>
 <li>project-baseline checks for an after-edit lint hook, and the project templates ship
 <code>docs/runbooks/after-edit-check.md</code>: a <code>PostToolUse</code> hook that lints each edited file and shows the
 agent only the failures.</li>

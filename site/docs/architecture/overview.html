@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@83b1345b33d3">
+<meta name="dos-source" content="docs/architecture/overview.md@734ac144ef99">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -58,7 +58,7 @@ plugin/                           the installed payload
   hooks/hooks.json                5 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
-  hooks/guard.py                  PreToolUse guard for Bash
+  hooks/guard.py                  PreToolUse guard for Bash, Edit and Write
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/&lt;name&gt;/SKILL.md          32 skills
   agents/&lt;name&gt;.md                10 agents
@@ -128,7 +128,7 @@ site/                             public documentation site, published by .githu
 <text class="sm" x="220" y="177" text-anchor="middle">card after compact/resume/fork; notices on startup</text>
 <text class="sm" x="220" y="161" text-anchor="middle">stdout = core rules, plus a state card</text>
 <line class="edge" x1="100" y1="245" x2="576" y2="245" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="340" y="237" text-anchor="middle">every Bash call, JSON on stdin</text>
+<text class="sm" x="340" y="237" text-anchor="middle">every Bash, Edit and Write call, JSON on stdin</text>
 <line class="edge dash" x1="580" y1="305" x2="104" y2="305" marker-end="url(#arch-seq-arrow)"/>
 <text class="sm" x="340" y="297" text-anchor="middle">{"permissionDecision":"ask", reason}</text>
 <text class="sm" x="340" y="281" text-anchor="middle">nothing (allow normal flow) or</text>

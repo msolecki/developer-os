@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse guard for Bash.
+"""PreToolUse guard for Bash, Edit and Write.
 
 Answers "ask" (never "deny") before a dependency install, update or removal with a package argument,
 a force push (--force, -f, a +refspec or remote.<name>.push=+; a --force-with-lease alone passes),
@@ -9,10 +9,16 @@ command that destroys uncommitted or untracked work: `rm` with both a recursive 
 deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
+An Edit or Write asks when its `file_path` is a secret or the agent's own user-level config: a `.env` or
+`.env.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
+`~/.gnupg`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, or anything under
+`~/.claude/hooks` or `~/.claude/rules`.
+
 Quotes are stripped before matching, so `sh -c "pnpm add zod"` asks, and so does a mention such as
 `git commit -m "pnpm add zod"`. An extra prompt costs one click; a missed install rewrites the lockfile.
 """
 import json
+import os
 import re
 import sys
 
@@ -20,6 +26,7 @@ REASONS = {
     "install": "Dependency install, update or removal rewrites dependencies and the lockfile.",
     "push": "Force push can overwrite others' commits; use --force-with-lease alone.",
     "destroy": "This deletes files or discards uncommitted work that git cannot bring back.",
+    "protected": "This file holds secrets or your user-level agent config; edit it only on your request.",
     "noverify": "This skips the repository's git hooks (--no-verify, commit -n, HUSKY=0, LEFTHOOK=0, SKIP=, core.hooksPath).",
 }
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
@@ -125,8 +132,34 @@ def scan(line):
     return None
 
 
+def protected(path):
+    """A secret file or the agent's own user-level config, after expanding `~` and normalizing."""
+    p = os.path.normpath(os.path.expanduser(path))
+    home = os.path.expanduser("~")
+    base = os.path.basename(p)
+    if base == ".env" or (base.startswith(".env.") and base.rsplit(".", 1)[1] not in ("example", "sample", "template", "dist")):
+        return True
+    claude = os.path.join(home, ".claude")
+    if p in (os.path.join(claude, "settings.json"), os.path.join(claude, "settings.local.json")):
+        return True
+    dirs = [os.path.join(home, d) for d in (".ssh", ".aws", ".gnupg")] + [os.path.join(claude, d) for d in ("hooks", "rules")]
+    return any(p == d or p.startswith(d + os.sep) for d in dirs)
+
+
+def ask(reason):
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": REASONS[reason]}},
+        separators=(",", ":")))
+
+
 def main():
-    cmd = command(sys.stdin.buffer.read().decode("utf-8", "replace"))
+    raw = sys.stdin.buffer.read().decode("utf-8", "replace")
+    if re.search(r'"tool_name"\s*:\s*"(Edit|Write)"', raw):
+        path = json.loads(raw).get("tool_input", {}).get("file_path")
+        if isinstance(path, str) and protected(path):
+            ask("protected")
+        return
+    cmd = command(raw)
     if not cmd:
         return
     # Each way runs with a newline as `;` and as a space: five views, and a hit in any asks.
@@ -135,9 +168,7 @@ def main():
     for v in views:
         hit = scan(v)
         if hit:
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": REASONS[hit]}},
-                separators=(",", ":")))
+            ask(hit)
             return
 
 

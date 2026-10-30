@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@2dacb40f5f33">
+<meta name="dos-source" content="README.md@ea9c7480da28">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -114,7 +114,7 @@ Monitor start times from it, never message content. Once per session, after 30 t
 while a background agent, command or Monitor it can see is still running, it asks the agent to run the session-retro skill, which proposes a wrap-up and applies only what you
 approve. Set <code>DEVELOPER_OS_CAPTURE_NUDGE=off</code> to turn it off, or <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN=&lt;n&gt;</code>
 to change the threshold.</p>
-    <p>A <code>PreToolUse</code> hook on Bash (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/guard.py"><code>plugin/hooks/guard.py</code></a>) asks for confirmation
+    <p>A <code>PreToolUse</code> hook on Bash, Edit and Write (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/guard.py"><code>plugin/hooks/guard.py</code></a>) asks for confirmation
 (it never blocks) before a dependency install, update or removal with a package argument
 (<code>npm|pnpm|yarn|bun install|add|i|update|remove &lt;pkg&gt;</code>, an alias such as <code>npm in</code>, <code>npm un</code> or <code>bun a</code>,
 <code>update --latest</code>, or the binary by full path), a <code>git push</code> with <code>--force</code>, <code>-f</code>, a <code>+refspec</code> or
@@ -123,7 +123,9 @@ also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of i
 <code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form, and a command
 that destroys uncommitted or untracked work: <code>rm</code> with both a recursive and a force flag (<code>rm -rf</code>),
 <code>git reset --hard</code>, <code>git clean -f</code>, or <code>git checkout</code>/<code>git restore</code> of <code>.</code>, <code>:/</code> or <code>*</code>
-(<code>git restore --staged .</code> passes). <code>$IFS</code>
+(<code>git restore --staged .</code> passes). An Edit or Write asks when its file is a <code>.env</code> or <code>.env.*</code> (not
+<code>.example</code>, <code>.sample</code>, <code>.template</code>, <code>.dist</code>), is under <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.claude/hooks</code> or
+<code>~/.claude/rules</code>, or is <code>~/.claude/settings.json</code> or <code>settings.local.json</code>. <code>$IFS</code>
 (also with an empty <code>$9</code> glued on), <code>${X:-word}</code> and <code>$'\x66'</code> escapes are expanded before the scan. In <code>claude -p</code> an ask resolves to a denial.</p>
     <p>The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need <code>python3</code> on <code>PATH</code>;

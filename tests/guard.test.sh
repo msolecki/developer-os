@@ -178,5 +178,23 @@ check pass "$(fx 'git restore --staged .')"
 check pass "$(fx 'git checkout main')"
 check pass "$(fx 'git checkout -- src/a.ts')"
 check pass "$(fx 'npm run clean')"
+# protected paths (Edit, Write)
+fe() { printf '{"tool_name":"%s","tool_input":{"file_path":"%s","content":"x"}}' "$1" "$2"; }
+check ask "$(fe Write /x/.env)" "secrets"
+check ask "$(fe Edit /x/.env.local)"
+check ask "$(fe Write "$HOME/.ssh/config")"
+check ask "$(fe Edit '~/.aws/credentials')"
+check ask "$(fe Edit "$HOME/.claude/settings.json")"
+check ask "$(fe Write "$HOME/.claude/hooks/x.sh")"
+check ask "$(fe Edit "$HOME/.claude/rules/personal.md")"
+check ask "$(fe Edit "$HOME/.claude/../.claude/settings.local.json")"
+check pass "$(fe Write /x/.env.example)"
+check pass "$(fe Edit /x/src/a.ts)"
+check pass "$(fe Edit /x/.claude/settings.json)"
+check pass "$(fe Edit "$HOME/.claude/CLAUDE.md")"
+check pass "$(fe Edit "$HOME/.sshx/a")"
+check pass '{"tool_name":"Edit","tool_input":{"old_string":"a"}}'
+check pass '{"tool_name":"Write","tool_input":{"file_path":"/x/a.md","content":"{\"tool_name\":\"Edit\",\"file_path\":\"/x/.env\"}"}}'
+check pass "$(fx 'cat .env')"
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

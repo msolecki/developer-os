@@ -80,6 +80,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   with a recursive and a force flag, `git reset --hard`, `git clean -f`, `git checkout`/`git restore`
   of the whole tree). Users without their own deny list had no check on these in auto mode; they are
   the first reflexes harness-engineering-101 (chapter 13) names.
+- **Amended 2026-10-30:** a fifth category, an Edit or Write of a secret file or the user-level agent
+  config (`.env*`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/settings*.json`, `~/.claude/hooks`,
+  `~/.claude/rules`). The rule against copying hooks into `~/.claude` unread was prompt-only.
 
 ## D7. One wrap-up nudge per long session
 

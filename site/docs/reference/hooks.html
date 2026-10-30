@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@3dd85d4345e0">
+<meta name="dos-source" content="docs/reference/hooks.md@6e7b2ef0b41d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -136,8 +136,9 @@ Worktrees:
     another user, the hook prints nothing, because without markers every notice would repeat each session.</p>
     <p><strong>Failure:</strong> every error exits 0 with no output. <code>DEVELOPER_OS_NOTICES=off</code> and <code>sdk-*</code> entrypoints
     (<code>claude -p</code>, the SDK) print nothing.</p>
-    <h2 id="pretooluse-on-bash--guardpy">PreToolUse on Bash — <code>guard.py</code></h2>
-    <p><strong>Input:</strong> the hook JSON on stdin; only <code>tool_input.command</code> is used.</p>
+    <h2 id="pretooluse-on-bash-edit-and-write--guardpy">PreToolUse on Bash, Edit and Write — <code>guard.py</code></h2>
+    <p><strong>Matcher:</strong> <code>Bash|Edit|Write</code>.</p>
+    <p><strong>Input:</strong> the hook JSON on stdin; <code>tool_input.command</code> for Bash, <code>tool_name</code> and <code>tool_input.file_path</code> for Edit and Write.</p>
     <p><strong>Decision:</strong> prints one line and exits 0:</p>
 <pre><code>{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"&lt;reason&gt;"}}</code></pre>
     <p>or prints nothing and exits 0, which leaves Claude Code's normal permission flow in charge. It never
@@ -151,6 +152,7 @@ Worktrees:
           <tr><td>Force push</td><td><code>git push</code> (git also by full path) with <code>--force</code>, <code>--mirror</code>, a short-flag cluster containing <code>f</code>, or a <code>+refspec</code>, even next to <code>--force-with-lease</code>; <code>remote.&lt;name&gt;.push=+…</code> in a git word</td><td><code>--force-with-lease</code> alone (including <code>=ref:sha</code>), <code>git push --delete</code>, <code>git push origin :branch</code>, <code>git push -n</code>, <code>git stash push -f</code></td></tr>
           <tr><td>Hook bypass</td><td><code>--no-verify</code> or <code>--no-veri</code>/<code>--no-verif</code> anywhere in a segment, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, a word starting <code>SKIP=</code> (pre-commit), <code>core.hooksPath</code> anywhere in a word (<code>-c core.hooksPath=…</code>, <code>git config core.hooksPath</code>, <code>--config-env=</code>, <code>GIT_CONFIG_KEY_&lt;n&gt;=</code>, <code>GIT_CONFIG_PARAMETERS=</code>); <code>git commit</code> with a short-flag cluster containing <code>n</code> (<code>-n</code>, <code>-anm</code>)</td><td><code>git commit -am</code></td></tr>
           <tr><td>Destructive command</td><td><code>rm</code> (also by full path) with a recursive flag (<code>-r</code>, <code>-R</code>, <code>--recursive</code>, or a cluster containing one) and a force flag (<code>-f</code>, <code>--force</code>, or a cluster containing it) in one segment; <code>git reset --hard</code>; <code>git clean</code> with <code>--force</code> or a cluster containing <code>f</code>; <code>git checkout</code> or <code>git restore</code> followed by <code>.</code>, <code>./</code>, <code>:/</code> or <code>*</code></td><td><code>rm file</code>, <code>rm -r dir</code>, <code>rm -f file</code>, <code>git reset --soft</code>, <code>git clean -n</code>, <code>git restore src/a.ts</code>, <code>git restore --staged .</code>, <code>git checkout main</code>, <code>git checkout -- src/a.ts</code></td></tr>
+          <tr><td>Protected file (Edit, Write)</td><td>a <code>file_path</code> named <code>.env</code> or <code>.env.*</code>; anything under <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.claude/hooks</code> or <code>~/.claude/rules</code>; <code>~/.claude/settings.json</code> or <code>~/.claude/settings.local.json</code> (after <code>~</code> expansion and normalization)</td><td><code>.env.example</code>, <code>.env.sample</code>, <code>.env.template</code>, <code>.env.dist</code>, a project <code>.claude/settings.json</code>, <code>~/.claude/CLAUDE.md</code>, any other path; an Edit or Write without <code>file_path</code></td></tr>
         </tbody>
       </table>
     </div>

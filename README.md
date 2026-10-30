@@ -92,7 +92,7 @@ while a background agent, command or Monitor it can see is still running, it ask
 approve. Set `DEVELOPER_OS_CAPTURE_NUDGE=off` to turn it off, or `DEVELOPER_OS_CAPTURE_NUDGE_MIN=<n>`
 to change the threshold.
 
-A `PreToolUse` hook on Bash ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) asks for confirmation
+A `PreToolUse` hook on Bash, Edit and Write ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) asks for confirmation
 (it never blocks) before a dependency install, update or removal with a package argument
 (`npm|pnpm|yarn|bun install|add|i|update|remove <pkg>`, an alias such as `npm in`, `npm un` or `bun a`,
 `update --latest`, or the binary by full path), a `git push` with `--force`, `-f`, a `+refspec` or
@@ -101,7 +101,9 @@ also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `
 `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form, and a command
 that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag (`rm -rf`),
 `git reset --hard`, `git clean -f`, or `git checkout`/`git restore` of `.`, `:/` or `*`
-(`git restore --staged .` passes). `$IFS`
+(`git restore --staged .` passes). An Edit or Write asks when its file is a `.env` or `.env.*` (not
+`.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/hooks` or
+`~/.claude/rules`, or is `~/.claude/settings.json` or `settings.local.json`. `$IFS`
 (also with an empty `$9` glued on), `${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
 
 The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
