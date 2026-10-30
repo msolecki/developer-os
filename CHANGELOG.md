@@ -4,6 +4,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- project-baseline checks for an after-edit lint hook, and the project templates ship
+  `docs/runbooks/after-edit-check.md`: a `PostToolUse` hook that lints each edited file and shows the
+  agent only the failures.
+
 ### Changed
 - implement-backlog stops an item whose code no longer matches it (a moved file, a changed API, a
   branch that landed since) and proposes an `Amended` line instead of pushing past.

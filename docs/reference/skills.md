@@ -50,7 +50,7 @@ and audit skills below in one pass.
 
 ### project-baseline
 
-[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 13 engineering
+[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 14 engineering
 practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog item.
 
 | Practice | Present when |
@@ -67,6 +67,7 @@ practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog i
 | Docs-vs-code check | a script or CI step checks docs against code |
 | Design system file | a UI project has a root `DESIGN.md` (skipped without a UI) |
 | No runtime dependency two majors behind | the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from `dependency-upgrader` as their Fix |
+| After-edit lint hook | a `PostToolUse` hook on `Edit\|Write` lints the edited file and shows only failures (skipped without a linter) |
 | Gate verdict in the exit code | no `\|\| true` or `continue-on-error` on a gate |
 
 It never picks a default for the package manager, test runner, auth library, monitoring stack or

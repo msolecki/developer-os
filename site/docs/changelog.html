@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@8f1dd9e9bf38">
+<meta name="dos-source" content="CHANGELOG.md@757e2100d51e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -49,6 +49,12 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h3 id="unreleased-added">Added</h3>
+    <ul>
+<li>project-baseline checks for an after-edit lint hook, and the project templates ship
+<code>docs/runbooks/after-edit-check.md</code>: a <code>PostToolUse</code> hook that lints each edited file and shows the
+agent only the failures.</li>
+    </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
 <li>implement-backlog stops an item whose code no longer matches it (a moved file, a changed API, a
