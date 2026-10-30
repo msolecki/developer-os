@@ -4,6 +4,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- implement-backlog stops an item whose code no longer matches it (a moved file, a changed API, a
+  branch that landed since) and proposes an `Amended` line instead of pushing past.
+
 ## [0.2.6] - 2026-10-26
 
 ### Added

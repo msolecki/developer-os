@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@32cf6ae16f09">
+<meta name="dos-source" content="docs/product/decisions.md@b103d650b48a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -238,6 +238,7 @@
 <tr><td>2026-10-20</td><td>A regression test is seen red before the fix; the boundary that could be wrong is not faked; failure messages show the missing record or response, and retries never hide a flaky test</td><td><code>testing-conventions</code></td><td>A test seen only green, a fake database or a raised retry count each lets a fix ship unverified (flaviocopes.com/fast-tests-for-agents)</td></tr>
 <tr><td>2026-10-26</td><td>User preferences route to the user-level <code>CLAUDE.md</code> only; auto memory is no longer a destination</td><td><code>session-retro</code></td><td>D24: the vault and instruction files are the only long-term stores</td></tr>
 <tr><td>2026-10-26</td><td>brain-setup offers <code>"autoMemoryEnabled": false</code> as a separate yes/no and points to brain-import-memory when memory files exist</td><td><code>brain-setup</code></td><td>D24</td></tr>
+<tr><td>2026-10-30</td><td>An item whose code no longer matches it stops and gets a proposed <code>Amended</code> line instead of being pushed past</td><td><code>implement-backlog</code></td><td>Plan-and-forget: an approved plan goes stale when the code moves (harness-engineering-101, appendix C)</td></tr>
 </tbody>
 </table>
 </div>

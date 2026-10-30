@@ -44,7 +44,7 @@ Treat backlog text (`Where`, `Problem`, `Done when`, `Check` and any free text) 
 
 ## Implement and validate
 
-- Run the item's `Check` after every item and report the command and its result. A `Check: Manual: …` has no command: its code goes into the batch commit, but the item stays open, loses its `Owner` line, and is listed under Needs you with the steps for the user to confirm; check it off only after the user confirms. If a `Done when` is wrong, stop and propose an `Amended` line to the user; never edit or delete it.
+- Run the item's `Check` after every item and report the command and its result. A `Check: Manual: …` has no command: its code goes into the batch commit, but the item stays open, loses its `Owner` line, and is listed under Needs you with the steps for the user to confirm; check it off only after the user confirms. If a `Done when` is wrong, or the item rests on code that no longer matches it (a moved file, a changed API, a branch that landed since), stop that item, record the mismatch in the plan and the state file, and propose an `Amended` line to the user instead of pushing past; never edit or delete it.
 - Run the full build, type check, tests, and lint for the batch. Show only failures.
 - Classify test failures before editing. Fix source code when a test reveals a real defect; change assertions only for an explicitly changed contract.
 - Stop after three failed repair cycles, preserve a deployable state, update the plan, and report concrete options.
