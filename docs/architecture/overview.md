@@ -17,10 +17,11 @@ plugin/                           the installed payload
   .claude-plugin/plugin.json      name, version, description, license, keywords
   rules/core.md                   core rules, printed by a SessionStart cat hook
   SURFACE.txt                     public names, checked against the disk
-  hooks/hooks.json                5 hooks, 10-second timeouts
+  hooks/hooks.json                6 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
   hooks/guard.py                  PreToolUse guard for Bash, Edit and Write
+  hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/<name>/SKILL.md          32 skills
   agents/<name>.md                10 agents
@@ -64,6 +65,7 @@ sequenceDiagram
   participant SS as SessionStart: state-card.py
   participant NO as SessionStart: notices.py
   participant G as PreToolUse: guard.py
+  participant F as PostToolUseFailure: repeat-failure.py
   participant N as Stop: capture-nudge.py
   CC->>R: session starts / resumes / compacts
   R-->>CC: stdout = core rules
@@ -73,6 +75,8 @@ sequenceDiagram
   NO-->>CC: nothing or systemMessage (user) + additionalContext (agent)
   CC->>G: every Bash, Edit and Write call, JSON on stdin
   G-->>CC: nothing (allow normal flow) or {"permissionDecision":"ask", reason}
+  CC->>F: a tool call failed, JSON on stdin
+  F-->>CC: nothing, or additionalContext "stop retrying" at the third identical failure
   CC->>N: agent finishes a turn, JSON on stdin
   N-->>CC: exit 0, nothing or additionalContext "Run the developer-os:session-retro skill..."
 ```
@@ -94,8 +98,11 @@ sequenceDiagram
   directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session
   marker in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/capture-nudge/` so it fires once. Markers older than
   7 days are removed.
+- `repeat-failure.py` hashes the agent, tool and input of each failed call (for Bash, the command),
+  keeps the counts per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/repeat-failure/`,
+  and at the third failure of the same hash adds a "stop retrying" reminder. It stores no command text.
 
-The four scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
+The five scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
 
 ## 4. Skill composition
 

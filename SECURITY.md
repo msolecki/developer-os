@@ -23,15 +23,15 @@ Never include the content of a vault or a secret. Describe it instead.
 
 ## Scope
 
-- The plugin is Markdown (skills, agents, output styles, rules) plus 5 hooks in
+- The plugin is Markdown (skills, agents, output styles, rules) plus 6 hooks in
   `plugin/hooks/hooks.json`: `SessionStart` runs `cat` on `plugin/rules/core.md` and, after a
   compaction, resume or fork, `state-card.py`, which prints the git branch, newest plan, `docs/plans/.devos-state.md` and worktrees of the
   working directory, and on a new session `notices.py`, which reads the plugin version, the `Brain vault:`
   line of the user-level `CLAUDE.md`, the first 2 KB of `_inbox/` notes and the last line of
   `_reports/garden-log.md`, and shows counts and dates, never note names; `Stop` runs
   `capture-nudge.py`, which counts `tool_use` entries in the session transcript and reads only
-  background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; `PreToolUse` runs `guard.py` on Bash commands and can only ask for confirmation.
-  The four scripts are Python 3 with the standard library only, make no network calls and fail open. The plugin ships no binary,
+  background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; `PreToolUse` runs `guard.py` on Bash, Edit and Write calls and can only ask for confirmation; `PostToolUseFailure` runs `repeat-failure.py`, which stores per-session hashes of failed calls, never their text, and can only add a reminder.
+  The five scripts are Python 3 with the standard library only, make no network calls and fail open. The plugin ships no binary,
   server or network code.
 - Updates come from this Git repository through the Claude Code plugin marketplace: each update
   installs the latest release from `main`. An update can change `plugin/hooks/hooks.json` and the

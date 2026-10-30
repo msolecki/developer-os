@@ -27,7 +27,7 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
    conventions skills, ten agents (nine specialists and a verifier), four output styles and a small Bash guard.
 
-The plugin is Markdown and JSON plus four Python 3 hook scripts (standard library only). There is no server, database,
+The plugin is Markdown and JSON plus five Python 3 hook scripts (standard library only). There is no server, database,
 index, binary, background job or network call in the plugin itself.
 
 ## Who it is for

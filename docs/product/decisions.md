@@ -90,6 +90,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   reminding the agent of the fast check; a rule loaded at session start fades in a long session, and a
   reminder tied to the event it governs does not (harness-engineering-101, chapter 8). Checked in
   `claude -p`: the text reaches the model and the command runs without a prompt.
+- **Scope, 2026-10-30:** the guard matches command text, so it decides what asks; it is not a security
+  boundary. The boundary is Claude Code's permission rules and sandbox (Harness Patterns 2.14 Proxy:
+  text patterns are easy to get around with quoting, aliases or scripts).
 
 ## D7. One wrap-up nudge per long session
 
@@ -321,6 +324,18 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   reviewer stuck re-running a failing command spent tokens with no limit. The cap is a runaway stop,
   not a budget: an ordinary review stays well under it.
 - **Alternatives:** `effort` per agent (changes quality, not the upper bound); no cap (the status quo).
+
+## D26. A repeated failure gets one reminder
+
+- **Date:** 2026-10-30
+- **Decision:** a `PostToolUseFailure` hook counts failures per session by a hash of the agent, tool and
+  input (for Bash, the command) and, at the third failure of the same call, adds `additionalContext`
+  telling the agent to stop retrying it unchanged. Once per call, no decision, fail open (D6).
+- **Why:** a model that keeps calling the same failing tool is the commonest runaway loop (Harness
+  Patterns 1.01 Game Loop); a rule loaded at session start fades, a reminder tied to the event does not.
+  Checked in `claude -p`: a non-zero Bash fires the event and the text reaches the model.
+- **Alternatives:** two failures (the second retry of a flaky command is often legitimate); a
+  `PostToolUse` hook (it does not fire for a failed call); a rule in `core.md` (no room, and it fades).
 
 ## Rules history
 

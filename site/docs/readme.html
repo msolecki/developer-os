@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@d77675f9ca04">
+<meta name="dos-source" content="README.md@1761f6a2d35b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -51,7 +51,7 @@
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
-agents, output styles and rules) plus three small Python 3 hook scripts (standard library only), with no server, no database and
+agents, output styles and rules) plus five small Python 3 hook scripts (standard library only), with no server, no database and
 nothing to install beyond <code>python3</code>.</p>
     <h2 id="install-claude-code">Install (Claude Code)</h2>
     <pre><code>/plugin marketplace add msolecki/developer-os
@@ -90,7 +90,7 @@ by hand:</p>
     <p>They include a <code>docs/</code> skeleton; run the docs-sync skill to fill and check it. The
 full setup, with Obsidian settings and a first test, is in <a href="workflow.html#setup-in-5-minutes">docs/workflow.md</a>.</p>
     <h2 id="what-the-hooks-do">What the hooks do</h2>
-    <p>The plugin has 5 hooks. On every <code>SessionStart</code> (startup, resume, <code>/clear</code>, compaction and fork), in
+    <p>The plugin has 6 hooks. On every <code>SessionStart</code> (startup, resume, <code>/clear</code>, compaction and fork), in
 every project, it prints <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md"><code>plugin/rules/core.md</code></a> with <code>cat</code>; the output becomes
 session context. After a compaction, a resume or a fork inside a git repository, a second <code>SessionStart</code> hook,
 <a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/state-card.py"><code>plugin/hooks/state-card.py</code></a>, adds a state card of at most 1 KB: the branch, a
@@ -129,8 +129,15 @@ that destroys uncommitted or untracked work: <code>rm</code> with both a recursi
 call that writes (<code>sed -i</code>, <code>tee</code>, <code>rm</code>, <code>mv</code>, <code>cp</code>, a redirect into a file, a git command that changes the
 tree or history) asks too. A <code>git commit</code> that asks for nothing gets a one-line reminder, as context for
 the agent, to run the fast check first. <code>$IFS</code>
-(also with an empty <code>$9</code> glued on), <code>${X:-word}</code> and <code>$'\x66'</code> escapes are expanded before the scan. In <code>claude -p</code> an ask resolves to a denial.</p>
-    <p>The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
+(also with an empty <code>$9</code> glued on), <code>${X:-word}</code> and <code>$'\x66'</code> escapes are expanded before the scan. In <code>claude -p</code> an ask resolves to a denial.
+The guard matches command text, so it decides only what needs your confirmation; quoting, aliases or a
+script can get past it. It is not a security boundary: for that, use Claude Code's permission rules and
+its sandbox (<code>/sandbox</code>), which restrict writes and network for every command.</p>
+    <p>A <code>PostToolUseFailure</code> hook (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/repeat-failure.py"><code>plugin/hooks/repeat-failure.py</code></a>) counts
+failed tool calls per session. When the same call (the same tool and input; for Bash, the same command)
+fails for the third time, it tells the agent, as context, to stop retrying it unchanged and diagnose the
+cause. It never blocks; set <code>DEVELOPER_OS_REPEAT_FAILURE=off</code> to turn it off.</p>
+    <p>The five scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need <code>python3</code> on <code>PATH</code>;
 without it the core rules still load and the other hooks do not run.</p>
     <h2 id="whats-inside">What's inside</h2>

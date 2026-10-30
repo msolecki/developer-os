@@ -7,7 +7,7 @@ A Claude Code plugin for working with an AI coding agent and an Obsidian vault a
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
-agents, output styles and rules) plus three small Python 3 hook scripts (standard library only), with no server, no database and
+agents, output styles and rules) plus five small Python 3 hook scripts (standard library only), with no server, no database and
 nothing to install beyond `python3`.
 
 ## Install (Claude Code)
@@ -64,7 +64,7 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 
 ## What the hooks do
 
-The plugin has 5 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
+The plugin has 6 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
 session context. After a compaction, a resume or a fork inside a git repository, a second `SessionStart` hook,
 [`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
@@ -108,8 +108,16 @@ call that writes (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, a g
 tree or history) asks too. A `git commit` that asks for nothing gets a one-line reminder, as context for
 the agent, to run the fast check first. `$IFS`
 (also with an empty `$9` glued on), `${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
+The guard matches command text, so it decides only what needs your confirmation; quoting, aliases or a
+script can get past it. It is not a security boundary: for that, use Claude Code's permission rules and
+its sandbox (`/sandbox`), which restrict writes and network for every command.
 
-The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
+A `PostToolUseFailure` hook ([`plugin/hooks/repeat-failure.py`](plugin/hooks/repeat-failure.py)) counts
+failed tool calls per session. When the same call (the same tool and input; for Bash, the same command)
+fails for the third time, it tells the agent, as context, to stop retrying it unchanged and diagnose the
+cause. It never blocks; set `DEVELOPER_OS_REPEAT_FAILURE=off` to turn it off.
+
+The five scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;
 without it the core rules still load and the other hooks do not run.
 

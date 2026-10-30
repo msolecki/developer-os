@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@82ce0a6b9fbb">
+<meta name="dos-source" content="docs/product/decisions.md@44179ad5120a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -93,6 +93,7 @@
 <li><strong>Amended 2026-10-30:</strong> a fifth category, an Edit or Write of a secret file or the user-level agent config (<code>.env*</code>, <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.claude/settings*.json</code>, <code>~/.claude/hooks</code>, <code>~/.claude/rules</code>). The rule against copying hooks into <code>~/.claude</code> unread was prompt-only.</li>
 <li><strong>Amended 2026-10-30:</strong> a sixth category, a writing Bash call inside the five read-only review agents, keyed on the hook input's <code>agent_type</code>. They keep Bash for <code>git diff</code> and test runs; <code>permissionMode</code> is ignored for plugin agents, and <code>disallowedTools: Bash</code> would remove those reads.</li>
 <li><strong>Amended 2026-10-30:</strong> a <code>git commit</code> that hits no category gets <code>additionalContext</code> (no decision) reminding the agent of the fast check; a rule loaded at session start fades in a long session, and a reminder tied to the event it governs does not (harness-engineering-101, chapter 8). Checked in <code>claude -p</code>: the text reaches the model and the command runs without a prompt.</li>
+<li><strong>Scope, 2026-10-30:</strong> the guard matches command text, so it decides what asks; it is not a security boundary. The boundary is Claude Code's permission rules and sandbox (Harness Patterns 2.14 Proxy: text patterns are easy to get around with quoting, aliases or scripts).</li>
 </ul>
 <h2 id="d7-one-wrap-up-nudge-per-long-session">D7. One wrap-up nudge per long session</h2>
 <ul>
@@ -225,6 +226,13 @@
 <li><strong>Decision:</strong> each plugin agent sets <code>maxTurns</code>: 100, and 40 for <code>verifier</code>, which checks one claim. At the cap Claude Code returns the agent's output marked partial; audit-to-backlog then names the missing dimension instead of presenting the backlog as complete.</li>
 <li><strong>Why:</strong> a one-line Agent call hides an unbounded subagent (Harness Patterns 2.18 Delegation); a reviewer stuck re-running a failing command spent tokens with no limit. The cap is a runaway stop, not a budget: an ordinary review stays well under it.</li>
 <li><strong>Alternatives:</strong> <code>effort</code> per agent (changes quality, not the upper bound); no cap (the status quo).</li>
+</ul>
+<h2 id="d26-a-repeated-failure-gets-one-reminder">D26. A repeated failure gets one reminder</h2>
+<ul>
+<li><strong>Date:</strong> 2026-10-30</li>
+<li><strong>Decision:</strong> a <code>PostToolUseFailure</code> hook counts failures per session by a hash of the agent, tool and input (for Bash, the command) and, at the third failure of the same call, adds <code>additionalContext</code> telling the agent to stop retrying it unchanged. Once per call, no decision, fail open (D6).</li>
+<li><strong>Why:</strong> a model that keeps calling the same failing tool is the commonest runaway loop (Harness Patterns 1.01 Game Loop); a rule loaded at session start fades, a reminder tied to the event does not. Checked in <code>claude -p</code>: a non-zero Bash fires the event and the text reaches the model.</li>
+<li><strong>Alternatives:</strong> two failures (the second retry of a flaky command is often legitimate); a <code>PostToolUse</code> hook (it does not fire for a failed call); a rule in <code>core.md</code> (no room, and it fades).</li>
 </ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>

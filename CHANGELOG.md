@@ -19,6 +19,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   agent only the failures.
 - Every agent has a turn cap (`maxTurns`: 100, 40 for verifier); at the cap its output comes back
   marked partial. D25.
+- A `PostToolUseFailure` hook tells the agent to stop retrying and diagnose when the same tool call fails
+  for the third time in a session. `DEVELOPER_OS_REPEAT_FAILURE=off` turns it off. D26.
+- The README and hooks reference say the guard is not a security boundary and point to Claude Code's
+  permission rules and sandbox.
 
 ### Changed
 - audit-to-backlog names a perspective whose reviewer failed, was blocked or hit its turn cap under

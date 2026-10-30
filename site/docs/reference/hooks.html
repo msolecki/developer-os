@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@392466fba308">
+<meta name="dos-source" content="docs/reference/hooks.md@24f10e8105ca">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -48,13 +48,13 @@
     <h1 id="hooks-reference">Hooks reference</h1>
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/hooks.md">docs/reference/hooks.md</a></span><span>Verified 2026-10-16</span></p>
     <p>Defined in <code>plugin/hooks/hooks.json</code>. Commands run with <code>${CLAUDE_PLUGIN_ROOT}</code> set to the installed
-    <code>plugin/</code> directory; each has a 10-second timeout. There are 5 hooks: one <code>cat</code> and four
+    <code>plugin/</code> directory; each has a 10-second timeout. There are 6 hooks: one <code>cat</code> and five
     Python 3 scripts run as <code>python3 "${CLAUDE_PLUGIN_ROOT}/hooks/&lt;script&gt;.py"</code>. The scripts use the
     standard library only, need <code>python3</code> 3.8 or later on <code>PATH</code>, make no network call, and fail open.
     Without <code>python3</code> the core rules still load; the state card, notices, guard and nudge fail with a
     non-blocking hook error and the session goes on as if they were absent. Why Python and not <code>sh</code>:
     <a href="../product/decisions.html#d2-no-runtime-small-hook-scripts-without-dependencies">decisions D2</a>.
-    Tests: <code>tests/state-card.test.sh</code>, <code>tests/notices.test.sh</code>, <code>tests/guard.test.sh</code>, <code>tests/capture-nudge.test.sh</code>.</p>
+    Tests: <code>tests/state-card.test.sh</code>, <code>tests/notices.test.sh</code>, <code>tests/guard.test.sh</code>, <code>tests/repeat-failure.test.sh</code>, <code>tests/capture-nudge.test.sh</code>.</p>
     <h2 id="sessionstart--core-rules-and-state-card">SessionStart — core rules and state card</h2>
     <p>Two hooks on the same event, run independently, so the card is not guaranteed to follow the rules.</p>
     <div class="table-wrap">
@@ -179,6 +179,28 @@ Worktrees:
     as <code>npm --cache run install zod</code> must not end the check.</p>
     <p><strong>Failure:</strong> any exception exits 0; input without <code>{…}</code> or without a <code>command</code> string produces no
     output.</p>
+    <p><strong>Not a security boundary.</strong> The guard matches command text, so it decides only what needs your
+    confirmation: quoting, an alias, a variable built at run time or a script can get past it. The hard
+    boundary is Claude Code's permission rules and its sandbox (<code>sandbox.enabled</code>, or <code>/sandbox</code>), which
+    restrict writes and network for every command whatever its text.</p>
+    <h2 id="posttoolusefailure--repeat-failurepy">PostToolUseFailure — <code>repeat-failure.py</code></h2>
+    <p><strong>Matcher:</strong> none: every tool. Claude Code fires the event when a tool call fails, for Bash when the
+    command exits non-zero; a call rejected before it runs (permission denial, invalid input) or cancelled
+    does not fire it.</p>
+    <p><strong>Input:</strong> the hook JSON on stdin; uses <code>session_id</code>, <code>tool_name</code>, <code>tool_input</code>, <code>agent_id</code> and
+    <code>is_interrupt</code>.</p>
+    <p><strong>Counts</strong> one failure per call key: <code>agent_id</code>, <code>tool_name</code> and <code>tool_input</code> (for Bash only
+    <code>tool_input.command</code>, since the description changes between otherwise identical retries), hashed.</p>
+    <p><strong>Exits 0 silently when</strong> <code>DEVELOPER_OS_REPEAT_FAILURE=off</code>, <code>is_interrupt</code> is <code>true</code>, the input is not
+    a JSON object, <code>session_id</code> is empty or has characters other than <code>A-Z a-z 0-9 _ -</code>, or the count for
+    the key is not exactly 3.</p>
+    <p><strong>Otherwise</strong> (the third failure of the key) prints</p>
+    <pre><code class="language-json">{"hookSpecificOutput": {"hookEventName": "PostToolUseFailure", "additionalContext": "developer-os: this exact &lt;tool&gt; call has now failed 3 times in this session. Do not run it again unchanged: read the error, find the cause, then change the approach or ask the user."}}</code></pre>
+    <p>and exits 0. No decision: the call has already failed. Checked in <code>claude -p</code>: the text reaches the model.</p>
+    <p><strong>State:</strong> one JSON file of counts per session in
+    <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/repeat-failure/</code>, created with mode 700 and
+    removed after 8 days; the hook fails open when that directory or its parent is a symlink or owned by
+    another user. It stores hashes only, never commands or errors.</p>
     <h2 id="stop--capture-nudgepy">Stop — <code>capture-nudge.py</code></h2>
     <p><strong>Input:</strong> the hook JSON on stdin; uses <code>stop_hook_active</code>, <code>agent_id</code>, <code>session_id</code>,
     <code>transcript_path</code>.</p>
@@ -218,8 +240,9 @@ Worktrees:
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE</code></td><td>capture-nudge</td><td><code>off</code> disables the nudge</td></tr>
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code></td><td>capture-nudge</td><td>Tool-call threshold; non-numeric falls back to 30</td></tr>
           <tr><td><code>DEVELOPER_OS_NOTICES</code></td><td>notices</td><td><code>off</code> disables the version and upkeep notices</td></tr>
+          <tr><td><code>DEVELOPER_OS_REPEAT_FAILURE</code></td><td>repeat-failure</td><td><code>off</code> disables the repeated-failure reminder</td></tr>
           <tr><td><code>CLAUDE_CODE_ENTRYPOINT</code></td><td>capture-nudge, notices</td><td>Set by Claude Code but not in its documentation, so it may change without notice; <code>sdk-*</code> skips the hook</td></tr>
-          <tr><td><code>CLAUDE_PLUGIN_DATA</code></td><td>capture-nudge, notices</td><td>Set by Claude Code; marker directory root, kept across plugin updates</td></tr>
+          <tr><td><code>CLAUDE_PLUGIN_DATA</code></td><td>capture-nudge, notices, repeat-failure</td><td>Set by Claude Code; marker directory root, kept across plugin updates</td></tr>
           <tr><td><code>CLAUDE_CONFIG_DIR</code></td><td>notices</td><td>Where the user-level <code>CLAUDE.md</code> with the <code>Brain vault:</code> line lives (default <code>~/.claude</code>)</td></tr>
           <tr><td><code>CLAUDE_PLUGIN_ROOT</code></td><td>hooks.json</td><td>Set by Claude Code; plugin install path</td></tr>
         </tbody>

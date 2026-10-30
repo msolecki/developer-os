@@ -7,13 +7,13 @@ last-verified: 2026-10-24
 # Hooks reference
 
 Defined in `plugin/hooks/hooks.json`. Commands run with `${CLAUDE_PLUGIN_ROOT}` set to the installed
-`plugin/` directory; each has a 10-second timeout. There are 5 hooks: one `cat` and four
+`plugin/` directory; each has a 10-second timeout. There are 6 hooks: one `cat` and five
 Python 3 scripts run as `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.py"`. The scripts use the
 standard library only, need `python3` 3.8 or later on `PATH`, make no network call, and fail open.
 Without `python3` the core rules still load; the state card, notices, guard and nudge fail with a
 non-blocking hook error and the session goes on as if they were absent. Why Python and not `sh`:
 [decisions D2](../product/decisions.md#d2-no-runtime-small-hook-scripts-without-dependencies).
-Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh`, `tests/capture-nudge.test.sh`.
+Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh`, `tests/repeat-failure.test.sh`, `tests/capture-nudge.test.sh`.
 
 ## SessionStart — core rules and state card
 
@@ -165,6 +165,40 @@ as `npm --cache run install zod` must not end the check.
 **Failure:** any exception exits 0; input without `{…}` or without a `command` string produces no
 output.
 
+**Not a security boundary.** The guard matches command text, so it decides only what needs your
+confirmation: quoting, an alias, a variable built at run time or a script can get past it. The hard
+boundary is Claude Code's permission rules and its sandbox (`sandbox.enabled`, or `/sandbox`), which
+restrict writes and network for every command whatever its text.
+
+## PostToolUseFailure — `repeat-failure.py`
+
+**Matcher:** none: every tool. Claude Code fires the event when a tool call fails, for Bash when the
+command exits non-zero; a call rejected before it runs (permission denial, invalid input) or cancelled
+does not fire it.
+
+**Input:** the hook JSON on stdin; uses `session_id`, `tool_name`, `tool_input`, `agent_id` and
+`is_interrupt`.
+
+**Counts** one failure per call key: `agent_id`, `tool_name` and `tool_input` (for Bash only
+`tool_input.command`, since the description changes between otherwise identical retries), hashed.
+
+**Exits 0 silently when** `DEVELOPER_OS_REPEAT_FAILURE=off`, `is_interrupt` is `true`, the input is not
+a JSON object, `session_id` is empty or has characters other than `A-Z a-z 0-9 _ -`, or the count for
+the key is not exactly 3.
+
+**Otherwise** (the third failure of the key) prints
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PostToolUseFailure", "additionalContext": "developer-os: this exact <tool> call has now failed 3 times in this session. Do not run it again unchanged: read the error, find the cause, then change the approach or ask the user."}}
+```
+
+and exits 0. No decision: the call has already failed. Checked in `claude -p`: the text reaches the model.
+
+**State:** one JSON file of counts per session in
+`${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/repeat-failure/`, created with mode 700 and
+removed after 8 days; the hook fails open when that directory or its parent is a symlink or owned by
+another user. It stores hashes only, never commands or errors.
+
 ## Stop — `capture-nudge.py`
 
 **Input:** the hook JSON on stdin; uses `stop_hook_active`, `agent_id`, `session_id`,
@@ -210,7 +244,8 @@ script reads the file's modification time with `stat` and runs no other program 
 | `DEVELOPER_OS_CAPTURE_NUDGE` | capture-nudge | `off` disables the nudge |
 | `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | capture-nudge | Tool-call threshold; non-numeric falls back to 30 |
 | `DEVELOPER_OS_NOTICES` | notices | `off` disables the version and upkeep notices |
+| `DEVELOPER_OS_REPEAT_FAILURE` | repeat-failure | `off` disables the repeated-failure reminder |
 | `CLAUDE_CODE_ENTRYPOINT` | capture-nudge, notices | Set by Claude Code but not in its documentation, so it may change without notice; `sdk-*` skips the hook |
-| `CLAUDE_PLUGIN_DATA` | capture-nudge, notices | Set by Claude Code; marker directory root, kept across plugin updates |
+| `CLAUDE_PLUGIN_DATA` | capture-nudge, notices, repeat-failure | Set by Claude Code; marker directory root, kept across plugin updates |
 | `CLAUDE_CONFIG_DIR` | notices | Where the user-level `CLAUDE.md` with the `Brain vault:` line lives (default `~/.claude`) |
 | `CLAUDE_PLUGIN_ROOT` | hooks.json | Set by Claude Code; plugin install path |
