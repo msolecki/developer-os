@@ -14,6 +14,11 @@ An Edit or Write asks when its `file_path` is a secret or the agent's own user-l
 `~/.gnupg`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, or anything under
 `~/.claude/hooks` or `~/.claude/rules`.
 
+Inside the read-only agents (code-reviewer, database-reviewer, infra-reviewer, performance-engineer,
+security-auditor; `agent_type` with or without the `developer-os:` prefix) a Bash call also asks when it
+writes: `sed -i`, `tee`, `rm`, `mv`, `cp`, `truncate`, a git command that changes the tree or history, or a
+`>`/`>>` redirect to anything but `/dev/null` or a temp directory.
+
 Quotes are stripped before matching, so `sh -c "pnpm add zod"` asks, and so does a mention such as
 `git commit -m "pnpm add zod"`. An extra prompt costs one click; a missed install rewrites the lockfile.
 """
@@ -27,10 +32,15 @@ REASONS = {
     "push": "Force push can overwrite others' commits; use --force-with-lease alone.",
     "destroy": "This deletes files or discards uncommitted work that git cannot bring back.",
     "protected": "This file holds secrets or your user-level agent config; edit it only on your request.",
+    "readonly": "This agent is read-only, and this command writes files or changes git state.",
     "noverify": "This skips the repository's git hooks (--no-verify, commit -n, HUSKY=0, LEFTHOOK=0, SKIP=, core.hooksPath).",
 }
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
+READ_ONLY = {"code-reviewer", "database-reviewer", "infra-reviewer", "performance-engineer", "security-auditor"}
+GIT_WRITE = {"add", "apply", "checkout", "cherry-pick", "commit", "merge", "push", "rebase", "reset", "restore", "stash",
+             "switch"}
+TEMP = ("/dev/null", "/tmp/", "/private/tmp/", "/var/folders/")
 PM_VALUE = {"--filter", "-F", "--prefix", "--dir", "-C"}
 
 
@@ -132,6 +142,32 @@ def scan(line):
     return None
 
 
+def read_only(raw):
+    """True inside one of this plugin's read-only agents; the main session has no agent_type."""
+    m = re.search(r'"agent_type"\s*:\s*"([^"]*)"', raw)
+    name = m.group(1) if m else ""
+    return (name[len("developer-os:"):] if name.startswith("developer-os:") else name) in READ_ONLY
+
+
+def writes(line):
+    """A write-shaped command in any segment: a file-changing binary, a tree- or history-changing git
+    subcommand, or a redirect into a file outside /dev/null and the temp directories."""
+    for target in re.findall(r"(?<!<)>>?\s*([^\s;&|()<>]*)", line):
+        if target and not target.startswith(TEMP):
+            return True
+    for seg in re.split(r"[;&|()`]", line):
+        words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+        git = False
+        for x in words:
+            if re.search(r"(^|/)(tee|rm|mv|cp|truncate)$", x) or (git and x in GIT_WRITE):
+                return True
+            if re.search(r"(^|/)sed$", x) and any(w == "--in-place" or re.match(r"(-i|--in-place=)", w) for w in words):
+                return True
+            if re.search(r"(^|/)git$", x):
+                git = True
+    return False
+
+
 def protected(path):
     """A secret file or the agent's own user-level config, after expanding `~` and normalizing."""
     p = os.path.normpath(os.path.expanduser(path))
@@ -170,6 +206,8 @@ def main():
         if hit:
             ask(hit)
             return
+    if read_only(raw) and any(writes(v) for v in views):
+        ask("readonly")
 
 
 if __name__ == "__main__":

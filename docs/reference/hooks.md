@@ -115,7 +115,7 @@ another user, the hook prints nothing, because without markers every notice woul
 
 **Matcher:** `Bash|Edit|Write`.
 
-**Input:** the hook JSON on stdin; `tool_input.command` for Bash, `tool_name` and `tool_input.file_path` for Edit and Write.
+**Input:** the hook JSON on stdin; `tool_input.command` for Bash, `tool_name` and `tool_input.file_path` for Edit and Write; `agent_type`, present when a subagent makes the call.
 
 **Decision:** prints one line and exits 0:
 
@@ -134,6 +134,7 @@ command does not run, even when `--allowedTools Bash` allows it.
 | Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `LEFTHOOK=0`, a word starting `SKIP=` (pre-commit), `core.hooksPath` anywhere in a word (`-c core.hooksPath=…`, `git config core.hooksPath`, `--config-env=`, `GIT_CONFIG_KEY_<n>=`, `GIT_CONFIG_PARAMETERS=`); `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`) | `git commit -am` |
 | Destructive command | `rm` (also by full path) with a recursive flag (`-r`, `-R`, `--recursive`, or a cluster containing one) and a force flag (`-f`, `--force`, or a cluster containing it) in one segment; `git reset --hard`; `git clean` with `--force` or a cluster containing `f`; `git checkout` or `git restore` followed by `.`, `./`, `:/` or `*` | `rm file`, `rm -r dir`, `rm -f file`, `git reset --soft`, `git clean -n`, `git restore src/a.ts`, `git restore --staged .`, `git checkout main`, `git checkout -- src/a.ts` |
 | Protected file (Edit, Write) | a `file_path` named `.env` or `.env.*`; anything under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/hooks` or `~/.claude/rules`; `~/.claude/settings.json` or `~/.claude/settings.local.json` (after `~` expansion and normalization) | `.env.example`, `.env.sample`, `.env.template`, `.env.dist`, a project `.claude/settings.json`, `~/.claude/CLAUDE.md`, any other path; an Edit or Write without `file_path` |
+| Write inside a read-only agent | a Bash call whose `agent_type` is code-reviewer, database-reviewer, infra-reviewer, performance-engineer or security-auditor (bare or with the `developer-os:` prefix) and that runs `sed -i`/`--in-place`, `tee`, `rm`, `mv`, `cp` or `truncate`, a git `add`, `apply`, `checkout`, `cherry-pick`, `commit`, `merge`, `push`, `rebase`, `reset`, `restore`, `stash` or `switch`, or a `>`/`>>` redirect (also `2>`) to a file | redirects to `/dev/null`, `/tmp/`, `/private/tmp/`, `/var/folders/` or a file descriptor (`2>&1`); read-only git (`diff`, `log`, `show`); the same command in the main session or another agent |
 
 **Parsing:** first `$IFS` and any `${IFS…}` (such as `${IFS%?}`) become a space, `${X:-word}` (also `-`, `+`, `=`, `?`) becomes
 `word`, the positional parameters `$1`–`$9`, `$@` and `$*` (empty in a tool call) are dropped, and a `\xHH` or octal escape inside `$'...'` becomes its character, so `npm${IFS}i${IFS}zod`, `npm$IFS$9i$IFS$9zod`,

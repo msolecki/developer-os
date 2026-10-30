@@ -196,5 +196,21 @@ check pass "$(fe Edit "$HOME/.sshx/a")"
 check pass '{"tool_name":"Edit","tool_input":{"old_string":"a"}}'
 check pass '{"tool_name":"Write","tool_input":{"file_path":"/x/a.md","content":"{\"tool_name\":\"Edit\",\"file_path\":\"/x/.env\"}"}}'
 check pass "$(fx 'cat .env')"
+# read-only agents
+fa() { printf '{"tool_name":"Bash","agent_id":"a1","agent_type":"%s","tool_input":{"command":"%s"}}' "$1" "$2"; }
+check ask "$(fa developer-os:code-reviewer 'sed -i s/a/b/ x.ts')" "read-only"
+check ask "$(fa code-reviewer 'echo x > a.ts')"
+check ask "$(fa developer-os:security-auditor 'npm test 2> out.txt')"
+check ask "$(fa developer-os:infra-reviewer 'git stash')"
+check ask "$(fa developer-os:performance-engineer 'cd a && tee log.txt')"
+check ask "$(fa developer-os:database-reviewer 'sed --in-place=.bak s/a/b/ x')"
+check pass "$(fa developer-os:code-reviewer 'git diff main...HEAD')"
+check pass "$(fa developer-os:code-reviewer 'npm test 2>/dev/null')"
+check pass "$(fa developer-os:code-reviewer 'npm test > /tmp/out.txt 2>&1')"
+check pass "$(fa developer-os:code-reviewer 'grep -n x a.ts | sed -n 1,5p')"
+check pass "$(fa developer-os:code-reviewer 'git log --oneline -5')"
+check pass "$(fa developer-os:qa-expert 'echo x > a.ts')"
+check pass "$(fa other-plugin:code-reviewer 'echo x > a.ts')"
+check pass "$(fx 'echo x > a.ts')"
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

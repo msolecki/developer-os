@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@6e7b2ef0b41d">
+<meta name="dos-source" content="docs/reference/hooks.md@47a04f475c8b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -138,7 +138,7 @@ Worktrees:
     (<code>claude -p</code>, the SDK) print nothing.</p>
     <h2 id="pretooluse-on-bash-edit-and-write--guardpy">PreToolUse on Bash, Edit and Write — <code>guard.py</code></h2>
     <p><strong>Matcher:</strong> <code>Bash|Edit|Write</code>.</p>
-    <p><strong>Input:</strong> the hook JSON on stdin; <code>tool_input.command</code> for Bash, <code>tool_name</code> and <code>tool_input.file_path</code> for Edit and Write.</p>
+    <p><strong>Input:</strong> the hook JSON on stdin; <code>tool_input.command</code> for Bash, <code>tool_name</code> and <code>tool_input.file_path</code> for Edit and Write; <code>agent_type</code>, present when a subagent makes the call.</p>
     <p><strong>Decision:</strong> prints one line and exits 0:</p>
 <pre><code>{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"&lt;reason&gt;"}}</code></pre>
     <p>or prints nothing and exits 0, which leaves Claude Code's normal permission flow in charge. It never
@@ -153,6 +153,7 @@ Worktrees:
           <tr><td>Hook bypass</td><td><code>--no-verify</code> or <code>--no-veri</code>/<code>--no-verif</code> anywhere in a segment, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, a word starting <code>SKIP=</code> (pre-commit), <code>core.hooksPath</code> anywhere in a word (<code>-c core.hooksPath=…</code>, <code>git config core.hooksPath</code>, <code>--config-env=</code>, <code>GIT_CONFIG_KEY_&lt;n&gt;=</code>, <code>GIT_CONFIG_PARAMETERS=</code>); <code>git commit</code> with a short-flag cluster containing <code>n</code> (<code>-n</code>, <code>-anm</code>)</td><td><code>git commit -am</code></td></tr>
           <tr><td>Destructive command</td><td><code>rm</code> (also by full path) with a recursive flag (<code>-r</code>, <code>-R</code>, <code>--recursive</code>, or a cluster containing one) and a force flag (<code>-f</code>, <code>--force</code>, or a cluster containing it) in one segment; <code>git reset --hard</code>; <code>git clean</code> with <code>--force</code> or a cluster containing <code>f</code>; <code>git checkout</code> or <code>git restore</code> followed by <code>.</code>, <code>./</code>, <code>:/</code> or <code>*</code></td><td><code>rm file</code>, <code>rm -r dir</code>, <code>rm -f file</code>, <code>git reset --soft</code>, <code>git clean -n</code>, <code>git restore src/a.ts</code>, <code>git restore --staged .</code>, <code>git checkout main</code>, <code>git checkout -- src/a.ts</code></td></tr>
           <tr><td>Protected file (Edit, Write)</td><td>a <code>file_path</code> named <code>.env</code> or <code>.env.*</code>; anything under <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.claude/hooks</code> or <code>~/.claude/rules</code>; <code>~/.claude/settings.json</code> or <code>~/.claude/settings.local.json</code> (after <code>~</code> expansion and normalization)</td><td><code>.env.example</code>, <code>.env.sample</code>, <code>.env.template</code>, <code>.env.dist</code>, a project <code>.claude/settings.json</code>, <code>~/.claude/CLAUDE.md</code>, any other path; an Edit or Write without <code>file_path</code></td></tr>
+          <tr><td>Write inside a read-only agent</td><td>a Bash call whose <code>agent_type</code> is code-reviewer, database-reviewer, infra-reviewer, performance-engineer or security-auditor (bare or with the <code>developer-os:</code> prefix) and that runs <code>sed -i</code>/<code>--in-place</code>, <code>tee</code>, <code>rm</code>, <code>mv</code>, <code>cp</code> or <code>truncate</code>, a git <code>add</code>, <code>apply</code>, <code>checkout</code>, <code>cherry-pick</code>, <code>commit</code>, <code>merge</code>, <code>push</code>, <code>rebase</code>, <code>reset</code>, <code>restore</code>, <code>stash</code> or <code>switch</code>, or a <code>&gt;</code>/<code>&gt;&gt;</code> redirect (also <code>2&gt;</code>) to a file</td><td>redirects to <code>/dev/null</code>, <code>/tmp/</code>, <code>/private/tmp/</code>, <code>/var/folders/</code> or a file descriptor (<code>2&gt;&amp;1</code>); read-only git (<code>diff</code>, <code>log</code>, <code>show</code>); the same command in the main session or another agent</td></tr>
         </tbody>
       </table>
     </div>

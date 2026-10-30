@@ -10,6 +10,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tree (`git restore --staged .` passes). D6 amended.
 - The guard also runs on Edit and Write and asks before a change to a `.env*` file, `~/.ssh`, `~/.aws`,
   `~/.gnupg`, `~/.claude/settings*.json`, `~/.claude/hooks` or `~/.claude/rules`. D6 amended.
+- Inside the five read-only review agents, the guard asks before a Bash call that writes files or
+  changes git state. D6 amended.
 - project-baseline checks for an after-edit lint hook, and the project templates ship
   `docs/runbooks/after-edit-check.md`: a `PostToolUse` hook that lints each edited file and shows the
   agent only the failures.

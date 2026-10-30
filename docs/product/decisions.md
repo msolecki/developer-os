@@ -83,6 +83,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-10-30:** a fifth category, an Edit or Write of a secret file or the user-level agent
   config (`.env*`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/settings*.json`, `~/.claude/hooks`,
   `~/.claude/rules`). The rule against copying hooks into `~/.claude` unread was prompt-only.
+- **Amended 2026-10-30:** a sixth category, a writing Bash call inside the five read-only review agents,
+  keyed on the hook input's `agent_type`. They keep Bash for `git diff` and test runs; `permissionMode`
+  is ignored for plugin agents, and `disallowedTools: Bash` would remove those reads.
 
 ## D7. One wrap-up nudge per long session
 
