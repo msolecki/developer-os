@@ -98,7 +98,10 @@ A `PreToolUse` hook on Bash ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) a
 `update --latest`, or the binary by full path), a `git push` with `--force`, `-f`, a `+refspec` or
 `-c remote.<name>.push=+…` (even next to `--force-with-lease`; a lone `--force-with-lease` passes; git
 also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `--no-veri`,
-`git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form. `$IFS`
+`git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form, and a command
+that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag (`rm -rf`),
+`git reset --hard`, `git clean -f`, or `git checkout`/`git restore` of `.`, `:/` or `*`
+(`git restore --staged .` passes). `$IFS`
 (also with an empty `$9` glued on), `${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
 
 The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
@@ -128,7 +131,7 @@ without it the core rules still load and the other hooks do not run.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
 - **Five hooks on three events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
-  once per long session, `PreToolUse` asks before installs, force pushes and hook bypasses (see above).
+  once per long session, `PreToolUse` asks before installs, force pushes, hook bypasses and destructive commands (see above).
 - **Evals:** behavior checks for the brain skills, code-review, session-retro and the skill
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
   plugin payload.

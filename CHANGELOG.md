@@ -5,6 +5,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- The guard asks before commands that destroy uncommitted or untracked work: `rm` with a recursive
+  and a force flag, `git reset --hard`, `git clean -f`, and `git checkout`/`git restore` of the whole
+  tree (`git restore --staged .` passes). D6 amended.
 - project-baseline checks for an after-edit lint hook, and the project templates ship
   `docs/runbooks/after-edit-check.md`: a `PostToolUse` hook that lints each edited file and shows the
   agent only the failures.

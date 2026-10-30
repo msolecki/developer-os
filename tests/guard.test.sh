@@ -154,5 +154,29 @@ check pass '{"tool_input":{"command":"pnpm add zod"'
 check pass 'not json'
 check pass ''
 
+
+# destroy
+check ask "$(fx 'rm -rf build')" "deletes files"
+check ask "$(fx 'rm -fr x')"
+check ask "$(fx 'cd a && rm -r -f b')"
+check ask "$(fx 'rm --recursive --force b')"
+check ask "$(fx '/bin/rm -Rf b')"
+check ask "$(fx 'git reset --hard HEAD~1')"
+check ask "$(fx 'git clean -fdx')"
+check ask "$(fx 'git checkout -- .')"
+check ask "$(fx 'git checkout .')"
+check ask "$(fx 'git restore .')"
+check ask "$(fx 'git restore -W :/')"
+check pass "$(fx 'rm file.txt')"
+check pass "$(fx 'rm -r dir')"
+check pass "$(fx 'rm -f file.txt')"
+check pass "$(fx 'git reset --soft HEAD~1')"
+check pass "$(fx 'git reset HEAD a.ts')"
+check pass "$(fx 'git clean -n')"
+check pass "$(fx 'git restore src/a.ts')"
+check pass "$(fx 'git restore --staged .')"
+check pass "$(fx 'git checkout main')"
+check pass "$(fx 'git checkout -- src/a.ts')"
+check pass "$(fx 'npm run clean')"
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

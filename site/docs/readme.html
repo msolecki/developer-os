@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@39cd867b1972">
+<meta name="dos-source" content="README.md@2dacb40f5f33">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -120,7 +120,10 @@ to change the threshold.</p>
 <code>update --latest</code>, or the binary by full path), a <code>git push</code> with <code>--force</code>, <code>-f</code>, a <code>+refspec</code> or
 <code>-c remote.&lt;name&gt;.push=+…</code> (even next to <code>--force-with-lease</code>; a lone <code>--force-with-lease</code> passes; git
 also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of it such as <code>--no-veri</code>,
-<code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form. <code>$IFS</code>
+<code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form, and a command
+that destroys uncommitted or untracked work: <code>rm</code> with both a recursive and a force flag (<code>rm -rf</code>),
+<code>git reset --hard</code>, <code>git clean -f</code>, or <code>git checkout</code>/<code>git restore</code> of <code>.</code>, <code>:/</code> or <code>*</code>
+(<code>git restore --staged .</code> passes). <code>$IFS</code>
 (also with an empty <code>$9</code> glued on), <code>${X:-word}</code> and <code>$'\x66'</code> escapes are expanded before the scan. In <code>claude -p</code> an ask resolves to a denial.</p>
     <p>The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need <code>python3</code> on <code>PATH</code>;
@@ -148,7 +151,7 @@ performance-engineer, qa-expert, research-analyst, security-auditor, verifier.</
 <li><strong>Output styles:</strong> architect, debug, direct-objective, tdd-enforcer. Select one with
 <code>/output-style</code>, or set <code>"outputStyle": "developer-os:architect"</code> in settings (the plugin prefix is required).</li>
 <li><strong>Five hooks on three events:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), <code>Stop</code> suggests a session wrap-up
-once per long session, <code>PreToolUse</code> asks before installs, force pushes and hook bypasses (see above).</li>
+once per long session, <code>PreToolUse</code> asks before installs, force pushes, hook bypasses and destructive commands (see above).</li>
 <li><strong>Evals:</strong> behavior checks for the brain skills, code-review, session-retro and the skill
 triggers in <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md"><code>evals/</code></a>, run by hand with <code>claude plugin eval</code>. Not part of the
 plugin payload.</li>

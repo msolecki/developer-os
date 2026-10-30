@@ -3,7 +3,9 @@
 
 Answers "ask" (never "deny") before a dependency install, update or removal with a package argument,
 a force push (--force, -f, a +refspec or remote.<name>.push=+; a --force-with-lease alone passes),
-`git commit -n`, or any --no-verify, HUSKY=0, LEFTHOOK=0, SKIP= or core.hooksPath in any form. Branch
+`git commit -n`, or any --no-verify, HUSKY=0, LEFTHOOK=0, SKIP= or core.hooksPath in any form, and before a
+command that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag,
+`git reset --hard`, `git clean -f`, and `git checkout` or `git restore` of `.`, `:/` or `*`. Branch
 deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
@@ -17,6 +19,7 @@ import sys
 REASONS = {
     "install": "Dependency install, update or removal rewrites dependencies and the lockfile.",
     "push": "Force push can overwrite others' commits; use --force-with-lease alone.",
+    "destroy": "This deletes files or discards uncommitted work that git cannot bring back.",
     "noverify": "This skips the repository's git hooks (--no-verify, commit -n, HUSKY=0, LEFTHOOK=0, SKIP=, core.hooksPath).",
 }
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
@@ -54,12 +57,41 @@ def view(cmd, newline, quotes_to_space=False, join_commas=False):
     return s.replace(",", "" if join_commas else " ")
 
 
+def destroys(x, reset, clean, restore, staged):
+    """`git reset --hard`, `git clean` with a force flag, or a `git checkout`/`git restore` of the whole
+    tree; `git restore --staged .` only unstages and passes."""
+    if reset and x == "--hard":
+        return True
+    if clean and (x == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x)):
+        return True
+    return restore and not staged and x in (".", ":/", "*", "./")
+
+
 def scan(line):
-    """Word scanner: install, push or noverify for the first hit, None otherwise."""
+    """Word scanner: install, push, noverify or destroy for the first hit, None otherwise."""
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
         pm = sub = git = push = commit = force = skip = False
+        rm = rec = rmf = reset = clean = restore = staged = False
         for i, x in enumerate(words):
+            if destroys(x, reset, clean, restore, staged):
+                return "destroy"
+            if rm and (x == "--recursive" or re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", x)):
+                rec = True
+            if rm and (x == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x)):
+                rmf = True
+            if rm and rec and rmf:
+                return "destroy"
+            if re.search(r"(^|/)rm$", x):
+                rm = True
+            if git and x == "reset":
+                reset = True
+            elif git and x == "clean":
+                clean = True
+            elif git and x in ("checkout", "restore"):
+                restore = True
+            elif restore and x in ("--staged", "-S"):
+                staged = True
             if re.fullmatch(r"--no-veri(f|fy)?", x) or x in ("HUSKY=0", "LEFTHOOK=0") or x.startswith("SKIP=") or re.search(r"core\.hookspath(=|$)", x.lower()):
                 return "noverify"
             if re.search(r"(^|/)git$", x):

@@ -76,6 +76,10 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Why:** a broken guard must not block a session; an extra confirmation costs one click, while a
   missed install rewrites a lockfile. Per the README, an ask resolves to a denial in `claude -p`, the safe
   default for headless runs.
+- **Amended 2026-10-30:** a fourth category, commands that destroy uncommitted or untracked work (`rm`
+  with a recursive and a force flag, `git reset --hard`, `git clean -f`, `git checkout`/`git restore`
+  of the whole tree). Users without their own deny list had no check on these in auto mode; they are
+  the first reflexes harness-engineering-101 (chapter 13) names.
 
 ## D7. One wrap-up nudge per long session
 
