@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@a51d190ddc3a">
+<meta name="dos-source" content="CHANGELOG.md@784235fc07b3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -69,6 +69,10 @@ marked partial. D25.</li>
 for the third time in a session. <code>DEVELOPER_OS_REPEAT_FAILURE=off</code> turns it off. D26.</li>
 <li>The README and hooks reference say the guard is not a security boundary and point to Claude Code's
 permission rules and sandbox.</li>
+<li>defensive-coding-conventions checks eight more defect classes, from the corrections in Harness
+Patterns' enterprise review: idempotency keys claimed with a status, check-then-act races, <code>LIMIT</code>
+without <code>ORDER BY</code>, cleanup that misses setup, truncation before redaction, money as floats, unsafe
+retries, and authorization from client-held values.</li>
     </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>

@@ -23,6 +23,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   for the third time in a session. `DEVELOPER_OS_REPEAT_FAILURE=off` turns it off. D26.
 - The README and hooks reference say the guard is not a security boundary and point to Claude Code's
   permission rules and sandbox.
+- defensive-coding-conventions checks eight more defect classes, from the corrections in Harness
+  Patterns' enterprise review: idempotency keys claimed with a status, check-then-act races, `LIMIT`
+  without `ORDER BY`, cleanup that misses setup, truncation before redaction, money as floats, unsafe
+  retries, and authorization from client-held values.
 
 ### Changed
 - audit-to-backlog names a perspective whose reviewer failed, was blocked or hit its turn cap under

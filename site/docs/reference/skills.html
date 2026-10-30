@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@63b8dc9c6d36">
+<meta name="dos-source" content="docs/reference/skills.md@f5a510d630ca">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -365,7 +365,10 @@ a read-side security fix every reader (grep the field or model, not the function
 status is not collapsed to a boolean; external input is shape-validated before computing; cost
 inputs have no silent default; per-clone setup lives in a script; build artifacts are verified, not
 only the exit code; numeric promises in docs are re-checked after a rewrite; an ordering constraint
-carries its reason; a guard that greps a command joins its lines first.</p>
+carries its reason; a guard that greps a command joins its lines first; an idempotency key is
+claimed with a status; check and act share one transaction; <code>LIMIT</code> has an <code>ORDER BY</code>; cleanup covers
+setup; redaction runs before truncation; money is integers in the smallest unit; only safe calls are
+retried, in one layer; authorization reads server-held facts.</p>
     <h3 id="comments-conventions">comments-conventions</h3>
     <p><a href="../../skills/comments-conventions.html">Source</a>. Loads when writing code. No comment by
 default (rename or extract first); never restate the next line or explain the change; a comment

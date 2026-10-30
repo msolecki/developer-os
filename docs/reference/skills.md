@@ -385,7 +385,10 @@ a read-side security fix every reader (grep the field or model, not the function
 status is not collapsed to a boolean; external input is shape-validated before computing; cost
 inputs have no silent default; per-clone setup lives in a script; build artifacts are verified, not
 only the exit code; numeric promises in docs are re-checked after a rewrite; an ordering constraint
-carries its reason; a guard that greps a command joins its lines first.
+carries its reason; a guard that greps a command joins its lines first; an idempotency key is
+claimed with a status; check and act share one transaction; `LIMIT` has an `ORDER BY`; cleanup covers
+setup; redaction runs before truncation; money is integers in the smallest unit; only safe calls are
+retried, in one layer; authorization reads server-held facts.
 
 ### comments-conventions
 
