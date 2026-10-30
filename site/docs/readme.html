@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@1761f6a2d35b">
+<meta name="dos-source" content="README.md@593a5a20b3d5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -123,11 +123,10 @@ also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of i
 <code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form, and a command
 that destroys uncommitted or untracked work: <code>rm</code> with both a recursive and a force flag (<code>rm -rf</code>),
 <code>git reset --hard</code>, <code>git clean -f</code>, <code>git checkout</code>/<code>git restore</code> of <code>.</code>, <code>:/</code> or <code>*</code>, <code>git checkout -f</code>,
-<code>git switch --discard-changes</code> or <code>find … -delete</code> (<code>git restore --staged .</code> and <code>git clean -n</code> pass). An Edit or Write asks when its file is a <code>.env</code> or <code>.env.*</code> (not
+<code>git switch --discard-changes</code>, <code>git worktree remove --force</code> or <code>find … -delete</code> (<code>git restore --staged .</code> and <code>git clean -n</code> pass). An Edit or Write asks when its file is a <code>.env</code> or <code>.env.*</code> (not
 <code>.example</code>, <code>.sample</code>, <code>.template</code>, <code>.dist</code>), is under <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.claude/hooks</code> or
-<code>~/.claude/rules</code>, or is <code>~/.claude/settings.json</code> or <code>settings.local.json</code>. Inside the five read-only review agents, a Bash
-call that writes (<code>sed -i</code>, <code>tee</code>, <code>rm</code>, <code>mv</code>, <code>cp</code>, a redirect into a file, a git command that changes the
-tree or history) asks too. A <code>git commit</code> that asks for nothing gets a one-line reminder, as context for
+<code>~/.claude/rules</code>, or is <code>~/.claude.json</code>, <code>~/.claude/settings.json</code> or <code>settings.local.json</code>. Inside the five read-only review agents, a Bash
+call that writes outside the temp directories (<code>sed -i</code>, <code>tee</code>, <code>rm</code>, <code>mv</code>, <code>cp</code>, a redirect into a file, <code>gh pr checkout</code>, a git command that changes the tree, history or remotes) asks too. A <code>git commit</code> that asks for nothing gets a one-line reminder, as context for
 the agent, to run the fast check first. <code>$IFS</code>
 (also with an empty <code>$9</code> glued on), <code>${X:-word}</code> and <code>$'\x66'</code> escapes are expanded before the scan. In <code>claude -p</code> an ask resolves to a denial.
 The guard matches command text, so it decides only what needs your confirmation; quoting, aliases or a
@@ -135,7 +134,7 @@ script can get past it. It is not a security boundary: for that, use Claude Code
 its sandbox (<code>/sandbox</code>), which restrict writes and network for every command.</p>
     <p>A <code>PostToolUseFailure</code> hook (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/repeat-failure.py"><code>plugin/hooks/repeat-failure.py</code></a>) counts
 failed tool calls per session. When the same call (the same tool and input; for Bash, the same command)
-fails for the third time, it tells the agent, as context, to stop retrying it unchanged and diagnose the
+fails for the third time, each within 10 minutes of the last, it tells the agent, as context, to stop retrying it unchanged and diagnose the
 cause. It never blocks; set <code>DEVELOPER_OS_REPEAT_FAILURE=off</code> to turn it off.</p>
     <p>The five scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need <code>python3</code> on <code>PATH</code>;

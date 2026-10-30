@@ -101,11 +101,11 @@ also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `
 `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form, and a command
 that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag (`rm -rf`),
 `git reset --hard`, `git clean -f`, `git checkout`/`git restore` of `.`, `:/` or `*`, `git checkout -f`,
-`git switch --discard-changes` or `find … -delete` (`git restore --staged .` and `git clean -n` pass). An Edit or Write asks when its file is a `.env` or `.env.*` (not
+`git switch --discard-changes`, `git worktree remove --force` or `find … -delete` (`git restore --staged .` and `git clean -n` pass). An Edit or Write asks when its file is a `.env` or `.env.*` (not
 `.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/hooks` or
-`~/.claude/rules`, or is `~/.claude/settings.json` or `settings.local.json`. Inside the five read-only review agents, a Bash
-call that writes (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, a git command that changes the
-tree or history) asks too. A `git commit` that asks for nothing gets a one-line reminder, as context for
+`~/.claude/rules`, or is `~/.claude.json`, `~/.claude/settings.json` or `settings.local.json`. Inside the five read-only review agents, a Bash
+call that writes outside the temp directories (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, `gh pr checkout`, a git command that changes the
+tree, history or remotes) asks too. A `git commit` that asks for nothing gets a one-line reminder, as context for
 the agent, to run the fast check first. `$IFS`
 (also with an empty `$9` glued on), `${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
 The guard matches command text, so it decides only what needs your confirmation; quoting, aliases or a
@@ -114,7 +114,7 @@ its sandbox (`/sandbox`), which restrict writes and network for every command.
 
 A `PostToolUseFailure` hook ([`plugin/hooks/repeat-failure.py`](plugin/hooks/repeat-failure.py)) counts
 failed tool calls per session. When the same call (the same tool and input; for Bash, the same command)
-fails for the third time, it tells the agent, as context, to stop retrying it unchanged and diagnose the
+fails for the third time, each within 10 minutes of the last, it tells the agent, as context, to stop retrying it unchanged and diagnose the
 cause. It never blocks; set `DEVELOPER_OS_REPEAT_FAILURE=off` to turn it off.
 
 The five scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse

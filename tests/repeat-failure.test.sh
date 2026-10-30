@@ -49,6 +49,12 @@ printf '{"x":' > "$tmp/data/repeat-failure/s8"
 run "$(bash_fail s8 'make')" >/dev/null; run "$(bash_fail s8 'make')" >/dev/null
 check "truncated state file is reset" "$(run "$(bash_fail s8 'make')")" fire
 check "no temp file left" "$(ls "$tmp/data/repeat-failure" | grep -c tmp)" 0
+run "$(bash_fail s9 'npm test')" >/dev/null; run "$(bash_fail s9 'npm test')" >/dev/null
+# Age every entry past the 10-minute window, as a red test run later in the session would find them.
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); json.dump({k: [v[0], v[1] - 601] for k, v in d.items()}, open(p, "w"))' "$tmp/data/repeat-failure/s9"
+check "failure after 10 minutes starts a new run" "$(run "$(bash_fail s9 'npm test')")" silent
+run "$(bash_fail s9 'npm test')" >/dev/null
+check "3rd of the new run fires" "$(run "$(bash_fail s9 'npm test')")" fire
 check "bad session id" "$(run "$(bash_fail '../x' 'ls')")" silent
 mkdir -p "$tmp/link-data" && ln -s "$tmp/elsewhere" "$tmp/link-data/repeat-failure"
 mkdir -p "$tmp/elsewhere"

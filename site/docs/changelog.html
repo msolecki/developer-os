@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@6e907755de82">
+<meta name="dos-source" content="CHANGELOG.md@91f4cb8bd927">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,12 +52,10 @@
     <h3 id="unreleased-added">Added</h3>
     <ul>
 <li>The guard asks before commands that destroy uncommitted or untracked work: <code>rm</code> with a recursive
-and a force flag, <code>git reset --hard</code>, <code>git clean -f</code>, and <code>git checkout</code>/<code>git restore</code> of the whole
-tree (<code>git restore --staged .</code> passes). D6 amended.</li>
+and a force flag, <code>git reset --hard</code>, <code>git clean -f</code>, <code>git worktree remove --force</code>, and <code>git checkout</code>/<code>git restore</code> of the whole tree (<code>git restore --staged .</code> passes). D6 amended.</li>
 <li>The guard also runs on Edit and Write and asks before a change to a <code>.env*</code> file, <code>~/.ssh</code>, <code>~/.aws</code>,
-<code>~/.gnupg</code>, <code>~/.claude/settings*.json</code>, <code>~/.claude/hooks</code> or <code>~/.claude/rules</code>. D6 amended.</li>
-<li>Inside the five read-only review agents, the guard asks before a Bash call that writes files or
-changes git state. D6 amended.</li>
+<code>~/.gnupg</code>, <code>~/.claude.json</code>, <code>~/.claude/settings*.json</code>, <code>~/.claude/hooks</code> or <code>~/.claude/rules</code>. D6 amended.</li>
+<li>Inside the five read-only review agents, the guard asks before a Bash call that writes files outside the temp directories, changes git state or remotes, or runs <code>gh pr checkout</code>. D6 amended.</li>
 <li>A <code>git commit</code> the guard does not ask about gets a one-line reminder, as agent context, to run the
 project's fast check first.</li>
 <li>project-baseline checks for an after-edit lint hook, and the project templates ship
@@ -67,9 +65,9 @@ agent only the failures.</li>
 <code>.mcp.json</code> servers pinned to a version.</li>
 <li>brain-garden reports a compiled note that is older than an update to one of its <code>sources:</code>.</li>
 <li>Every agent has a turn cap (<code>maxTurns</code>: 100, 40 for verifier); at the cap its output comes back
-marked partial. D25.</li>
+marked partial (Claude Code v2.1.246 or later). D25.</li>
 <li>A <code>PostToolUseFailure</code> hook tells the agent to stop retrying and diagnose when the same tool call fails
-for the third time in a session. <code>DEVELOPER_OS_REPEAT_FAILURE=off</code> turns it off. D26.</li>
+for the third time in a session, each failure within 10 minutes of the last. <code>DEVELOPER_OS_REPEAT_FAILURE=off</code> turns it off. D26.</li>
 <li>The README and hooks reference say the guard is not a security boundary and point to Claude Code's
 permission rules and sandbox.</li>
 <li>defensive-coding-conventions checks eight more defect classes, from the corrections in Harness

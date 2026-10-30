@@ -6,19 +6,20 @@ a force push (--force, -f, a +refspec or remote.<name>.push=+; a --force-with-le
 `git commit -n`, or any --no-verify, HUSKY=0, LEFTHOOK=0, SKIP= or core.hooksPath in any form, and before a
 command that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag,
 `git reset --hard`, `git clean -f` (not a dry run), `git checkout -f`, `git switch --discard-changes`,
-`find -delete`, and `git checkout` or `git restore` of `.`, `:/` or `*` (an unstage-only restore passes). Branch
+`git worktree remove --force`, `find -delete`, and `git checkout` or `git restore` of `.`, `:/` or `*` (an unstage-only restore passes). Branch
 deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
 An Edit or Write asks when its `file_path` is a secret or the agent's own user-level config: a `.env` or
 `.env.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
-`~/.gnupg`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, or anything under
+`~/.gnupg`, `~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, or anything under
 `~/.claude/hooks` or `~/.claude/rules`.
 
 Inside the read-only agents (code-reviewer, database-reviewer, infra-reviewer, performance-engineer,
 security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
-file-changing binary or `sed -i` in command position, a git command that changes state, or a redirect to
-anything but `/dev/null` or a temp directory.
+file-changing binary (unless every path it writes is in a temp directory) or `sed -i` in command
+position, a git command that changes state, `gh pr checkout`, or a redirect to anything but `/dev/null`,
+the standard streams or a temp directory. A redirect inside single quotes (`awk '$1>3'`) is not one.
 
 A `git commit` that passes every check gets no decision, only a one-line `additionalContext` reminding the
 agent to run the project's fast check first; the rule loaded at session start fades in a long session.
@@ -45,10 +46,11 @@ COMMIT = "Before this commit, run the project's fast check (lint, types, tests o
 READ_ONLY = {"code-reviewer", "database-reviewer", "infra-reviewer", "performance-engineer", "security-auditor"}
 GIT_WRITE = {"add", "am", "apply", "checkout", "cherry-pick", "clean", "commit", "merge", "mv", "pull", "push", "rebase",
              "reset", "restore", "revert", "rm", "switch", "update-ref"}
-WRITE_BIN = {"tee", "rm", "mv", "cp", "truncate", "touch", "mkdir", "dd"}
+WRITE_BIN = {"tee", "rm", "mv", "cp", "install", "ln", "truncate", "touch", "mkdir", "dd"}
 # A word after one of these is a command name, as is the first word of a segment.
 PRECMD = {"sudo", "xargs", "command", "nohup", "time", "exec", "env", "-exec", "-execdir"}
-TEMP = ("/tmp/", "/private/tmp/", "/var/folders/")
+# A view reads `$TMPDIR` as `TMPDIR`. ponytail: a relative directory literally named TMPDIR also counts as temp.
+TEMP = ("/tmp/", "/private/tmp/", "/var/folders/", "TMPDIR/")
 WHOLE_TREE = (".", "./", ":/", "*")
 PM_VALUE = {"--filter", "-F", "--prefix", "--dir", "-C"}
 
@@ -116,6 +118,8 @@ def destroys(words):
             return True
         if sub == "switch" and (force or "--discard-changes" in rest):
             return True
+        if sub == "worktree" and rest[:1] == ["remove"] and force:
+            return True
         if sub == "restore" and whole:
             staged = any(x == "--staged" or short(x, "S") for x in rest)
             worktree = any(x == "--worktree" or short(x, "W") for x in rest)
@@ -129,13 +133,15 @@ def scan(line):
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
         pm = sub = git = push = commit = force = skip = False
-        rm = rec = rmf = False
+        rm = rec = rmf = ended = False
         if destroys(words):
             return "destroy"
         for i, x in enumerate(words):
-            if rm and (x == "--recursive" or re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", x)):
+            if rm and x == "--":
+                ended = True
+            if rm and not ended and (x == "--recursive" or re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", x)):
                 rec = True
-            if rm and (x == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x)):
+            if rm and not ended and (x == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x)):
                 rmf = True
             if rm and rec and rmf:
                 return "destroy"
@@ -183,6 +189,8 @@ def read_only(raw):
 
 def git_writes(sub, rest):
     """A git subcommand that changes the tree, the index, refs or config; listing forms pass."""
+    if sub == "apply" and "--apply" not in rest and any(x in ("--check", "--stat", "--numstat", "--summary") for x in rest):
+        return False
     if sub in GIT_WRITE:
         return True
     args = [x for x in rest if not x.startswith("-")]
@@ -190,6 +198,10 @@ def git_writes(sub, rest):
         return rest[:1] not in (["list"], ["show"])
     if sub == "worktree":
         return rest[:1] in (["add"], ["remove"], ["move"], ["prune"], ["repair"])
+    if sub == "remote":
+        return rest[:1] in (["add"], ["remove"], ["rm"], ["rename"], ["set-url"], ["set-head"], ["set-branches"], ["prune"])
+    if sub == "notes":
+        return rest[:1] not in ([], ["list"], ["show"])
     if sub in ("branch", "tag"):
         changes = {"-d", "-D", "-m", "-M", "-c", "-C", "-f", "-a", "-s", "--delete", "--move", "--copy", "--force"}
         lists = {"-l", "--list", "-a", "-r", "--all", "--remotes", "--contains", "--no-contains", "--merged",
@@ -204,24 +216,77 @@ def git_writes(sub, rest):
     return False
 
 
-def writes(line):
-    """A write-shaped command in any segment: a file-changing binary or `sed -i`/`perl -i` in command
-    position, a git subcommand that changes state, or a redirect (`>`, `>>`, `>|`, `&>`, `>&file`) into a
-    file outside /dev/null and the temp directories. `=>` and `->` are not redirects."""
+def unquoted(cmd):
+    """The command, JSON-unescaped, with each single-quoted string replaced by `q` and then quotes, `$` and
+    braces dropped; double quotes and backslashes are tracked as the shell does. None when the quotes do
+    not balance."""
+    try:
+        s = json.loads('"%s"' % cmd)
+    except ValueError:
+        return None
+    out, i, dq = [], 0, False
+    while i < len(s):
+        c = s[i]
+        if c == "\\":
+            out.append(s[i:i + 2])
+            i += 2
+            continue
+        if c == "'" and not dq:
+            j = s.find("'", i + 1)
+            if j < 0:
+                return None
+            out.append("q")
+            i = j + 1
+            continue
+        dq ^= c == '"'
+        out.append(c)
+        i += 1
+    return None if dq else re.sub(r"[\"\\${}]", "", "".join(out))
+
+
+def scratch(path):
+    """/dev/null, a standard stream, or a path inside a temp directory, after normalizing."""
+    t = os.path.normpath(path)
+    return t in ("/dev/null", "/dev/stdout", "/dev/stderr") or t.startswith("/dev/fd/") or (t + "/").startswith(TEMP)
+
+
+def redirects(line):
+    """A redirect (`>`, `>>`, `>|`, `&>`, `>&file`) into a file that is not scratch. `=>` and `->` are not
+    redirects."""
     for m in re.finditer(r"(?<![<=-])>[>|]?\s*(&?)([^\s;&|()<>]*)", line):
         target = m.group(2)
         if not target or (m.group(1) and (target.isdigit() or target == "-")):
             continue
-        t = os.path.normpath(target)
-        if t != "/dev/null" and not (t + "/").startswith(TEMP):
+        if not scratch(target):
             return True
+    return False
+
+
+def writes(line):
+    """A write-shaped command in any segment: a file-changing binary that writes outside scratch or
+    `sed -i`/`perl -i` in command position, a git subcommand that changes state, or `gh pr checkout`.
+    Command position is the first word of a segment, a word after a PRECMD word, or one after a leading
+    `NAME=value`."""
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+        at = True
         for i, x in enumerate(words):
-            if i and words[i - 1] not in PRECMD:
+            here, at = at, x in PRECMD or (at and re.fullmatch(r"[A-Za-z_]\w*=.*", x) is not None)
+            if not here:
                 continue
             name = x.rsplit("/", 1)[-1]
             if name in WRITE_BIN:
+                args = [w for w in words[i + 1:] if not w.startswith("-")]
+                if name == "dd":
+                    args = [w[3:] for w in args if w.startswith("of=")]
+                elif name in ("cp", "mv", "install", "ln"):
+                    # `-t dir` names the destination before the sources: ask rather than parse it.
+                    if any(w.startswith("--target-directory") or short(w, "t") for w in words[i + 1:]):
+                        return True
+                    args = args[-1:]
+                if not args or not all(scratch(a) for a in args):
+                    return True
+            if name == "gh" and words[i + 1:i + 3] == ["pr", "checkout"]:
                 return True
             if name in ("sed", "perl") and any(
                     w == "--in-place" or w.startswith("--in-place=") or re.match(r"-[a-zA-Z]*i", w) for w in words[i + 1:]):
@@ -248,7 +313,7 @@ def protected(path):
     if base == ".env" or (base.startswith(".env.") and base.rsplit(".", 1)[1] not in ("example", "sample", "template", "dist")):
         return True
     claude = os.path.join(home, ".claude")
-    if p in (os.path.join(claude, "settings.json"), os.path.join(claude, "settings.local.json")):
+    if p in (os.path.join(home, ".claude.json"), os.path.join(claude, "settings.json"), os.path.join(claude, "settings.local.json")):
         return True
     dirs = [os.path.join(home, d) for d in (".ssh", ".aws", ".gnupg")] + [os.path.join(claude, d) for d in ("hooks", "rules")]
     return any(p == d or p.startswith(d + os.sep) for d in dirs)
@@ -278,7 +343,10 @@ def main():
         if hit:
             ask(hit)
             return
-    if read_only(raw) and any(writes(v) for v in views):
+    # A redirect inside single quotes is a program's text (`awk '$1>3'`); unbalanced quotes check every view.
+    u = unquoted(cmd)
+    redirect = redirects(u) if u is not None else any(redirects(v) for v in views)
+    if read_only(raw) and (redirect or any(writes(v) for v in views)):
         ask("readonly")
     elif any(commits(v) for v in views):
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": COMMIT}},

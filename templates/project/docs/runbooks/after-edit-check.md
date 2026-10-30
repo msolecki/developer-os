@@ -59,5 +59,5 @@ Fix it: the next edit shows nothing.
 
 - Lint the one file, never the whole project; a whole-project type check belongs to the fast check
   before a commit.
-- A missing linter (`npx --no-install` fails) prints its error once; remove that stack's line rather
+- A missing linter (`npx --no-install` fails) prints its error after every edit of that file type; remove that stack's line rather
   than installing the tool from the hook.

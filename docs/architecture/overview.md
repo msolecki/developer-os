@@ -100,7 +100,7 @@ sequenceDiagram
   7 days are removed.
 - `repeat-failure.py` hashes the agent, tool and input of each failed call (for Bash, the command),
   keeps the counts per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/repeat-failure/`,
-  and at the third failure of the same hash adds a "stop retrying" reminder. It stores no command text.
+  and at the third failure of the same hash, each within 10 minutes of the last, adds a "stop retrying" reminder. It stores no command text.
 
 The five scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
 

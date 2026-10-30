@@ -78,11 +78,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   default for headless runs.
 - **Amended 2026-10-30:** a fourth category, commands that destroy uncommitted or untracked work (`rm`
   with a recursive and a force flag, `git reset --hard`, `git clean -f`, `git checkout`/`git restore`
-  of the whole tree). Users without their own deny list had no check on these in auto mode; they are
+  of the whole tree, `git worktree remove --force`). Users without their own deny list had no check on these in auto mode; they are
   the first reflexes harness-engineering-101 (chapter 13) names.
 - **Amended 2026-10-30:** a fifth category, an Edit or Write of a secret file or the user-level agent
-  config (`.env*`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/settings*.json`, `~/.claude/hooks`,
-  `~/.claude/rules`). The rule against copying hooks into `~/.claude` unread was prompt-only.
+  config (`.env*`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude.json`, `~/.claude/settings*.json`,
+  `~/.claude/hooks`, `~/.claude/rules`). The rule against copying hooks into `~/.claude` unread was prompt-only.
 - **Amended 2026-10-30:** a sixth category, a writing Bash call inside the five read-only review agents,
   keyed on the hook input's `agent_type`. They keep Bash for `git diff` and test runs; `permissionMode`
   is ignored for plugin agents, and `disallowedTools: Bash` would remove those reads.
@@ -318,7 +318,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 
 - **Date:** 2026-10-30
 - **Decision:** each plugin agent sets `maxTurns`: 100, and 40 for `verifier`, which checks one claim.
-  At the cap Claude Code returns the agent's output marked partial; audit-to-backlog then names the
+  At the cap Claude Code (v2.1.246 or later) returns the agent's output marked partial; audit-to-backlog then names the
   missing dimension instead of presenting the backlog as complete.
 - **Why:** a one-line Agent call hides an unbounded subagent (Harness Patterns 2.18 Delegation); a
   reviewer stuck re-running a failing command spent tokens with no limit. The cap is a runaway stop,
@@ -330,11 +330,14 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Date:** 2026-10-30
 - **Decision:** a `PostToolUseFailure` hook counts failures per session by a hash of the agent, tool and
   input (for Bash, the command) and, at the third failure of the same call, adds `additionalContext`
-  telling the agent to stop retrying it unchanged. Once per call, no decision, fail open (D6).
+  telling the agent to stop retrying it unchanged. A failure more than 10 minutes after the previous
+  one of that call starts a new count. Once per run of failures, no decision, fail open (D6).
 - **Why:** a model that keeps calling the same failing tool is the commonest runaway loop (Harness
   Patterns 1.01 Game Loop); a rule loaded at session start fades, a reminder tied to the event does not.
   Checked in `claude -p`: a non-zero Bash fires the event and the text reaches the model.
-- **Alternatives:** two failures (the second retry of a flaky command is often legitimate); a
+- **Alternatives:** two failures (the second retry of a flaky command is often legitimate); counting the
+  whole session (a test run that is red three times during test-first work is not a loop); resetting
+  on success (a second hook on every tool call); a
   `PostToolUse` hook (it does not fire for a failed call); a rule in `core.md` (no room, and it fades).
 
 ## Rules history

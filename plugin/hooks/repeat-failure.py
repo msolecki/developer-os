@@ -3,8 +3,10 @@
 stop retrying it unchanged and diagnose the cause. A model that keeps calling the same failing tool is
 the commonest runaway loop; a rule loaded at session start does not fire at the moment it happens.
 
-The same call means the same tool name and input (for Bash, the command alone) from the same agent. It
-fires once per call, at the third failure, and gives no decision: the call has already failed.
+The same call means the same tool name and input (for Bash, the command alone) from the same agent. A
+failure more than 10 minutes after the previous one of that call starts the count again, so a test run
+that is red now and then during the work (test-first) is not a loop. It fires once per run of failures,
+at the third, and gives no decision: the call has already failed.
 
 Fails open: every unexpected state exits 0 with no output.
 """
@@ -16,6 +18,7 @@ import sys
 import time
 
 LIMIT = 3
+WINDOW = 600  # seconds between failures that still count as one run
 
 
 def owned_dir(path):
@@ -63,8 +66,13 @@ def main():
         pass
     if not isinstance(counts, dict):
         counts = {}
-    n = counts.get(key, 0) + 1 if isinstance(counts.get(key, 0), int) else 1
-    counts[key] = n
+    now = time.time()
+    prev = counts.get(key)
+    # [count, time of the last failure]; anything else (an old or corrupt entry) starts a new run.
+    fresh = (isinstance(prev, list) and len(prev) == 2 and isinstance(prev[0], int) and prev[0] > 0
+             and isinstance(prev[1], (int, float)) and now - prev[1] <= WINDOW)
+    n = prev[0] + 1 if fresh else 1
+    counts[key] = [n, now]
     # Written to a temp file and renamed, so a reader never sees a half-written file.
     tmp = "%s.%d.tmp" % (path, os.getpid())
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
@@ -72,7 +80,6 @@ def main():
         json.dump(counts, f)
     os.replace(tmp, path)
 
-    now = time.time()
     for entry in os.scandir(state_dir):
         try:
             if entry.is_file(follow_symlinks=False) and now - entry.stat(follow_symlinks=False).st_mtime >= 8 * 86400:
