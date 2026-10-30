@@ -15,7 +15,7 @@ Find the line `Brain vault: <absolute path>`. Look in this order and stop at the
 
 ## 2. Run the checks
 
-Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Note names, link targets and the `.md` extension match case-insensitively, as in Obsidian. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance: they are exempt from the archived-link info line, but a missing source is still `no such note`. A superseded note (`status: superseded`) stays in its topic folder, is never stale or an orphan, and must name its replacement in `superseded_by: "[[note]]"`; the script reports a missing field, a target that is missing or archived, a cycle (A → B → A), and a chain that leads into one; a `superseded_by` on a note that is not superseded is checked as an ordinary link. Links inside fenced code blocks are ignored. The script prints only offending files, then one `totals:` line for the report header.
+Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Note names, link targets and the `.md` extension match case-insensitively, as in Obsidian. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance: they are exempt from the archived-link info line, but a missing source is still `no such note`. A superseded note (`status: superseded`) stays in its topic folder, is never stale or an orphan, and must name its replacement in `superseded_by: "[[note]]"`; the script reports a missing field, a target that is missing or archived, a cycle (A → B → A), and a chain that leads into one; a `superseded_by` on a note that is not superseded is checked as an ordinary link. A compiled note (tag `compiled`) is out of date when a note in its `sources:` has a later `updated` date than the compiled note; the fix is to recompile it with brain-compile. Links inside fenced code blocks are ignored. The script prints only offending files, then one `totals:` line for the report header.
 
 ```bash
 V="/path/to/vault"
@@ -56,14 +56,15 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
       if (t == "") continue
       p = ((fm == 1 && key == "sources") || (comp && sec ~ /^## Links[ \t]*$/))
       if ((f, tolower(t)) in seen) { if (!p) lp[seen[f, tolower(t)]] = 0; continue }   # one body link makes it reportable
-      nl++; seen[f, tolower(t)] = nl; src[nl] = f; lt[nl] = t; lp[nl] = p; lq[nl] = (fm == 1 && key == "superseded_by"); tgt[tolower(t)] = 1
+      nl++; seen[f, tolower(t)] = nl; src[nl] = f; lt[nl] = t; lp[nl] = p; lq[nl] = (fm == 1 && key == "superseded_by"); ls[nl] = (fm == 1 && key == "sources"); tgt[tolower(t)] = 1
     }
   }
   close(f)
+  if (comp && up != "") cmp[f] = up   # a compiled note is out of date once a source is updated after it
   if (st != "superseded") for (x = nl0 + 1; x <= nl; x++) lq[x] = 0   # superseded_by elsewhere is a plain link
   if (f == "./README.md") { live[k] = 1; next }   # a link source and target, not a note
   if (f ~ /^\.\/_archive\//) { arch[k] = 1; if (st != "archived") print f ": status: " st " in _archive/"; next }
-  if (st == "archived") arch[k] = 1; else live[k] = 1
+  if (st == "archived") arch[k] = 1; else { live[k] = 1; upd[k] = up }
   if (f ~ /^\.\/_inbox\//) inbox++; else { nn++; notes[nn] = f; nk[nn] = k }
   if (!nfm) { print f ": no frontmatter"; next }
   split("type status created updated project tags summary", req, " ")
@@ -91,6 +92,8 @@ END {
     x = t; cyc = 0; for (h = 0; (x in sbt) && h < 1000; h++) if ((x = sbt[x]) == n) { cyc = 1; break }
     if (cyc) print sbf[n] ": superseded_by cycle" | "sort"; else if (x in sbt) print sbf[n] ": superseded_by leads into a cycle" | "sort"
   }
+  for (x = 1; x <= nl; x++) if (ls[x] && (src[x] in cmp) && ((t = tolower(lt[x])) in upd) && upd[t] > cmp[src[x]])
+    print src[x] ": compiled " cmp[src[x]] ", source [[" lt[x] "]] updated " upd[t]
   fflush(); close("sort")   # earlier lines first
   for (x = 1; x <= nn; x++) if (!(nk[x] in tgt) && !(nk[x] in sup)) { print notes[x] ": orphan"; o++ }   # a superseded note is history
   printf "totals: notes %d, orphans %d (%d%%), inbox %d\n", nn, o, (nn ? int(o * 100 / nn) : 0), inbox
@@ -124,6 +127,8 @@ Frontmatter:
   QA/flaky-tests.md: missing summary → propose: "Retry policy for flaky e2e tests."
   INFRA/dns.md: status: draft (invalid) → active
   DEV/cache.md: status: inbox outside _inbox/ → active
+Out-of-date compiled notes:
+  DEV/missing-compiled.md: compiled 2026-08-01, source [[api-coerce]] updated 2026-10-02 → recompile with brain-compile
 Superseded:
   DEV/queue-sqs.md: superseded_by [[queue-kafka]]: no such note → fix the link or create the note
   DEV/cdn-a.md, DEV/cdn-b.md: superseded_by cycle → ask which note is current

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@975b0c9f53c6">
+<meta name="dos-source" content="CHANGELOG.md@6e907755de82">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -65,6 +65,7 @@ project's fast check first.</li>
 agent only the failures.</li>
 <li>project-baseline checks for Claude Code's sandbox (with reads of <code>~/.ssh</code> and <code>~/.aws</code> denied) and for
 <code>.mcp.json</code> servers pinned to a version.</li>
+<li>brain-garden reports a compiled note that is older than an update to one of its <code>sources:</code>.</li>
 <li>Every agent has a turn cap (<code>maxTurns</code>: 100, 40 for verifier); at the cap its output comes back
 marked partial. D25.</li>
 <li>A <code>PostToolUseFailure</code> hook tells the agent to stop retrying and diagnose when the same tool call fails

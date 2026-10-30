@@ -19,6 +19,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   agent only the failures.
 - project-baseline checks for Claude Code's sandbox (with reads of `~/.ssh` and `~/.aws` denied) and for
   `.mcp.json` servers pinned to a version.
+- brain-garden reports a compiled note that is older than an update to one of its `sources:`.
 - Every agent has a turn cap (`maxTurns`: 100, 40 for verifier); at the cap its output comes back
   marked partial. D25.
 - A `PostToolUseFailure` hook tells the agent to stop retrying and diagnose when the same tool call fails

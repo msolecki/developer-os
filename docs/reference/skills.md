@@ -297,7 +297,7 @@ checks the name (`^[a-z0-9-]+$`) and that no other note has it.
 [Source](../../plugin/skills/brain-garden/SKILL.md). One pass over every note: missing or invalid
 frontmatter, inbox notes older than 7 days, active notes not updated in 180 days, status/folder
 mismatches, broken links and links to archived notes, superseded notes whose `superseded_by` is
-missing, dangling or looping, orphans with a percentage (a superseded note is never one), likely
+missing, dangling or looping, compiled notes older than an updated source, orphans with a percentage (a superseded note is never one), likely
 duplicates (a project note and its `-overview` note are not), and rules stated by three or more
 notes or restated in two or more hubs, proposed as one brain-compile note that the hubs link. Every
 proposed link is tagged FOUND or GUESSED.
