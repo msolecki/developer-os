@@ -17,6 +17,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - project-baseline checks for an after-edit lint hook, and the project templates ship
   `docs/runbooks/after-edit-check.md`: a `PostToolUse` hook that lints each edited file and shows the
   agent only the failures.
+- project-baseline checks for Claude Code's sandbox (with reads of `~/.ssh` and `~/.aws` denied) and for
+  `.mcp.json` servers pinned to a version.
 - Every agent has a turn cap (`maxTurns`: 100, 40 for verifier); at the cap its output comes back
   marked partial. D25.
 - A `PostToolUseFailure` hook tells the agent to stop retrying and diagnose when the same tool call fails
