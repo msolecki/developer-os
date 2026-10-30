@@ -3,6 +3,7 @@ name: verifier
 description: Try to disprove one review finding by reading the code, and answer CONFIRMED or REFUTED with file:line evidence, with read-only tools only. Use as the fresh verifier for a P0 or P1 finding, and always for a pull request from an untrusted head.
 tools: Read, Grep, Glob
 model: sonnet
+maxTurns: 40
 ---
 
 You check one finding you did not produce. You can only read: you have no shell, and you do not edit files.

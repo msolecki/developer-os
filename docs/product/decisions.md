@@ -311,6 +311,17 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   without review, outside the vault's note format); copying all memory files into `_inbox/` in one go
   (skips brain-capture's gate and floods the inbox).
 
+## D25. Every agent has a turn cap
+
+- **Date:** 2026-10-30
+- **Decision:** each plugin agent sets `maxTurns`: 100, and 40 for `verifier`, which checks one claim.
+  At the cap Claude Code returns the agent's output marked partial; audit-to-backlog then names the
+  missing dimension instead of presenting the backlog as complete.
+- **Why:** a one-line Agent call hides an unbounded subagent (Harness Patterns 2.18 Delegation); a
+  reviewer stuck re-running a failing command spent tokens with no limit. The cap is a runaway stop,
+  not a budget: an ordinary review stays well under it.
+- **Alternatives:** `effort` per agent (changes quality, not the upper bound); no cap (the status quo).
+
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change

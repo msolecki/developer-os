@@ -17,6 +17,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - project-baseline checks for an after-edit lint hook, and the project templates ship
   `docs/runbooks/after-edit-check.md`: a `PostToolUse` hook that lints each edited file and shows the
   agent only the failures.
+- Every agent has a turn cap (`maxTurns`: 100, 40 for verifier); at the cap its output comes back
+  marked partial. D25.
 
 ### Changed
 - implement-backlog stops an item whose code no longer matches it (a moved file, a changed API, a

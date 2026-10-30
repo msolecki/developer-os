@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@3070bada8623">
+<meta name="dos-source" content="docs/product/decisions.md@82ce0a6b9fbb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -218,6 +218,13 @@
 <li><strong>Decision:</strong> developer-os recommends <code>"autoMemoryEnabled": false</code> in the user's <code>settings.json</code>. brain-setup offers it as a separate yes/no; session-retro no longer routes anything to auto memory (user preferences go to the user-level <code>CLAUDE.md</code>); the brain-import-memory skill moves an existing auto-memory folder into the vault item by item (new inbox notes, additions to notes the user names, preference and project-rule lines) and never edits or deletes the memory files.</li>
 <li><strong>Why:</strong> auto memory is a second store per project and machine that the agent writes without review, with its index loaded into every session. It duplicated vault notes and drifted from them, could not be searched across projects or read by other agents, and bypassed the approval step D4 puts on vault knowledge. On the author's machine it held more than 500 files across 20 projects when this was decided.</li>
 <li><strong>Alternatives:</strong> keeping both stores with a routing table (the 0.2 behaviour; facts still landed in both); pointing <code>autoMemoryDirectory</code> at the vault (one shared folder for every project, written without review, outside the vault's note format); copying all memory files into <code>_inbox/</code> in one go (skips brain-capture's gate and floods the inbox).</li>
+</ul>
+<h2 id="d25-every-agent-has-a-turn-cap">D25. Every agent has a turn cap</h2>
+<ul>
+<li><strong>Date:</strong> 2026-10-30</li>
+<li><strong>Decision:</strong> each plugin agent sets <code>maxTurns</code>: 100, and 40 for <code>verifier</code>, which checks one claim. At the cap Claude Code returns the agent's output marked partial; audit-to-backlog then names the missing dimension instead of presenting the backlog as complete.</li>
+<li><strong>Why:</strong> a one-line Agent call hides an unbounded subagent (Harness Patterns 2.18 Delegation); a reviewer stuck re-running a failing command spent tokens with no limit. The cap is a runaway stop, not a budget: an ordinary review stays well under it.</li>
+<li><strong>Alternatives:</strong> <code>effort</code> per agent (changes quality, not the upper bound); no cap (the status quo).</li>
 </ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>
