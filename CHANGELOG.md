@@ -21,6 +21,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   marked partial. D25.
 
 ### Changed
+- audit-to-backlog names a perspective whose reviewer failed, was blocked or hit its turn cap under
+  `Not covered:` instead of presenting the backlog as a complete audit.
 - implement-backlog stops an item whose code no longer matches it (a moved file, a changed API, a
   branch that landed since) and proposes an `Amended` line instead of pushing past.
 

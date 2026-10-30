@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@09eb99a02e9f">
+<meta name="dos-source" content="docs/reference/skills.md@63b8dc9c6d36">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -155,7 +155,8 @@ architecture and dead code, UI and accessibility. Every finding needs <code>file
 evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. Each P0 and
 P1 goes to a fresh verifier (the <code>verifier</code> agent); refuted ones are listed
 as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
-its done file.</p>
+its done file. A perspective whose reviewer ended <code>BLOCKED</code>, failed or hit its turn cap is listed under
+<code>Not covered:</code> at the top of the backlog and in the report.</p>
     <h2 id="code-review-and-pull-requests">Code review and pull requests</h2>
     <h3 id="code-review">code-review</h3>
     <p><a href="../../skills/code-review.html">Source</a>. Reviews a PR, diff, commit or working tree.</p>

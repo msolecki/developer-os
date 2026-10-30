@@ -120,7 +120,8 @@ architecture and dead code, UI and accessibility. Every finding needs `file:line
 evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. Each P0 and
 P1 goes to a fresh verifier (the `verifier` agent); refuted ones are listed
 as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
-its done file.
+its done file. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
+`Not covered:` at the top of the backlog and in the report.
 
 ## Code review and pull requests
 

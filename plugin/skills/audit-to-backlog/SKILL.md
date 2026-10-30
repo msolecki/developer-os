@@ -41,6 +41,8 @@ Require each finding to include a unique category ID, `file:line`, severity, pro
 
 Every brief ends with the final-status contract: the report's first line is `DONE`, `REVIEW`, `BLOCKED` (with `Unblock owner: user | orchestrator | <item ID>`) or `CONTINUING`. Send a report without one back once; a second miss is `BLOCKED`, `Unblock owner: orchestrator`.
 
+A perspective whose reviewer ended `BLOCKED`, failed, or returned output marked partial (its turn cap) is a missing pass: name it, with the reason, under `Not covered:` at the top of the backlog and in the report. Never present the backlog as a complete audit while one is missing.
+
 Severity: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup.
 
 For dead code, require zero references, invariant flags, old unreferenced code, or long commented blocks; classify removal confidence.
@@ -81,7 +83,7 @@ While reviewers run, keep `Plan:` (the backlog path), `Agents:` (perspective →
 - Group 5–7 related tasks per implementation session without mixing P0 and P3, one line per session under `## Implementation sessions`: `Session N: <ID>, <ID>, …`. A session is done when every ID is checked or in the done file.
 - Report only measured metrics.
 
-Validate that every item is evidence-backed, actionable, unique, and absent from the done file. Report priority counts and the three highest-impact findings.
+Validate that every item is evidence-backed, actionable, unique, and absent from the done file. Report priority counts, the three highest-impact findings, and the `Not covered:` perspectives.
 
 ## Stop point
 
