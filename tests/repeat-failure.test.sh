@@ -42,6 +42,13 @@ check "Edit 3rd fires" "$(run "$edit")" fire
 run "$(bash_fail s5 'ls')" >/dev/null; run "$(bash_fail s5 'ls')" >/dev/null
 check "off switch" "$(run "$(bash_fail s5 'ls')" DEVELOPER_OS_REPEAT_FAILURE=off)" silent
 check "bad JSON" "$(run 'not json')" silent
+mkdir -p "$tmp/data/repeat-failure" && printf '[]' > "$tmp/data/repeat-failure/s7"
+run "$(bash_fail s7 'make')" >/dev/null; run "$(bash_fail s7 'make')" >/dev/null
+check "corrupt state file is reset" "$(run "$(bash_fail s7 'make')")" fire
+printf '{"x":' > "$tmp/data/repeat-failure/s8"
+run "$(bash_fail s8 'make')" >/dev/null; run "$(bash_fail s8 'make')" >/dev/null
+check "truncated state file is reset" "$(run "$(bash_fail s8 'make')")" fire
+check "no temp file left" "$(ls "$tmp/data/repeat-failure" | grep -c tmp)" 0
 check "bad session id" "$(run "$(bash_fail '../x' 'ls')")" silent
 mkdir -p "$tmp/link-data" && ln -s "$tmp/elsewhere" "$tmp/link-data/repeat-failure"
 mkdir -p "$tmp/elsewhere"

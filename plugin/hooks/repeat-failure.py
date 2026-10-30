@@ -53,14 +53,24 @@ def main():
     path = state_dir + "/" + sid
     if os.path.islink(path):
         return 0
+    # A corrupt file (a writer killed by the timeout) restarts the counts instead of disabling the hook.
+    # Parallel failures can lose an increment or fire twice; both are harmless, so there is no lock.
     counts = {}
-    if os.path.isfile(path):
+    try:
         with open(path, encoding="utf-8") as f:
             counts = json.load(f)
-    n = counts.get(key, 0) + 1
+    except (OSError, ValueError):
+        pass
+    if not isinstance(counts, dict):
+        counts = {}
+    n = counts.get(key, 0) + 1 if isinstance(counts.get(key, 0), int) else 1
     counts[key] = n
-    with open(path, "w", encoding="utf-8") as f:
+    # Written to a temp file and renamed, so a reader never sees a half-written file.
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(counts, f)
+    os.replace(tmp, path)
 
     now = time.time()
     for entry in os.scandir(state_dir):
