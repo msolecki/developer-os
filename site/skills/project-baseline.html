@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/project-baseline/SKILL.md@8b74b0232a6f">
+<meta name="dos-source" content="plugin/skills/project-baseline/SKILL.md@361b3fbea2df">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -82,6 +82,9 @@
           <li>A script or CI step that checks docs against code: P3.</li>
           <li>A root <code>DESIGN.md</code> for a project with a UI: P3, skipped without a UI. When it exists, the skill suggests a lint command for you to run; it never runs or installs it.</li>
           <li>Runtime dependencies no more than one major version behind, from the package manager's outdated report: P2 for a framework or runtime dependency, otherwise P3; skipped when the report needs credentials or the network. After a second question, the three furthest behind get an upgrade plan from the dependency-upgrader agent as their fix; the plan reads changelogs on the web, and its install commands are for you to run.</li>
+          <li>A <code>PostToolUse</code> hook that lints each edited file and shows the agent only the failures (the after-edit runbook in the project templates): P3; skipped without a linter.</li>
+          <li>Claude Code's sandbox enabled in <code>.claude/settings.json</code>, with reads of <code>~/.ssh</code> and <code>~/.aws</code> denied, in <code>sandbox.filesystem.denyRead</code> or as <code>sandbox.credentials.files</code> deny entries (the sandbox allows them by default): P2. The guard and permission rules match text; the sandbox restricts every command.</li>
+          <li>Every stdio server in <code>.mcp.json</code> pinned to a version, with no <code>@latest</code> or bare package name, since its tool descriptions reach the model: P2; skipped without <code>.mcp.json</code>.</li>
           <li>Every CI and validation gate exits non-zero on failure: P2.</li>
         </ul>
       </li>

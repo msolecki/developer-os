@@ -50,7 +50,7 @@ and audit skills below in one pass.
 
 ### project-baseline
 
-[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 13 engineering
+[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 16 engineering
 practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog item.
 
 | Practice | Present when |
@@ -67,6 +67,9 @@ practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog i
 | Docs-vs-code check | a script or CI step checks docs against code |
 | Design system file | a UI project has a root `DESIGN.md` (skipped without a UI) |
 | No runtime dependency two majors behind | the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from `dependency-upgrader` as their Fix |
+| After-edit lint hook | a `PostToolUse` hook on `Edit\|Write` lints the edited file and shows only failures (skipped without a linter) |
+| Agent sandbox | `.claude/settings.json` enables `sandbox` and denies reads of `~/.ssh` and `~/.aws` |
+| Pinned MCP servers | every stdio server in `.mcp.json` runs a pinned version (skipped without `.mcp.json`) |
 | Gate verdict in the exit code | no `\|\| true` or `continue-on-error` on a gate |
 
 It never picks a default for the package manager, test runner, auth library, monitoring stack or
@@ -119,7 +122,8 @@ architecture and dead code, UI and accessibility. Every finding needs `file:line
 evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. Each P0 and
 P1 goes to a fresh verifier (the `verifier` agent); refuted ones are listed
 as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
-its done file.
+its done file. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
+`Not covered:` at the top of the backlog and in the report.
 
 ## Code review and pull requests
 
@@ -293,7 +297,7 @@ checks the name (`^[a-z0-9-]+$`) and that no other note has it.
 [Source](../../plugin/skills/brain-garden/SKILL.md). One pass over every note: missing or invalid
 frontmatter, inbox notes older than 7 days, active notes not updated in 180 days, status/folder
 mismatches, broken links and links to archived notes, superseded notes whose `superseded_by` is
-missing, dangling or looping, orphans with a percentage (a superseded note is never one), likely
+missing, dangling or looping, compiled notes older than an updated source, orphans with a percentage (a superseded note is never one), likely
 duplicates (a project note and its `-overview` note are not), and rules stated by three or more
 notes or restated in two or more hubs, proposed as one brain-compile note that the hubs link. Every
 proposed link is tagged FOUND or GUESSED.
@@ -383,7 +387,10 @@ a read-side security fix every reader (grep the field or model, not the function
 status is not collapsed to a boolean; external input is shape-validated before computing; cost
 inputs have no silent default; per-clone setup lives in a script; build artifacts are verified, not
 only the exit code; numeric promises in docs are re-checked after a rewrite; an ordering constraint
-carries its reason; a guard that greps a command joins its lines first.
+carries its reason; a guard that greps a command joins its lines first; an idempotency key is
+claimed with a status; check and act share one transaction; `LIMIT` has an `ORDER BY`; cleanup covers
+setup; redaction runs before truncation; money is integers in the smallest unit; only safe calls are
+retried, in one layer; authorization reads server-held facts.
 
 ### comments-conventions
 

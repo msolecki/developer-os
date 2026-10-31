@@ -18,16 +18,16 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os agents and output styles">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/agents/code-reviewer.md@e26a9de93810">
-<meta name="dos-source" content="plugin/agents/performance-engineer.md@34033b4830ac">
-<meta name="dos-source" content="plugin/agents/qa-expert.md@36270d914eb0">
-<meta name="dos-source" content="plugin/agents/research-analyst.md@2d32579ba298">
-<meta name="dos-source" content="plugin/agents/verifier.md@c97fe26608e5">
-<meta name="dos-source" content="plugin/agents/security-auditor.md@405c4449e4a9">
-<meta name="dos-source" content="plugin/agents/database-reviewer.md@05dfc8ce9715">
-<meta name="dos-source" content="plugin/agents/dependency-upgrader.md@d75208242b05">
-<meta name="dos-source" content="plugin/agents/infra-reviewer.md@36cd9df668b2">
-<meta name="dos-source" content="plugin/agents/docs-writer.md@d0c25f7dcb01">
+<meta name="dos-source" content="plugin/agents/code-reviewer.md@aae3e2346600">
+<meta name="dos-source" content="plugin/agents/performance-engineer.md@1333b22435ab">
+<meta name="dos-source" content="plugin/agents/qa-expert.md@e4e520a9fc2d">
+<meta name="dos-source" content="plugin/agents/research-analyst.md@cfc47831a9a8">
+<meta name="dos-source" content="plugin/agents/verifier.md@074244d3fac6">
+<meta name="dos-source" content="plugin/agents/security-auditor.md@690a6b5e7b27">
+<meta name="dos-source" content="plugin/agents/database-reviewer.md@db0aa49e6310">
+<meta name="dos-source" content="plugin/agents/dependency-upgrader.md@18345079a1b3">
+<meta name="dos-source" content="plugin/agents/infra-reviewer.md@efbc190789cd">
+<meta name="dos-source" content="plugin/agents/docs-writer.md@fd5a6a932b38">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -72,6 +72,7 @@
     <p>Reviews named files as an independent reader who did not write them, rating correctness, security, data-safety and maintainability findings P0–P3 with a merge verdict. Use it when code written in this session needs a reviewer other than its author, or for the correctness pass of an audit.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>100</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Bash, Glob, Grep, Skill</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
       <div class="fact"><dt>Used by</dt><dd>code-review, and through it pr-cycle and implement-backlog; audit-to-backlog</dd></div>
@@ -99,6 +100,7 @@
     <p>Reviews schema migrations, queries and data-access code for data-safety defects: unsafe or irreversible migrations, table locks, missing indexes and constraints, transaction gaps and data loss. Use it when a change touches a migration, a schema or a query.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>100</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Bash, Glob, Grep</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
       <div class="fact"><dt>Used by</dt><dd><a href="skills/audit-to-backlog.html">audit-to-backlog</a> (data), <a href="skills/code-review.html">code-review</a> (migration, schema or query diffs)</dd></div>
@@ -124,6 +126,7 @@
     <p>Plans the upgrade of one dependency to a target version: the breaking changes from its changelog and migration guide, every affected usage in the repository, ordered migration steps and the checks that prove them. Use it before bumping a library or framework version.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>100</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash, WebFetch, WebSearch</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No; it installs nothing</dd></div>
       <div class="fact"><dt>Used by</dt><dd><a href="skills/project-baseline.html">project-baseline</a> (the three dependencies furthest behind); on request</dd></div>
@@ -149,6 +152,7 @@
     <p>Writes or updates the documentation a named change needs: a doc made false by the code, a missing reference section, a README or runbook entry. Use it after a feature lands without docs, or to apply the drift items a docs-sync report lists.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>100</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash, Edit, Write, Skill</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>Documentation files only</dd></div>
       <div class="fact"><dt>Used by</dt><dd><a href="skills/docs-sync.html">docs-sync</a> (approved items spanning more than three docs); on request</dd></div>
@@ -174,6 +178,7 @@
     <p>Reviews infrastructure-as-code and CI configuration (Terraform, CDK, CloudFormation, serverless and Kubernetes manifests, CI workflows) for over-broad access, public exposure, secrets in config, destructive replacements of stateful resources, an unpinned supply chain and missing alerts. Use it when a change touches infrastructure or CI.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>100</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Bash, Glob, Grep, Skill</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
       <div class="fact"><dt>Used by</dt><dd><a href="skills/audit-to-backlog.html">audit-to-backlog</a> (infra), <a href="skills/code-review.html">code-review</a> (IaC or CI diffs)</dd></div>
@@ -199,6 +204,7 @@
     <p>Finds measured performance defects (N+1 queries, blocking I/O, serial awaits, bundle bloat, render thrash) in a named scope. Use it when something is slow or before a performance-sensitive release.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>100</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Bash, Glob, Grep</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
       <div class="fact"><dt>Used by</dt><dd>audit-to-backlog (performance)</dd></div>
@@ -223,6 +229,7 @@
     <p>Assesses test quality and coverage gaps for a named change or module, and writes the missing tests when asked. Use it when you need to know whether a change is actually verified.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>100</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash, Write, Edit, Skill</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>Tests only, and only when asked</dd></div>
       <div class="fact"><dt>Used by</dt><dd>audit-to-backlog (tests, assessment only)</dd></div>
@@ -249,6 +256,7 @@
     <p>Gathers and synthesizes external information (library behavior, API contracts, vendor limits, migration paths) into a sourced answer. Use it when the question needs sources rather than reasoning.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>100</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, WebFetch, WebSearch</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
       <div class="fact"><dt>Used by</dt><dd>bug-triage (library or vendor behavior); on request</dd></div>
@@ -274,6 +282,7 @@
     <p>Audits a codebase or diff for exploitable security defects: authentication and authorization, injection, secret exposure, unsafe deserialization, SSRF and insecure defaults. Use it when the work needs a security pass.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>opus</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>100</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
       <div class="fact"><dt>Used by</dt><dd>audit-to-backlog (security)</dd></div>
@@ -300,6 +309,7 @@
     <p>Tries to disprove one review finding by reading the code, and answers CONFIRMED or REFUTED with <code>file:line</code> evidence, with read-only tools only. Use it as the fresh verifier for a P0 or P1 finding, and always for a pull request from an untrusted head.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>40</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
       <div class="fact"><dt>Used by</dt><dd>code-review and audit-to-backlog (P0/P1 verification), pr-cycle through code-review</dd></div>

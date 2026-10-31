@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@14fb7e68e7e0">
+<meta name="dos-source" content="docs/reference/skills.md@04065269898d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -86,7 +86,7 @@ records reject on purpose is reported as <code>deliberate</code>, never proposed
 A/B/C question.</li>
     </ul>
     <h3 id="project-baseline">project-baseline</h3>
-    <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 13 engineering
+    <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 16 engineering
 practices; each one has a probe, and a missing one becomes a <code>BASE-NN</code> backlog item.</p>
     <div class="table-wrap">
 <table>
@@ -104,6 +104,9 @@ practices; each one has a probe, and a missing one becomes a <code>BASE-NN</code
 <tr><td>Docs-vs-code check</td><td>a script or CI step checks docs against code</td></tr>
 <tr><td>Design system file</td><td>a UI project has a root <code>DESIGN.md</code> (skipped without a UI)</td></tr>
 <tr><td>No runtime dependency two majors behind</td><td>the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from <code>dependency-upgrader</code> as their Fix</td></tr>
+<tr><td>After-edit lint hook</td><td>a <code>PostToolUse</code> hook on <code>Edit|Write</code> lints the edited file and shows only failures (skipped without a linter)</td></tr>
+<tr><td>Agent sandbox</td><td><code>.claude/settings.json</code> enables <code>sandbox</code> and denies reads of <code>~/.ssh</code> and <code>~/.aws</code></td></tr>
+<tr><td>Pinned MCP servers</td><td>every stdio server in <code>.mcp.json</code> runs a pinned version (skipped without <code>.mcp.json</code>)</td></tr>
 <tr><td>Gate verdict in the exit code</td><td>no <code>|| true</code> or <code>continue-on-error</code> on a gate</td></tr>
 </tbody>
 </table>
@@ -154,7 +157,8 @@ architecture and dead code, UI and accessibility. Every finding needs <code>file
 evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. Each P0 and
 P1 goes to a fresh verifier (the <code>verifier</code> agent); refuted ones are listed
 as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
-its done file.</p>
+its done file. A perspective whose reviewer ended <code>BLOCKED</code>, failed or hit its turn cap is listed under
+<code>Not covered:</code> at the top of the backlog and in the report.</p>
     <h2 id="code-review-and-pull-requests">Code review and pull requests</h2>
     <h3 id="code-review">code-review</h3>
     <p><a href="../../skills/code-review.html">Source</a>. Reviews a PR, diff, commit or working tree.</p>
@@ -293,7 +297,7 @@ checks the name (<code>^[a-z0-9-]+$</code>) and that no other note has it.</p>
     <p><a href="../../skills/brain-garden.html">Source</a>. One pass over every note: missing or invalid
 frontmatter, inbox notes older than 7 days, active notes not updated in 180 days, status/folder
 mismatches, broken links and links to archived notes, superseded notes whose <code>superseded_by</code> is
-missing, dangling or looping, orphans with a percentage (a superseded note is never one), likely
+missing, dangling or looping, compiled notes older than an updated source, orphans with a percentage (a superseded note is never one), likely
 duplicates (a project note and its <code>-overview</code> note are not), and rules stated by three or more
 notes or restated in two or more hubs, proposed as one brain-compile note that the hubs link. Every
 proposed link is tagged FOUND or GUESSED.</p>
@@ -363,7 +367,10 @@ a read-side security fix every reader (grep the field or model, not the function
 status is not collapsed to a boolean; external input is shape-validated before computing; cost
 inputs have no silent default; per-clone setup lives in a script; build artifacts are verified, not
 only the exit code; numeric promises in docs are re-checked after a rewrite; an ordering constraint
-carries its reason; a guard that greps a command joins its lines first.</p>
+carries its reason; a guard that greps a command joins its lines first; an idempotency key is
+claimed with a status; check and act share one transaction; <code>LIMIT</code> has an <code>ORDER BY</code>; cleanup covers
+setup; redaction runs before truncation; money is integers in the smallest unit; only safe calls are
+retried, in one layer; authorization reads server-held facts.</p>
     <h3 id="comments-conventions">comments-conventions</h3>
     <p><a href="../../skills/comments-conventions.html">Source</a>. Loads when writing code. No comment by
 default (rename or extract first); never restate the next line or explain the change; a comment

@@ -92,7 +92,7 @@
           <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>under 8 KB; a state card after compaction, resume or fork; version and upkeep notices on a new session</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
           <li class="lane"><span class="when">before a task</span><span class="what">Search the vault, read the plan<small>answers cite a note path for every claim</small></span><a class="badge info" href="skills/brain-search.html">skill</a></li>
           <li class="lane"><span class="when">during work</span><span class="what">Specs, reviews, audits, PR cycles<small>evidence on every finding; a fresh agent reviews</small></span><a class="badge info" href="skills/index.html">skills</a></li>
-          <li class="lane is-ask"><span class="when">risky command</span><span class="what">Installs, force pushes, hook bypasses<small>the guard asks; it never blocks on its own</small></span><span class="badge ask">asks you</span></li>
+          <li class="lane is-ask"><span class="when">risky command</span><span class="what">Installs, force pushes, hook bypasses, <code>rm -rf</code><small>the guard asks; it never blocks on its own</small></span><span class="badge ask">asks you</span></li>
           <li class="lane"><span class="when">a decision</span><span class="what">Captured as a draft in the inbox<small>secrets redacted; only <code>_inbox/</code> is written</small></span><a class="badge info" href="skills/brain-capture.html">skill</a></li>
           <li class="lane is-ok"><span class="when">wrap-up</span><span class="what">You review what becomes knowledge<small>commits, pushes and notes only on a named yes</small></span><span class="badge ok">you approve</span></li>
         </ol>
@@ -128,9 +128,9 @@
         <article class="layer">
           <span class="k">guard rails</span>
           <h3>Hooks that ask, never deny</h3>
-          <p>Five small hooks: two load the rules and, after a compaction, the state card, one shows version and vault-upkeep notices on a new session, one asks before risky commands, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
+          <p>Six small hooks: two load the rules and, after a compaction, the state card, one shows version and vault-upkeep notices on a new session, one asks before risky commands, one tells the agent to stop retrying a call that failed three times, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
           <ul>
-            <li><span>Hooks</span><span>5</span></li>
+            <li><span>Hooks</span><span>6</span></li>
             <li><span>Network calls</span><span>none</span></li>
             <li><span>On a parse error</span><span>exit silently</span></li>
           </ul>

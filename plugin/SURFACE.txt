@@ -8,12 +8,14 @@ agent qa-expert
 agent research-analyst
 agent security-auditor
 agent verifier
+hook PostToolUseFailure
 hook PreToolUse
 hook SessionStart
 hook Stop
 hook-script capture-nudge.py
 hook-script guard.py
 hook-script notices.py
+hook-script repeat-failure.py
 hook-script state-card.py
 output-style architect
 output-style debug

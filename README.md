@@ -7,7 +7,7 @@ A Claude Code plugin for working with an AI coding agent and an Obsidian vault a
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
-agents, output styles and rules) plus three small Python 3 hook scripts (standard library only), with no server, no database and
+agents, output styles and rules) plus five small Python 3 hook scripts (standard library only), with no server, no database and
 nothing to install beyond `python3`.
 
 ## Install (Claude Code)
@@ -64,7 +64,7 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 
 ## What the hooks do
 
-The plugin has 5 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
+The plugin has 6 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
 session context. After a compaction, a resume or a fork inside a git repository, a second `SessionStart` hook,
 [`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
@@ -92,16 +92,32 @@ while a background agent, command or Monitor it can see is still running, it ask
 approve. Set `DEVELOPER_OS_CAPTURE_NUDGE=off` to turn it off, or `DEVELOPER_OS_CAPTURE_NUDGE_MIN=<n>`
 to change the threshold.
 
-A `PreToolUse` hook on Bash ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) asks for confirmation
+A `PreToolUse` hook on Bash, Edit and Write ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) asks for confirmation
 (it never blocks) before a dependency install, update or removal with a package argument
 (`npm|pnpm|yarn|bun install|add|i|update|remove <pkg>`, an alias such as `npm in`, `npm un` or `bun a`,
 `update --latest`, or the binary by full path), a `git push` with `--force`, `-f`, a `+refspec` or
 `-c remote.<name>.push=+…` (even next to `--force-with-lease`; a lone `--force-with-lease` passes; git
 also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `--no-veri`,
-`git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form. `$IFS`
+`git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form, and a command
+that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag (`rm -rf`),
+`git reset --hard`, `git clean -f`, `git checkout`/`git restore` of `.`, `:/` or `*`, `git checkout -f`,
+`git switch --discard-changes`, `git worktree remove --force`, `git stash drop`/`clear` or `find … -delete` (`git restore --staged .` and `git clean -n` pass). An Edit or Write asks when its file is a `.env`, `.envrc` or `.env.*` (not
+`.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, or `~/.claude/` `hooks`,
+`rules`, `agents`, `skills` or `commands`, or is `~/.claude.json`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` or `settings.local.json` (also under `$CLAUDE_CONFIG_DIR`). Inside the five read-only review agents, a Bash
+call that writes outside the temp directories (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, `prettier --write`, `eslint --fix`, `gh pr checkout`, a git command that changes the
+tree, history or remotes) asks too. A `git commit` that asks for nothing gets a one-line reminder, as context for
+the agent, to run the fast check first. `$IFS`
 (also with an empty `$9` glued on), `${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
+The guard matches command text, so it decides only what needs your confirmation; quoting, aliases or a
+script can get past it. It is not a security boundary: for that, use Claude Code's permission rules and
+its sandbox (`/sandbox`), which restrict writes and network for every command.
 
-The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
+A `PostToolUseFailure` hook ([`plugin/hooks/repeat-failure.py`](plugin/hooks/repeat-failure.py)) counts
+failed tool calls per session. When the same call (the same tool and input; for Bash, the same command)
+fails for the third time, each within 10 minutes of the last, it tells the agent, as context, to stop retrying it unchanged if nothing changed between the runs, and to diagnose the
+cause. It never blocks; set `DEVELOPER_OS_REPEAT_FAILURE=off` to turn it off.
+
+The five scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;
 without it the core rules still load and the other hooks do not run.
 
@@ -128,7 +144,7 @@ without it the core rules still load and the other hooks do not run.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
 - **Five hooks on three events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
-  once per long session, `PreToolUse` asks before installs, force pushes and hook bypasses (see above).
+  once per long session, `PreToolUse` asks before installs, force pushes, hook bypasses and destructive commands (see above).
 - **Evals:** behavior checks for the brain skills, code-review, session-retro and the skill
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
   plugin payload.

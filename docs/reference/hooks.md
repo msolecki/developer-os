@@ -7,13 +7,13 @@ last-verified: 2026-10-24
 # Hooks reference
 
 Defined in `plugin/hooks/hooks.json`. Commands run with `${CLAUDE_PLUGIN_ROOT}` set to the installed
-`plugin/` directory; each has a 10-second timeout. There are 5 hooks: one `cat` and four
+`plugin/` directory; each has a 10-second timeout. There are 6 hooks: one `cat` and five
 Python 3 scripts run as `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.py"`. The scripts use the
 standard library only, need `python3` 3.8 or later on `PATH`, make no network call, and fail open.
 Without `python3` the core rules still load; the state card, notices, guard and nudge fail with a
 non-blocking hook error and the session goes on as if they were absent. Why Python and not `sh`:
 [decisions D2](../product/decisions.md#d2-no-runtime-small-hook-scripts-without-dependencies).
-Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh`, `tests/capture-nudge.test.sh`.
+Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh`, `tests/repeat-failure.test.sh`, `tests/capture-nudge.test.sh`.
 
 ## SessionStart — core rules and state card
 
@@ -111,9 +111,11 @@ another user, the hook prints nothing, because without markers every notice woul
 **Failure:** every error exits 0 with no output. `DEVELOPER_OS_NOTICES=off` and `sdk-*` entrypoints
 (`claude -p`, the SDK) print nothing.
 
-## PreToolUse on Bash — `guard.py`
+## PreToolUse on Bash, Edit and Write — `guard.py`
 
-**Input:** the hook JSON on stdin; only `tool_input.command` is used.
+**Matcher:** `Bash|Edit|Write`.
+
+**Input:** the hook JSON on stdin; `tool_input.command` for Bash, `tool_name` and `tool_input.file_path` for Edit and Write; `agent_type`, present when a subagent makes the call.
 
 **Decision:** prints one line and exits 0:
 
@@ -122,7 +124,13 @@ another user, the hook prints nothing, because without markers every notice woul
 ```
 
 or prints nothing and exits 0, which leaves Claude Code's normal permission flow in charge. It never
-answers `deny`. In `claude -p`, an `ask` resolves to a denial: the call is listed under `permission_denials` and the
+answers `deny`. A Bash `git commit` (`commit` as git's subcommand, after `-C`/`-c` and other global options)
+that hits no category prints only context, which reaches the model and leaves the permission flow as is:
+
+```json
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."}}
+```
+ In `claude -p`, an `ask` resolves to a denial: the call is listed under `permission_denials` and the
 command does not run, even when `--allowedTools Bash` allows it.
 
 | Category | Asks for | Passes |
@@ -130,6 +138,9 @@ command does not run, even when `--allowedTools Bash` allows it.
 | Dependency install, update or removal | `npm`, `pnpm`, `yarn` or `bun` (also by full path) followed by `install`, `add`, `i`, an alias (`in`, `inst`…, `isntall`, `it`, bun's `a`), or `update`, `up`, `upgrade`, `remove`, `rm`, `uninstall`, `un`, and then any non-dash word or `--latest` (`pnpm add zod`, `npm i -D vitest`, `pnpm --filter web add zod`, `npm uninstall zod`, `pnpm update --latest`) | `pnpm install`, `pnpm install --frozen-lockfile`, `npm ci`, `npm update`, `pnpm add -D` with flags only, a script or binary named like a subcommand immediately after `run`, `exec` or `dlx` (`npm run up foo`) |
 | Force push | `git push` (git also by full path) with `--force`, `--mirror`, a short-flag cluster containing `f`, or a `+refspec`, even next to `--force-with-lease`; `remote.<name>.push=+…` in a git word | `--force-with-lease` alone (including `=ref:sha`), `git push --delete`, `git push origin :branch`, `git push -n`, `git stash push -f` |
 | Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `LEFTHOOK=0`, a word starting `SKIP=` (pre-commit), `core.hooksPath` anywhere in a word (`-c core.hooksPath=…`, `git config core.hooksPath`, `--config-env=`, `GIT_CONFIG_KEY_<n>=`, `GIT_CONFIG_PARAMETERS=`); `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`) | `git commit -am` |
+| Destructive command | `rm` (also by full path) with a recursive flag (`-r`, `-R`, `--recursive`, or a cluster containing one) and a force flag (`-f`, `--force`, or a cluster containing it) in one segment; `git reset --hard`; `git clean` with `--force` or a cluster containing `f`, unless `-n`/`--dry-run`; `git checkout` of `.`, `./`, `:/` or `*`, or with `-f`/`--force`; `git switch -f`/`--discard-changes`; `git worktree remove` with `-f`/`--force`; `git rm` with `-f`/`--force` (it removes files with uncommitted changes); `git stash drop`/`clear`; `git restore` of the whole tree, unless it only unstages (`--staged`/`-S` without `--worktree`/`-W`); `find … -delete`; each `rm`, `git` or `find` in command position (as for a read-only agent below, also after `sh -c`) | `rm file`, `git rm a.ts`, `git rm -r --cached x`, a mention in an argument (`grep -rn "rm -rf" .`, `git commit -m "… reset --hard"`), `rm -r dir`, `rm -f file`, `git reset --soft`, `git clean -n`, `git clean -nfd`, `git restore src/a.ts`, `git restore --staged .`, `git checkout main`, `git checkout -b x`, `git checkout -- src/a.ts`, `git worktree remove ../x`, `git stash list`/`pop`, `rm -- -rf` (after `--` a word is a file name). A restore or checkout of one path passes on purpose: undoing one file is routine, and an ask on each would be noise |
+| Protected file (Edit, Write) | a `file_path` named `.env`, `.envrc`, `.env.*` or `.envrc.*`; anything under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/hooks`, `~/.claude/rules`, `~/.claude/agents`, `~/.claude/skills`, `~/.claude/commands`, `~/.claude/plugins` (installed plugins and their hooks) or `~/.claude/output-styles`; `~/.claude.json` (user-level MCP servers), `~/.claude/settings.json`, `~/.claude/settings.local.json` or `~/.claude/CLAUDE.md`, and the same files and directories under `$CLAUDE_CONFIG_DIR` when it is set, its `.claude.json` included (after `~` expansion and symlink resolution, compared without case) | `.env.example`, `.env.sample`, `.env.template`, `.env.dist`, a project `.claude/settings.json`, `~/.claude/plans/`, any other path; an Edit or Write without `file_path`. Only Edit and Write are checked: a Bash write to the same file (`echo X > .env`) or a NotebookEdit is not, so this is not a secrets boundary |
+| Write inside a read-only agent | a Bash call whose `agent_type` is `developer-os:` followed by code-reviewer, database-reviewer, infra-reviewer, performance-engineer or security-auditor, and that runs, in command position (first word of a segment, after one of these in command position: `builtin`, `sudo`, `doas`, `xargs`, `env`, `command`, `nohup`, `time`, `timeout`, `flock` and `chroot` (each past its first operand and a `--`), `nice`, `ionice`, `stdbuf`, `exec`, `eval`, `watch`, `setsid`, `strace`, `unshare`, `busybox`, `parallel`, `-exec`, `-execdir`, also by full path (`/usr/bin/env`), and their options with values, as in `sudo -u x rm`; after a shell keyword in command position (`if`, `then`, `else`, `elif`, `while`, `until`, `do`, `!`) or a shell's or `su`'s `-c` in any cluster (`sh -c`, `bash -lc`, `bash -cl`, `su root -c`); the word after a value option is checked too, since a view drops a `{}` value, as in `xargs -I{} rm`; or after a leading `NAME=value`), `tee`, `rm`, `mv`, `cp`, `install`, `ln`, `truncate`, `touch`, `mkdir`, `dd`, `unlink`, `rmdir`, `chmod`, `chown` or `chgrp` with a target outside scratch, or `patch` with any target (for `cp`/`mv`/`install`/`ln` the last argument, and any `-t`/`--target-directory` asks; for `dd` its `of=`; for `chmod`/`chown`/`chgrp` every operand after the mode or owner; otherwise every non-flag argument), `gh pr checkout`, or `sed`/`perl` with `-i` in a flag cluster or `--in-place`; a word `--write`, `--fix`, `--update-snapshots` or `--updateSnapshot` (also with `=value`), or `-u`/`--update` in a segment with `test`, `jest`, `vitest` or `playwright` (`prettier --write`, `eslint --fix`, `npm test -- -u`); a git (in command position) `add`, `am`, `apply`, `bisect`, `checkout`, `cherry-pick`, `clean`, `clone`, `commit`, `gc`, `init`, `merge`, `mv`, `prune`, `pull`, `push`, `rebase`, `reset`, `restore`, `revert`, `rm`, `sparse-checkout`, `submodule`, `switch`, `update-ref`, `stash` (not `list`/`show`), `worktree add`/`remove`/`move`/`prune`/`repair`, `remote add`/`remove`/`rm`/`rename`/`set-url`/`set-head`/`set-branches`/`prune`, `notes` (not `list`/`show`), a `branch` or `tag` that creates, deletes or moves, or a `config` write; or a redirect (`>`, `>>`, `>|`, `&>`, `>&file`, `2>`) to a file outside quotes, or inside quotes the shell may run (double quotes after a shell's or `su`'s `-c`, or after `eval`; any quotes in a command with `"$(...)"`, a backtick in double quotes, `<<<` or `| sh`) | scratch: `/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/fd/N`, `/tmp/`, `/private/tmp/`, `/var/folders/`, `$TMPDIR/` (after normalizing; a relative `TMPDIR/` too, since the guard drops `$`), so `mkdir -p /tmp/x` and `cp a.ts /tmp/` pass; a file descriptor (`2>&1`); `=>` and `->`; a `>` inside quotes (`awk '$1>3'`, `grep "<a>" f`, `python3 -c "print(1>2)"`; backslashes are tracked, and unbalanced quotes check every view); `git log -u`, `sort -u`; read-only git (`diff`, `log`, `grep`, `stash list`, `branch -a`, `tag -l`, `config --get`, `worktree list`, `remote -v`, `notes show`, `apply --check`/`--stat`/`--numstat`/`--summary` without `--apply`); a write word or a git command as an argument (`grep -rn rm .`, `grep -rn "git add" docs`, `grep -rn do rm .`, `wc -c rm`, `grep -rn "xargs -n 1 rm" tests`, `echo watch rm -rf x`); the same command in the main session, another agent, or an agent named without the `developer-os:` prefix |
 
 **Parsing:** first `$IFS` and any `${IFS…}` (such as `${IFS%?}`) become a space, `${X:-word}` (also `-`, `+`, `=`, `?`) becomes
 `word`, the positional parameters `$1`–`$9`, `$@` and `$*` (empty in a tool call) are dropped, and a `\xHH` or octal escape inside `$'...'` becomes its character, so `npm${IFS}i${IFS}zod`, `npm$IFS$9i$IFS$9zod`,
@@ -141,7 +152,13 @@ as a space, each with quotes deleted and with quotes turned into spaces (so `ali
 `push` and `-f` apart). Braces are deleted and commas split words, so `{-f,}` reads `-f`; a fifth
 view deletes commas instead, so `-{,f}` reads `-f`. A hit in any of the five views asks. A word built at run time, such as `$(command -v npm)`, is not
 resolved. Because quotes
-are dropped, a mention such as `git commit -m "pnpm add zod"` also asks; this is deliberate.
+are dropped, a mention such as `git commit -m "pnpm add zod"` also asks; this is deliberate. The
+destructive and read-only-agent categories match only a command in command position (see below), so a
+mention in an argument, such as `grep -rn "rm -rf" plugin`, `git commit -m "… git reset --hard"` or
+`grep -rn "git add" docs`, passes; `sh -c "git reset --hard"`, `su -c "…"`, `eval "…"` and `bash -lc '…'` still ask,
+because the word after a shell's `-c` is in command position. A command run on another host or in a
+container (`ssh host rm -rf x`, `docker exec c rm -rf /`, `kubectl exec p -- rm -rf /`) is out of scope:
+it cannot destroy local uncommitted work.
 
 **Known false positives** (an extra prompt, never a missed category): a command on the line after
 an install without a package asks (`pnpm install`, newline, `git status`), because the space view
@@ -149,10 +166,58 @@ joins them; `git` stays armed for the
 whole segment, so `git log --grep push -f` asks; a non-dash word after `install` other than a
 `--filter`, `-F`, `--prefix`, `--dir` or `-C` value asks; an install word anywhere after the package
 manager asks, even as a script argument (`pnpm run build -- add foo`), because an option value such
-as `npm --cache run install zod` must not end the check.
+as `npm --cache run install zod` must not end the check. A line of a multi-line commit message (a
+heredoc) that starts with a destructive command (`rm -rf old`, `git reset --hard`) asks, because the
+newline view reads it as a command. In a read-only agent, a `>` inside a heredoc body asks
+(`python3 - <<'EOF'` with `if a > b:`), because heredoc text is not told apart from commands; and once a shell word appears in a line, a
+`>` in double quotes after any later `-c` asks (`sh -c 'a'; python3 -c "print(1>2)"`).
+
+**Known misses in a read-only agent** (a write that passes): a program that writes from inside its own
+text, such as `awk '{print > "f"}' x` or `python3 -c "open('x', 'w').write('y')"`, a redirect in single
+quotes run by a shell (`bash -c 'echo x > f'`), a formatter that writes by default (`prettier -w`,
+`black`, `gofmt -w`, `cargo fmt`), a download or unpack into the tree (`curl -o`, `wget`, `tar x`,
+`unzip`), and an install without a package (`npm ci`, `pnpm install`), which a review may need to run tests. The sandbox, not the guard, stops these.
 
 **Failure:** any exception exits 0; input without `{…}` or without a `command` string produces no
 output.
+
+**Not a security boundary.** The guard matches command text, so it decides only what needs your
+confirmation: quoting, an alias, a variable built at run time or a script can get past it. The hard
+boundary is Claude Code's permission rules and its sandbox (`sandbox.enabled`, or `/sandbox`), which
+restrict writes and network for every command whatever its text.
+
+## PostToolUseFailure — `repeat-failure.py`
+
+**Matcher:** none: every tool. Claude Code fires the event when a tool call fails, for Bash when the
+command exits non-zero; a call rejected before it runs (permission denial, invalid input) or cancelled
+does not fire it.
+
+**Input:** the hook JSON on stdin; uses `session_id`, `tool_name`, `tool_input`, `agent_id` and
+`is_interrupt`.
+
+**Counts** one failure per call key: `agent_id`, `tool_name` and `tool_input` (for Bash only
+`tool_input.command`, since the description changes between otherwise identical retries), hashed. A
+failure more than 10 minutes after the previous one of the same key starts the count again at 1. A
+success does not reset it (that would need a hook on every call), so a test run that is red, green and
+red again within the window counts; the message tells the agent to stop only if nothing changed between
+the runs.
+
+**Exits 0 silently when** `DEVELOPER_OS_REPEAT_FAILURE=off`, `is_interrupt` is `true`, the input is not
+a JSON object, `session_id` is empty or has characters other than `A-Z a-z 0-9 _ -`, or the count for
+the key in the current run of failures is not exactly 3.
+
+**Otherwise** (the third failure of the key within one run) prints
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PostToolUseFailure", "additionalContext": "developer-os: this exact <tool> call has failed 3 times, each within 10 minutes of the last. If nothing changed between the runs, do not run it again unchanged: read the error, find the cause, then change the approach or ask the user."}}
+```
+
+and exits 0. No decision: the call has already failed. Checked in `claude -p`: the text reaches the model.
+
+**State:** one JSON file per session, mapping each key to its count and the time of its last failure, in
+`${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/repeat-failure/`, created with mode 700 and
+removed after 8 days; the hook fails open when that directory or its parent is a symlink or owned by
+another user. It stores hashes only, never commands or errors.
 
 ## Stop — `capture-nudge.py`
 
@@ -199,7 +264,8 @@ script reads the file's modification time with `stat` and runs no other program 
 | `DEVELOPER_OS_CAPTURE_NUDGE` | capture-nudge | `off` disables the nudge |
 | `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | capture-nudge | Tool-call threshold; non-numeric falls back to 30 |
 | `DEVELOPER_OS_NOTICES` | notices | `off` disables the version and upkeep notices |
+| `DEVELOPER_OS_REPEAT_FAILURE` | repeat-failure | `off` disables the repeated-failure reminder |
 | `CLAUDE_CODE_ENTRYPOINT` | capture-nudge, notices | Set by Claude Code but not in its documentation, so it may change without notice; `sdk-*` skips the hook |
-| `CLAUDE_PLUGIN_DATA` | capture-nudge, notices | Set by Claude Code; marker directory root, kept across plugin updates |
+| `CLAUDE_PLUGIN_DATA` | capture-nudge, notices, repeat-failure | Set by Claude Code; marker directory root, kept across plugin updates |
 | `CLAUDE_CONFIG_DIR` | notices | Where the user-level `CLAUDE.md` with the `Brain vault:` line lives (default `~/.claude`) |
 | `CLAUDE_PLUGIN_ROOT` | hooks.json | Set by Claude Code; plugin install path |

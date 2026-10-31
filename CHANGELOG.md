@@ -4,6 +4,49 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- The guard asks before commands that destroy uncommitted or untracked work: `rm` with a recursive
+  and a force flag, `git reset --hard`, `git clean -f`, `git worktree remove --force`, `git stash drop`/`clear`, and `git checkout`/`git restore` of the
+  whole tree (`git restore --staged .` passes). D6 amended.
+- The guard also runs on Edit and Write and asks before a change to a `.env*` or `.envrc` file, `~/.ssh`, `~/.aws`,
+  `~/.gnupg`, `~/.claude.json`, `~/.claude/settings*.json`, `~/.claude/CLAUDE.md`, or `~/.claude/` `hooks`,
+  `rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`, also under `$CLAUDE_CONFIG_DIR`. D6 amended.
+- Inside the five read-only review agents, the guard asks before a Bash call that writes files outside
+  the temp directories, changes git state or remotes, runs a formatter or test run that rewrites files (`--write`, `--fix`,
+  `-u` next to a test runner), or runs `gh pr checkout`, `unlink`, `rmdir`, `patch`, `chmod`, `chown`, `chgrp`, or `git bisect`, `clone`, `init`, `gc`, `prune`,
+  `sparse-checkout` or `submodule`. D6 amended.
+- A `git commit` the guard does not ask about gets a one-line reminder, as agent context, to run the
+  project's fast check first.
+- project-baseline checks for an after-edit lint hook, and the project templates ship
+  `docs/runbooks/after-edit-check.md`: a `PostToolUse` hook that lints each edited file and shows the
+  agent only the failures.
+- project-baseline checks for Claude Code's sandbox (with reads of `~/.ssh` and `~/.aws` denied) and for
+  `.mcp.json` servers pinned to a version.
+- brain-garden reports a compiled note that is older than an update to one of its `sources:`.
+- Every agent has a turn cap (`maxTurns`: 100, 40 for verifier); at the cap its output comes back
+  marked partial (Claude Code v2.1.246 or later). D25.
+- A `PostToolUseFailure` hook tells the agent to stop retrying and diagnose when the same tool call fails
+  for the third time, each failure within 10 minutes of the last, and nothing changed between the runs. `DEVELOPER_OS_REPEAT_FAILURE=off` turns it off. D26.
+- The README and hooks reference say the guard is not a security boundary and point to Claude Code's
+  permission rules and sandbox.
+- defensive-coding-conventions checks eight more defect classes, from the corrections in Harness
+  Patterns' enterprise review: idempotency keys claimed with a status, check-then-act races, `LIMIT`
+  without `ORDER BY`, cleanup that misses setup, truncation before redaction, money as floats, unsafe
+  retries, and authorization from client-held values.
+
+### Changed
+- The guard's destructive and read-only-agent checks match only a command in command position, so a
+  mention such as `grep -rn "rm -rf"` or `git commit -m "… reset --hard"` no longer asks. They also
+  follow `timeout`, `nice`, `stdbuf`, `doas`, `eval`, `watch`, `setsid`, `flock`, `chroot`, shell keywords,
+  `sh -c` and `su -c`, and `git rm -f` asks; `ssh` and `docker exec` commands no longer ask. A wrapper
+  word counts only in command position, so `echo watch rm -rf x` passes, and in a read-only agent a `>`
+  in double quotes after `-c` asks only after a shell (`sh -c`), not after `python3 -c`. D6 amended.
+- project-baseline accepts `sandbox.credentials.files` deny entries as well as `sandbox.filesystem.denyRead`.
+- audit-to-backlog names a perspective whose reviewer failed, was blocked or hit its turn cap under
+  `Not covered:` instead of presenting the backlog as a complete audit.
+- implement-backlog stops an item whose code no longer matches it (a moved file, a changed API, a
+  branch that landed since) and proposes an `Amended` line instead of pushing past.
+
 ## [0.2.6] - 2026-10-26
 
 ### Added

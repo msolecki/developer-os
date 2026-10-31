@@ -76,6 +76,50 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Why:** a broken guard must not block a session; an extra confirmation costs one click, while a
   missed install rewrites a lockfile. Per the README, an ask resolves to a denial in `claude -p`, the safe
   default for headless runs.
+- **Amended 2026-10-30:** a fourth category, commands that destroy uncommitted or untracked work (`rm`
+  with a recursive and a force flag, `git reset --hard`, `git clean -f`, `git checkout`/`git restore`
+  of the whole tree, `git worktree remove --force`). Users without their own deny list had no check on these in auto mode; they are
+  the first reflexes harness-engineering-101 (chapter 13) names.
+- **Amended 2026-10-30:** a fifth category, an Edit or Write of a secret file or the user-level agent
+  config (`.env*`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude.json`, `~/.claude/settings*.json`,
+  `~/.claude/hooks`, `~/.claude/rules`). The rule against copying hooks into `~/.claude` unread was prompt-only.
+- **Amended 2026-10-30:** a sixth category, a writing Bash call inside the five read-only review agents,
+  keyed on the hook input's `agent_type`. They keep Bash for `git diff` and test runs; `permissionMode`
+  is ignored for plugin agents, and `disallowedTools: Bash` would remove those reads.
+- **Amended 2026-10-30:** a `git commit` that hits no category gets `additionalContext` (no decision)
+  reminding the agent of the fast check; a rule loaded at session start fades in a long session, and a
+  reminder tied to the event it governs does not (harness-engineering-101, chapter 8). Checked in
+  `claude -p`: the text reaches the model and the command runs without a prompt.
+- **Scope, 2026-10-30:** the guard matches command text, so it decides what asks; it is not a security
+  boundary. The boundary is Claude Code's permission rules and sandbox (Harness Patterns 2.14 Proxy:
+  text patterns are easy to get around with quoting, aliases or scripts).
+- **Amended 2026-10-31:** the destroy category adds `git stash drop`/`clear` (a dropped stash is gone
+  short of `git fsck`); a restore or checkout of one path still passes, since undoing one file is routine
+  and an ask on each would be noise. The protected files add `~/.claude/CLAUDE.md` and `~/.claude/agents`,
+  `skills` and `commands`, which load into every session like `rules`; a brain-setup or session-retro
+  line written there now costs one click. In the read-only agents, `--write`, `--fix` and snapshot
+  updates ask, the commonest way a reviewer that runs lint or tests rewrites files.
+- **Amended 2026-10-31:** the protected files add `.envrc` (direnv secrets) and the same config under
+  `$CLAUDE_CONFIG_DIR`, which moves it for a second account. In the read-only agents, `unlink`, `rmdir`
+  and `patch` ask, and the word after an option's value is checked as a command too, so `xargs -I{} rm`
+  (whose `{}` a view drops) asks.
+- **Amended 2026-10-31:** the destroy and read-only categories match only a command in command
+  position, so a mention in an argument (`grep -rn "rm -rf"`, `git commit -m "… reset --hard"`,
+  `grep -rn "git add"` in a reviewer) no longer asks; a reviewer greps for command text on every review
+  of hooks or docs. Command position now also follows `timeout`, `nice`, `stdbuf`, `doas`, `eval`, a
+  shell keyword (`then`, `do`, …), a shell's or `su`'s `-c`, and the wrappers that ran a command before
+  (`watch`, `setsid`, `flock`, `chroot`, …), so `sh -c "git reset --hard"` still asks; a command on
+  another host or in a container (`ssh`, `docker exec`) no longer does. `git rm -f`
+  asks, since it removes files with uncommitted changes. The install, push and hook-bypass categories
+  still ask on a mention.
+- **Amended 2026-10-31:** the protected files add `~/.claude/plugins` and `~/.claude/output-styles`:
+  an installed plugin's hooks run code in every session and an output style enters the system prompt, a
+  stronger reason than for `rules`. In the read-only agents, `chmod`, `chown`, `chgrp` and the git
+  subcommands `bisect`, `clone`, `init`, `gc`, `prune`, `sparse-checkout` and `submodule` ask. A wrapper
+  word (`sudo`, `xargs`, `watch`, …) starts a command only in command position, so `grep -rn "xargs -n 1
+  rm"` passes in a reviewer, and quoted text after `-c` is read as a script only after a shell or `su`,
+  so `python3 -c "print(1>2)"` passes. Downloads, unpacking and installs without a package stay known
+  misses: a review may need them to run tests.
 
 ## D7. One wrap-up nudge per long session
 
@@ -297,6 +341,36 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   without review, outside the vault's note format); copying all memory files into `_inbox/` in one go
   (skips brain-capture's gate and floods the inbox).
 
+## D25. Every agent has a turn cap
+
+- **Date:** 2026-10-30
+- **Decision:** each plugin agent sets `maxTurns`: 100, and 40 for `verifier`, which checks one claim.
+  At the cap Claude Code (v2.1.246 or later) returns the agent's output marked partial; audit-to-backlog then names the
+  missing dimension instead of presenting the backlog as complete.
+- **Why:** a one-line Agent call hides an unbounded subagent (Harness Patterns 2.18 Delegation); a
+  reviewer stuck re-running a failing command spent tokens with no limit. The cap is a runaway stop,
+  not a budget: an ordinary review stays well under it.
+- **Alternatives:** `effort` per agent (changes quality, not the upper bound); no cap (the status quo).
+
+## D26. A repeated failure gets one reminder
+
+- **Date:** 2026-10-30
+- **Decision:** a `PostToolUseFailure` hook counts failures per session by a hash of the agent, tool and
+  input (for Bash, the command) and, at the third failure of the same call, adds `additionalContext`
+  telling the agent to stop retrying it unchanged. A failure more than 10 minutes after the previous
+  one of that call starts a new count. Once per run of failures, no decision, fail open (D6).
+- **Why:** a model that keeps calling the same failing tool is the commonest runaway loop (Harness
+  Patterns 1.01 Game Loop); a rule loaded at session start fades, a reminder tied to the event does not.
+  Checked in `claude -p`: a non-zero Bash fires the event and the text reaches the model.
+- **Alternatives:** two failures (the second retry of a flaky command is often legitimate); counting the
+  whole session (a test run that is red now and then over an hour is not a loop); resetting
+  on success (a second hook on every tool call); a
+  `PostToolUse` hook (it does not fire for a failed call); a rule in `core.md` (no room, and it fades).
+- **Amended 2026-10-31:** a success does not reset the count, so a test run that is red, green and red
+  again within 10 minutes during test-first work reaches three. The message says so ("each within 10
+  minutes of the last") and tells the agent to stop only if nothing changed between the runs; a reset
+  on success would cost a hook process on every Bash call.
+
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change
@@ -322,3 +396,4 @@ here before reversing a rule.
 | 2026-10-20 | A regression test is seen red before the fix; the boundary that could be wrong is not faked; failure messages show the missing record or response, and retries never hide a flaky test | `testing-conventions` | A test seen only green, a fake database or a raised retry count each lets a fix ship unverified (flaviocopes.com/fast-tests-for-agents) |
 | 2026-10-26 | User preferences route to the user-level `CLAUDE.md` only; auto memory is no longer a destination | `session-retro` | D24: the vault and instruction files are the only long-term stores |
 | 2026-10-26 | brain-setup offers `"autoMemoryEnabled": false` as a separate yes/no and points to brain-import-memory when memory files exist | `brain-setup` | D24 |
+| 2026-10-30 | An item whose code no longer matches it stops and gets a proposed `Amended` line instead of being pushed past | `implement-backlog` | Plan-and-forget: an approved plan goes stale when the code moves (harness-engineering-101, appendix C) |

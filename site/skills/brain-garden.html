@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-garden/SKILL.md@a9888eac962b">
+<meta name="dos-source" content="plugin/skills/brain-garden/SKILL.md@8d7309a075c5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,7 +68,7 @@
     <h2 id="what-it-does">What it does</h2>
     <ol>
       <li><strong>Finds the vault</strong> from the <code>Brain vault:</code> line, in the same order as the other brain skills, and asks once if there is none.</li>
-      <li><strong>Runs the checks.</strong> One script pass over every note outside <code>templates/</code>, <code>_views/</code>, <code>_reports/</code> and <code>.obsidian/</code> reports: no frontmatter or a missing required key (<code>type</code>, <code>status</code>, <code>created</code>, <code>updated</code>, <code>project</code>, <code>tags</code>, <code>summary</code>), an empty summary, an invalid type or status, a status that does not match the folder, inbox notes older than 7 days, active notes not updated in 180 days, links to notes that do not exist, superseded notes whose <code>superseded_by</code> is missing, names a missing or archived note, loops or leads into a loop (a <code>superseded_by</code> on a note that is not superseded is an ordinary link), and orphans that nothing links to (a superseded note is history, never an orphan). Names match case-insensitively, as in Obsidian; links inside code are ignored. A link to an archived note is an info line, not a broken link, and provenance links in a compiled note do not even get that. Notes in <code>_archive/</code> are only checked for <code>status: archived</code>. It ends with a totals line: notes, orphans with a percentage, inbox size.</li>
+      <li><strong>Runs the checks.</strong> One script pass over every note outside <code>templates/</code>, <code>_views/</code>, <code>_reports/</code> and <code>.obsidian/</code> reports: no frontmatter or a missing required key (<code>type</code>, <code>status</code>, <code>created</code>, <code>updated</code>, <code>project</code>, <code>tags</code>, <code>summary</code>), an empty summary, an invalid type or status, a status that does not match the folder, inbox notes older than 7 days, active notes not updated in 180 days, links to notes that do not exist, superseded notes whose <code>superseded_by</code> is missing, names a missing or archived note, loops or leads into a loop (a <code>superseded_by</code> on a note that is not superseded is an ordinary link), compiled notes with a source updated after them (recompile with brain-compile), and orphans that nothing links to (a superseded note is history, never an orphan). Names match case-insensitively, as in Obsidian; links inside code are ignored. A link to an archived note is an info line, not a broken link, and provenance links in a compiled note do not even get that. Notes in <code>_archive/</code> are only checked for <code>status: archived</code>. It ends with a totals line: notes, orphans with a percentage, inbox size.</li>
       <li><strong>Finds likely duplicates</strong> by comparing file names and <code>summary</code> lines. A project note and its <code>-overview</code> note are not duplicates: the overview is the map, the project note holds the lessons.</li>
       <li><strong>Finds shared rules</strong>: a rule stated by three or more notes, or restated in two or more hubs, is proposed as one compiled note (via brain-compile) that the hubs link instead. A hub is a note whose body mostly links other notes, such as an index or an <code>-overview</code> note; its body is read, not only its summary. A rule a compiled note already covers is not proposed again: an inbox compile is sent to brain-review, and an active one gets a FOUND link from each hub that still restates the rule.</li>
       <li><strong>Reports with proposed fixes.</strong> Every proposed link, for a broken link or an orphan, is tagged <strong>FOUND</strong> when both notes state the connection, or <strong>GUESSED</strong> when it was inferred or uncertain. The report ends with "Apply which fixes?".</li>
@@ -92,6 +92,8 @@ Frontmatter:
   QA/flaky-tests.md: missing summary → propose: "Retry policy for flaky e2e tests."
   INFRA/dns.md: status: draft (invalid) → active
   DEV/cache.md: status: inbox outside _inbox/ → active
+Out-of-date compiled notes:
+  DEV/missing-compiled.md: compiled 2026-08-01, source [[api-coerce]] updated 2026-10-02 → recompile with brain-compile
 Superseded:
   DEV/queue-sqs.md: superseded_by [[queue-kafka]]: no such note → fix the link or create the note
   DEV/cdn-a.md, DEV/cdn-b.md: superseded_by cycle → ask which note is current
