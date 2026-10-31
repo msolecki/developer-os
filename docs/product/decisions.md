@@ -99,6 +99,10 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `skills` and `commands`, which load into every session like `rules`; a brain-setup or session-retro
   line written there now costs one click. In the read-only agents, `--write`, `--fix` and snapshot
   updates ask, the commonest way a reviewer that runs lint or tests rewrites files.
+- **Amended 2026-10-31:** the protected files add `.envrc` (direnv secrets) and the same config under
+  `$CLAUDE_CONFIG_DIR`, which moves it for a second account. In the read-only agents, `unlink`, `rmdir`
+  and `patch` ask, and the word after an option's value is checked as a command too, so `xargs -I{} rm`
+  (whose `{}` a view drops) asks.
 
 ## D7. One wrap-up nudge per long session
 
@@ -342,9 +346,13 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   Patterns 1.01 Game Loop); a rule loaded at session start fades, a reminder tied to the event does not.
   Checked in `claude -p`: a non-zero Bash fires the event and the text reaches the model.
 - **Alternatives:** two failures (the second retry of a flaky command is often legitimate); counting the
-  whole session (a test run that is red three times during test-first work is not a loop); resetting
+  whole session (a test run that is red now and then over an hour is not a loop); resetting
   on success (a second hook on every tool call); a
   `PostToolUse` hook (it does not fire for a failed call); a rule in `core.md` (no room, and it fades).
+- **Amended 2026-10-31:** a success does not reset the count, so a test run that is red, green and red
+  again within 10 minutes during test-first work reaches three. The message says so ("each within 10
+  minutes of the last") and tells the agent to stop only if nothing changed between the runs; a reset
+  on success would cost a hook process on every Bash call.
 
 ## Rules history
 

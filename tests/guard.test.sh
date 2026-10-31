@@ -342,5 +342,25 @@ check pass "$(fa $r 'xargs -0 grep -l rm')"
 check ask "$(fa $r 'xargs -0 rm')"
 check ask "$(fa $r 'sudo -E -u x tee f')"
 
+# review findings: xargs -I{}, more write binaries, .envrc, CLAUDE_CONFIG_DIR
+check ask "$(fa $r 'xargs -I{} rm {}')"
+check ask "$(fa $r 'find . -name x | xargs -I {} rm {}')"
+check ask "$(fa $r 'xargs -I % rm %')"
+check pass "$(fa $r 'xargs -I{} grep -l x {}')"
+check ask "$(fa $r 'unlink f')"
+check ask "$(fa $r 'rmdir d')"
+check pass "$(fa $r 'rmdir /tmp/d')"
+check ask "$(fa $r 'patch -p1 -i /tmp/p.diff')"
+check ask "$(fe Write /x/.envrc)"
+check ask "$(fe Edit /x/.envrc.local)"
+check pass "$(fe Edit /x/.envrc.example)"
+export CLAUDE_CONFIG_DIR=/x/claude2
+check ask "$(fe Edit /x/claude2/settings.json)"
+check ask "$(fe Write /x/claude2/rules/a.md)"
+check ask "$(fe Write /x/claude2/.claude.json)"
+check ask "$(fe Edit "$HOME/.claude/settings.json")"
+check pass "$(fe Edit /x/claude2/plans/a.md)"
+unset CLAUDE_CONFIG_DIR
+
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

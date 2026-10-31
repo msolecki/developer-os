@@ -5,7 +5,9 @@ the commonest runaway loop; a rule loaded at session start does not fire at the 
 
 The same call means the same tool name and input (for Bash, the command alone) from the same agent. A
 failure more than 10 minutes after the previous one of that call starts the count again, so a test run
-that is red now and then during the work (test-first) is not a loop. It fires once per run of failures,
+that is red now and then during the work is not a loop. A success does not reset the count (that would
+need a hook on every call), so a red-green-red test run inside the window still counts; the message
+leaves that case to the agent ("if nothing changed between the runs"). It fires once per run of failures,
 at the third, and gives no decision: the call has already failed.
 
 Fails open: every unexpected state exits 0 with no output.
@@ -89,8 +91,9 @@ def main():
 
     if n != LIMIT:
         return 0
-    msg = ("developer-os: this exact %s call has now failed %d times in a row. Do not run it again "
-           "unchanged: read the error, find the cause, then change the approach or ask the user." % (tool, n))
+    msg = ("developer-os: this exact %s call has failed %d times, each within 10 minutes of the last. If nothing "
+           "changed between the runs, do not run it again unchanged: read the error, find the cause, then change "
+           "the approach or ask the user." % (tool, n))
     sys.stdout.write(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUseFailure", "additionalContext": msg}}))
     return 0
 

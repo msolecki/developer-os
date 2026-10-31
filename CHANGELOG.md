@@ -8,12 +8,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The guard asks before commands that destroy uncommitted or untracked work: `rm` with a recursive
   and a force flag, `git reset --hard`, `git clean -f`, `git worktree remove --force`, `git stash drop`/`clear`, and `git checkout`/`git restore` of the
   whole tree (`git restore --staged .` passes). D6 amended.
-- The guard also runs on Edit and Write and asks before a change to a `.env*` file, `~/.ssh`, `~/.aws`,
+- The guard also runs on Edit and Write and asks before a change to a `.env*` or `.envrc` file, `~/.ssh`, `~/.aws`,
   `~/.gnupg`, `~/.claude.json`, `~/.claude/settings*.json`, `~/.claude/CLAUDE.md`, or `~/.claude/` `hooks`,
-  `rules`, `agents`, `skills` or `commands`. D6 amended.
+  `rules`, `agents`, `skills` or `commands`, also under `$CLAUDE_CONFIG_DIR`. D6 amended.
 - Inside the five read-only review agents, the guard asks before a Bash call that writes files outside
   the temp directories, changes git state or remotes, runs a formatter or test run that rewrites files (`--write`, `--fix`,
-  `-u` next to a test runner), or runs `gh pr checkout`. D6 amended.
+  `-u` next to a test runner), or runs `gh pr checkout`, `unlink`, `rmdir` or `patch`. D6 amended.
 - A `git commit` the guard does not ask about gets a one-line reminder, as agent context, to run the
   project's fast check first.
 - project-baseline checks for an after-edit lint hook, and the project templates ship
@@ -25,7 +25,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Every agent has a turn cap (`maxTurns`: 100, 40 for verifier); at the cap its output comes back
   marked partial (Claude Code v2.1.246 or later). D25.
 - A `PostToolUseFailure` hook tells the agent to stop retrying and diagnose when the same tool call fails
-  for the third time in a row, each failure within 10 minutes of the last. `DEVELOPER_OS_REPEAT_FAILURE=off` turns it off. D26.
+  for the third time, each failure within 10 minutes of the last, and nothing changed between the runs. `DEVELOPER_OS_REPEAT_FAILURE=off` turns it off. D26.
 - The README and hooks reference say the guard is not a security boundary and point to Claude Code's
   permission rules and sandbox.
 - defensive-coding-conventions checks eight more defect classes, from the corrections in Harness

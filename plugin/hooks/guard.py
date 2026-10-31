@@ -10,14 +10,15 @@ command that destroys uncommitted or untracked work: `rm` with both a recursive 
 deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
-An Edit or Write asks when its `file_path` is a secret or the agent's own user-level config: a `.env` or
-`.env.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
+An Edit or Write asks when its `file_path` is a secret or the agent's own user-level config: a `.env`,
+`.envrc`, `.env.*` or `.envrc.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
 `~/.gnupg`, `~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude/CLAUDE.md`,
-or anything under `~/.claude/hooks`, `rules`, `agents`, `skills` or `commands`.
+or anything under `~/.claude/hooks`, `rules`, `agents`, `skills` or `commands`; the same files under
+`$CLAUDE_CONFIG_DIR` when it is set.
 
 Inside the read-only agents (code-reviewer, database-reviewer, infra-reviewer, performance-engineer,
 security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
-file-changing binary (unless every path it writes is in a temp directory) or `sed -i` in command
+file-changing binary (unless every path it writes is in a temp directory; `patch` always) or `sed -i` in command
 position, a git command that changes state, `gh pr checkout`, a formatter or test run that rewrites files
 (`--write`, `--fix`, `--update-snapshots`, `-u` next to a test runner), or a redirect to anything but
 `/dev/null`, the standard streams or a temp directory. A redirect inside quotes (`awk '$1>3'`,
@@ -48,7 +49,7 @@ COMMIT = "Before this commit, run the project's fast check (lint, types, tests o
 READ_ONLY = {"code-reviewer", "database-reviewer", "infra-reviewer", "performance-engineer", "security-auditor"}
 GIT_WRITE = {"add", "am", "apply", "checkout", "cherry-pick", "clean", "commit", "merge", "mv", "pull", "push", "rebase",
              "reset", "restore", "revert", "rm", "switch", "update-ref"}
-WRITE_BIN = {"tee", "rm", "mv", "cp", "install", "ln", "truncate", "touch", "mkdir", "dd"}
+WRITE_BIN = {"tee", "rm", "mv", "cp", "install", "ln", "truncate", "touch", "mkdir", "dd", "unlink", "rmdir", "patch"}
 # A word after one of these (and its options) is a command name, as is the first word of a segment.
 PRECMD = {"sudo", "xargs", "command", "nohup", "time", "exec", "env", "-exec", "-execdir"}
 # Options of a PRECMD word that take a value: the word after one is not the command.
@@ -303,11 +304,10 @@ def writes(line):
             return True
         at, pre, value = False, None, False
         for i, x in enumerate(words):
-            if value:  # an option's value; the command comes next
-                value = False
-                continue
             here = at or i == 0
-            if x in PRECMD:
+            if value:  # an option's value, or the command when a view dropped it (`xargs -I{} rm`); either may come next
+                value = False
+            elif x in PRECMD:
                 at, pre = True, x
             elif here and pre and x.startswith("-"):
                 at = not (pre == "command" and x in ("-v", "-V"))
@@ -321,6 +321,8 @@ def writes(line):
                 args = [w for w in words[i + 1:] if not w.startswith("-")]
                 if name == "dd":
                     args = [w[3:] for w in args if w.startswith("of=")]
+                elif name == "patch":
+                    args = []  # it writes the files its diff names, not its arguments
                 elif name in ("cp", "mv", "install", "ln"):
                     # `-t dir` names the destination before the sources: ask rather than parse it.
                     if any(w.startswith("--target-directory") or short(w, "t") for w in words[i + 1:]):
@@ -352,15 +354,16 @@ def protected(path):
     p = os.path.realpath(os.path.expanduser(path)).lower()
     home = os.path.realpath(os.path.expanduser("~")).lower()
     base = os.path.basename(p)
-    if base == ".env" or (base.startswith(".env.") and base.rsplit(".", 1)[1] not in ("example", "sample", "template", "dist")):
+    if base in (".env", ".envrc") or (base.startswith((".env.", ".envrc.")) and base.rsplit(".", 1)[1] not in ("example", "sample", "template", "dist")):
         return True
-    claude = os.path.join(home, ".claude")
-    if p in (os.path.join(home, ".claude.json"), os.path.join(claude, "settings.json"), os.path.join(claude, "settings.local.json"),
-             os.path.join(claude, "claude.md")):
-        return True
-    dirs = [os.path.join(home, d) for d in (".ssh", ".aws", ".gnupg")] + [
-        os.path.join(claude, d) for d in ("hooks", "rules", "agents", "skills", "commands")]
-    return any(p == d or p.startswith(d + os.sep) for d in dirs)
+    files = [os.path.join(home, ".claude.json")]
+    dirs = [os.path.join(home, d) for d in (".ssh", ".aws", ".gnupg")]
+    # CLAUDE_CONFIG_DIR moves the config, `.claude.json` included, to another directory (a second account).
+    other = os.environ.get("CLAUDE_CONFIG_DIR")
+    for claude in {os.path.join(home, ".claude"), os.path.realpath(os.path.expanduser(other)).lower() if other else ""} - {""}:
+        files += [os.path.join(claude, f) for f in (".claude.json", "settings.json", "settings.local.json", "claude.md")]
+        dirs += [os.path.join(claude, d) for d in ("hooks", "rules", "agents", "skills", "commands")]
+    return p in files or any(p == d or p.startswith(d + os.sep) for d in dirs)
 
 
 def ask(reason):
