@@ -34,6 +34,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   retries, and authorization from client-held values.
 
 ### Changed
+- The guard's destructive and read-only-agent checks match only a command in command position, so a
+  mention such as `grep -rn "rm -rf"` or `git commit -m "… reset --hard"` no longer asks. They also
+  follow `timeout`, `nice`, `stdbuf`, `doas`, `eval`, `watch`, `setsid`, `flock`, `chroot`, shell keywords,
+  `sh -c` and `su -c`, and `git rm -f` asks; `ssh` and `docker exec` commands no longer ask. D6 amended.
+- project-baseline accepts `sandbox.credentials.files` deny entries as well as `sandbox.filesystem.denyRead`.
 - audit-to-backlog names a perspective whose reviewer failed, was blocked or hit its turn cap under
   `Not covered:` instead of presenting the backlog as a complete audit.
 - implement-backlog stops an item whose code no longer matches it (a moved file, a changed API, a

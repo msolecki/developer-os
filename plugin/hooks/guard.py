@@ -6,7 +6,8 @@ a force push (--force, -f, a +refspec or remote.<name>.push=+; a --force-with-le
 `git commit -n`, or any --no-verify, HUSKY=0, LEFTHOOK=0, SKIP= or core.hooksPath in any form, and before a
 command that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag,
 `git reset --hard`, `git clean -f` (not a dry run), `git checkout -f`, `git switch --discard-changes`,
-`git worktree remove --force`, `git stash drop`/`clear`, `find -delete`, and `git checkout` or `git restore` of `.`, `:/` or `*` (an unstage-only restore passes). Branch
+`git worktree remove --force`, `git rm -f`, `git stash drop`/`clear`, `find -delete`, and `git checkout` or `git restore` of `.`, `:/` or `*` (an unstage-only restore passes),
+each in command position (starts), so a mention such as `grep -rn "rm -rf"` passes. Branch
 deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
@@ -19,7 +20,7 @@ or anything under `~/.claude/hooks`, `rules`, `agents`, `skills` or `commands`; 
 Inside the read-only agents (code-reviewer, database-reviewer, infra-reviewer, performance-engineer,
 security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
 file-changing binary (unless every path it writes is in a temp directory; `patch` always) or `sed -i` in command
-position, a git command that changes state, `gh pr checkout`, a formatter or test run that rewrites files
+position, a git command in command position that changes state, `gh pr checkout`, a formatter or test run that rewrites files
 (`--write`, `--fix`, `--update-snapshots`, `-u` next to a test runner), or a redirect to anything but
 `/dev/null`, the standard streams or a temp directory. A redirect inside quotes (`awk '$1>3'`,
 `grep "<a>" f`) is not one, unless the shell runs the quoted text (`sh -c "..."`, `"$(...)"`).
@@ -28,7 +29,8 @@ A `git commit` that passes every check gets no decision, only a one-line `additi
 agent to run the project's fast check first; the rule loaded at session start fades in a long session.
 
 Quotes are stripped before matching, so `sh -c "pnpm add zod"` asks, and so does a mention such as
-`git commit -m "pnpm add zod"`. An extra prompt costs one click; a missed install rewrites the lockfile.
+`git commit -m "pnpm add zod"`: install, push and hook-bypass words count anywhere. An extra prompt costs
+one click; a missed install rewrites the lockfile.
 """
 import json
 import os
@@ -51,10 +53,20 @@ GIT_WRITE = {"add", "am", "apply", "checkout", "cherry-pick", "clean", "commit",
              "reset", "restore", "revert", "rm", "switch", "update-ref"}
 WRITE_BIN = {"tee", "rm", "mv", "cp", "install", "ln", "truncate", "touch", "mkdir", "dd", "unlink", "rmdir", "patch"}
 # A word after one of these (and its options) is a command name, as is the first word of a segment.
-PRECMD = {"sudo", "xargs", "command", "nohup", "time", "exec", "env", "-exec", "-execdir"}
+PRECMD = {"sudo", "doas", "xargs", "command", "nohup", "time", "timeout", "nice", "ionice", "stdbuf", "exec", "env",
+          "eval", "watch", "setsid", "flock", "strace", "unshare", "chroot", "busybox", "parallel", "-exec", "-execdir"}
+# PRECMD words whose first non-option word is a value, not the command (`timeout 5 rm`, `flock /tmp/l rm`).
+POSITIONAL = {"timeout", "flock", "chroot"}
+# Shell keywords that start a command; a keyword only in command position (`grep -rn do rm` is no command).
+KEYWORDS = {"if", "then", "else", "elif", "while", "until", "do", "!"}
+# A shell (or `su`) before `-c` or a cluster with c (`-lc`, `-cl`): the next word is the script it runs.
+SHELL = r"(^|/)((ba|z|da|k)?sh|su)$"
 # Options of a PRECMD word that take a value: the word after one is not the command.
-PRE_VALUE = {"sudo": {"-u", "-g", "-h", "-p", "-C", "-D", "-U", "-r", "-t"},
-             "xargs": {"-n", "-I", "-P", "-L", "-d", "-s", "-E", "-a"}, "env": {"-u", "-C", "-S"}}
+PRE_VALUE = {"sudo": {"-u", "-g", "-h", "-p", "-C", "-D", "-U", "-r", "-t"}, "doas": {"-u", "-C"},
+             "xargs": {"-n", "-I", "-P", "-L", "-d", "-s", "-E", "-a"}, "env": {"-u", "-C", "-S"},
+             "timeout": {"-s", "-k", "--signal", "--kill-after"}, "nice": {"-n", "--adjustment"},
+             "stdbuf": {"-i", "-o", "-e"}, "ionice": {"-c", "-n", "-p"}, "watch": {"-n", "--interval"},
+             "strace": {"-o", "-e", "-p", "-s", "-u"}, "exec": {"-a"}, "flock": {"-w", "-E"}}
 # Flags that make a formatter, linter or test runner rewrite files (`prettier --write`, `eslint --fix`).
 FIX_FLAGS = {"--write", "--fix", "--update-snapshots", "--updateSnapshot"}
 TEST_RUNNERS = {"test", "jest", "vitest", "playwright"}
@@ -99,10 +111,38 @@ def short(x, c):
     return re.fullmatch(r"-[a-zA-Z]*%s[a-zA-Z]*" % c, x) is not None
 
 
-def git_subs(words):
-    """(subcommand, the words after it) for each `git` in a segment, past its global options."""
+def starts(words):
+    """Indices of the words in command position: the first word of a segment, a word after a PRECMD word
+    (matched by its name, so `/usr/bin/env` counts) and its options (past the value of a PRE_VALUE option:
+    `sudo -u x rm`; past the first operand of a POSITIONAL word, `timeout 5 -- rm`;
+    `command -v` only looks a name up), after a keyword in command position (`then rm`), after a shell's
+    `-c` (`sh -c "rm -rf x"` once quotes are dropped), or after a leading `NAME=value`. A word anywhere
+    else is an argument, so a mention (`grep -rn "git add"`, `-m "rm -rf"`) is not a command."""
+    out, at, pre, value = [], False, None, False
+    for i, x in enumerate(words):
+        here = at or i == 0
+        if here:
+            out.append(i)
+        if value:  # an option's value, or the command when a view dropped it (`xargs -I{} rm`); either may come next
+            value = False
+        elif x.rsplit("/", 1)[-1] in PRECMD or (here and x in KEYWORDS) or (
+                re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", x) and any(re.search(SHELL, w) for w in words[:i])):
+            at, pre = True, x.rsplit("/", 1)[-1]
+        elif here and pre and x.startswith("-"):
+            at = not (pre == "command" and x in ("-v", "-V"))
+            value, pre = x in PRE_VALUE.get(pre, ()), pre if at else None
+        elif here and pre in POSITIONAL:
+            pre = "-"  # the operand is taken; a `--` may still follow
+        else:
+            at, pre = here and re.fullmatch(r"[A-Za-z_]\w*=.*", x) is not None, None
+    return out
+
+
+def git_subs(words, pos=None):
+    """(subcommand, the words after it) for each `git` in a segment, past its global options; with pos,
+    only a `git` at one of those indices."""
     for i, w in enumerate(words):
-        if not re.search(r"(^|/)git$", w):
+        if (pos is not None and i not in pos) or not re.search(r"(^|/)git$", w):
             continue
         rest = words[i + 1:]
         while rest and rest[0].startswith("-"):
@@ -115,8 +155,10 @@ def git_subs(words):
 def destroys(words):
     """`git reset --hard`, a forced `git clean` that is not a dry run, `git checkout` of the whole tree or
     with `-f`, `git switch -f`/`--discard-changes`, `git restore` of the whole tree unless it only
-    unstages (`--staged` without `--worktree`), `git stash drop`/`clear`, or `find ... -delete`."""
-    for sub, rest in git_subs(words):
+    unstages (`--staged` without `--worktree`), `git rm -f`, `git stash drop`/`clear`, or `find ... -delete`;
+    each in command position."""
+    pos = starts(words)
+    for sub, rest in git_subs(words, pos):
         whole = any(x in WHOLE_TREE for x in rest)
         force = any(x == "--force" or short(x, "f") for x in rest)
         if sub == "reset" and "--hard" in rest:
@@ -127,6 +169,8 @@ def destroys(words):
             return True
         if sub == "switch" and (force or "--discard-changes" in rest):
             return True
+        if sub == "rm" and force:  # `-f` removes files with uncommitted changes
+            return True
         if sub == "stash" and rest[:1] in (["drop"], ["clear"]):
             return True
         if sub == "worktree" and rest[:1] == ["remove"] and force:
@@ -136,7 +180,7 @@ def destroys(words):
             worktree = any(x == "--worktree" or short(x, "W") for x in rest)
             if worktree or not staged:
                 return True
-    return any(re.search(r"(^|/)find$", w) for w in words) and "-delete" in words
+    return any(re.search(r"(^|/)find$", words[i]) for i in pos) and "-delete" in words
 
 
 def scan(line):
@@ -147,6 +191,7 @@ def scan(line):
         rm = rec = rmf = ended = False
         if destroys(words):
             return "destroy"
+        pos = starts(words)
         for i, x in enumerate(words):
             if rm and x == "--":
                 ended = True
@@ -156,7 +201,7 @@ def scan(line):
                 rmf = True
             if rm and rec and rmf:
                 return "destroy"
-            if re.search(r"(^|/)rm$", x):
+            if i in pos and re.search(r"(^|/)rm$", x):
                 rm = True
             if re.fullmatch(r"--no-veri(f|fy)?", x) or x in ("HUSKY=0", "LEFTHOOK=0") or x.startswith("SKIP=") or re.search(r"core\.hookspath(=|$)", x.lower()):
                 return "noverify"
@@ -293,29 +338,16 @@ def redirects(line):
 def writes(line):
     """A write-shaped command in any segment: a file-changing binary that writes outside scratch or
     `sed -i`/`perl -i` in command position, a git subcommand that changes state, `gh pr checkout`, or a
-    formatter or test run that rewrites files (FIX_FLAGS; `-u`/`--update` next to a test runner).
-    Command position is the first word of a segment, a word after a PRECMD word and its options (past
-    the value of a PRE_VALUE option: `sudo -u x rm`; `command -v` only looks a name up), or one after a
-    leading `NAME=value`."""
+    formatter or test run that rewrites files (FIX_FLAGS; `-u`/`--update` next to a test runner); the
+    commands in command position (starts)."""
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
         if any(w.split("=")[0] in FIX_FLAGS for w in words) or (
                 {"-u", "--update"} & set(words) and TEST_RUNNERS & {w.rsplit("/", 1)[-1] for w in words}):
             return True
-        at, pre, value = False, None, False
-        for i, x in enumerate(words):
-            here = at or i == 0
-            if value:  # an option's value, or the command when a view dropped it (`xargs -I{} rm`); either may come next
-                value = False
-            elif x in PRECMD:
-                at, pre = True, x
-            elif here and pre and x.startswith("-"):
-                at = not (pre == "command" and x in ("-v", "-V"))
-                value, pre = x in PRE_VALUE.get(pre, ()), pre if at else None
-            else:
-                at, pre = here and re.fullmatch(r"[A-Za-z_]\w*=.*", x) is not None, None
-            if not here:
-                continue
+        pos = starts(words)
+        for i in pos:
+            x = words[i]
             name = x.rsplit("/", 1)[-1]
             if name in WRITE_BIN:
                 args = [w for w in words[i + 1:] if not w.startswith("-")]
@@ -335,7 +367,7 @@ def writes(line):
             if name in ("sed", "perl") and any(
                     w == "--in-place" or w.startswith("--in-place=") or re.match(r"-[a-zA-Z]*i", w) for w in words[i + 1:]):
                 return True
-        if any(git_writes(sub, rest) for sub, rest in git_subs(words)):
+        if any(git_writes(sub, rest) for sub, rest in git_subs(words, pos)):
             return True
     return False
 

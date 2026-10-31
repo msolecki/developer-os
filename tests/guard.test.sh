@@ -362,5 +362,42 @@ check ask "$(fe Edit "$HOME/.claude/settings.json")"
 check pass "$(fe Edit /x/claude2/plans/a.md)"
 unset CLAUDE_CONFIG_DIR
 
+# review findings: a mention is not a command; keywords, timeout, nice, stdbuf, doas and sh -c are
+check pass "$(fx 'grep -rn \"rm -rf\" plugin')"
+check ctx "$(fx 'git commit -m \"docs: explain git reset --hard\"')" "fast check"
+check pass "$(fx 'grep -rn \"find . -delete\" docs')"
+check pass "$(fx 'grep -c rm -rf')"
+check ask "$(fx 'sh -c \"git reset --hard\"')" "deletes"
+check ask "$(fx "bash -lc 'rm -rf build'")" "deletes"
+check ask "$(fx 'eval \"git clean -fd\"')" "deletes"
+check ask "$(fx 'timeout 60 rm -rf x')" "deletes"
+check ask "$(fx 'if true; then git reset --hard; fi')" "deletes"
+check ask "$(fx 'git rm -f a.ts')" "deletes"
+check pass "$(fx 'git rm a.ts')"
+check pass "$(fx 'git rm -r --cached x')"
+check pass "$(fa $r 'grep -rn \"git add\" docs')"
+check pass "$(fa $r 'grep -rn do rm .')"
+check pass "$(fa $r 'wc -c rm')"
+check pass "$(fa $r 'timeout 5 git status')"
+check pass "$(fa $r '! git diff --quiet')"
+check ask "$(fa $r 'timeout 60 rm -f x')" "read-only"
+check ask "$(fa $r 'nice -n 5 rm x')" "read-only"
+check ask "$(fa $r 'stdbuf -o L rm x')" "read-only"
+check ask "$(fa $r 'doas -u x rm f')" "read-only"
+check ask "$(fa $r 'if true; then rm x; fi')" "read-only"
+check ask "$(fa $r 'while read f; do rm x; done')" "read-only"
+check ask "$(fa $r 'sh -c \"git add x\"')" "read-only"
+
+# review findings: wrappers keep the command after them in command position
+for c in 'watch rm -rf x' 'su -c \"rm -rf x\"' 'su root -c \"rm -rf x\"' 'chroot /x rm -rf /' 'flock /tmp/l rm -rf x' \
+    'strace rm -rf x' 'ionice -c3 rm -rf x' 'ionice -c 3 rm -rf x' 'setsid rm -rf x' 'unshare rm -rf x' \
+    'busybox rm -rf x' 'parallel rm -rf ::: a b' 'timeout 5 -- rm -rf x'; do
+  check ask "$(fx "$c")" "deletes"
+done
+for c in '/usr/bin/env git add x' 'timeout 5 -- git add x' 'exec -a x git add y' 'bash -cl \"git add x\"'; do
+  check ask "$(fa $r "$c")" "read-only"
+done
+check pass "$(fx 'command -v rm -rf')"
+
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@ee3c0f04f440">
+<meta name="dos-source" content="CHANGELOG.md@4c59443b1f5b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -79,6 +79,11 @@ retries, and authorization from client-held values.</li>
     </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
+<li>The guard's destructive and read-only-agent checks match only a command in command position, so a
+  mention such as <code>grep -rn "rm -rf"</code> or <code>git commit -m "… reset --hard"</code> no longer asks. They also
+  follow <code>timeout</code>, <code>nice</code>, <code>stdbuf</code>, <code>doas</code>, <code>eval</code>, <code>watch</code>, <code>setsid</code>, <code>flock</code>, <code>chroot</code>, shell keywords,
+  <code>sh -c</code> and <code>su -c</code>, and <code>git rm -f</code> asks; <code>ssh</code> and <code>docker exec</code> commands no longer ask. D6 amended.</li>
+<li>project-baseline accepts <code>sandbox.credentials.files</code> deny entries as well as <code>sandbox.filesystem.denyRead</code>.</li>
 <li>audit-to-backlog names a perspective whose reviewer failed, was blocked or hit its turn cap under
 <code>Not covered:</code> instead of presenting the backlog as a complete audit.</li>
 <li>implement-backlog stops an item whose code no longer matches it (a moved file, a changed API, a

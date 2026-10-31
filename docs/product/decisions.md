@@ -103,6 +103,15 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `$CLAUDE_CONFIG_DIR`, which moves it for a second account. In the read-only agents, `unlink`, `rmdir`
   and `patch` ask, and the word after an option's value is checked as a command too, so `xargs -I{} rm`
   (whose `{}` a view drops) asks.
+- **Amended 2026-10-31:** the destroy and read-only categories match only a command in command
+  position, so a mention in an argument (`grep -rn "rm -rf"`, `git commit -m "… reset --hard"`,
+  `grep -rn "git add"` in a reviewer) no longer asks; a reviewer greps for command text on every review
+  of hooks or docs. Command position now also follows `timeout`, `nice`, `stdbuf`, `doas`, `eval`, a
+  shell keyword (`then`, `do`, …), a shell's or `su`'s `-c`, and the wrappers that ran a command before
+  (`watch`, `setsid`, `flock`, `chroot`, …), so `sh -c "git reset --hard"` still asks; a command on
+  another host or in a container (`ssh`, `docker exec`) no longer does. `git rm -f`
+  asks, since it removes files with uncommitted changes. The install, push and hook-bypass categories
+  still ask on a mention.
 
 ## D7. One wrap-up nudge per long session
 
