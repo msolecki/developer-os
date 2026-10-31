@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-10-31
+
 ### Added
 - The guard asks before commands that destroy uncommitted or untracked work: `rm` with a recursive
   and a force flag, `git reset --hard`, `git clean -f`, `git worktree remove --force`, `git stash drop`/`clear`, and `git checkout`/`git restore` of the
