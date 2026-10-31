@@ -93,6 +93,12 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Scope, 2026-10-30:** the guard matches command text, so it decides what asks; it is not a security
   boundary. The boundary is Claude Code's permission rules and sandbox (Harness Patterns 2.14 Proxy:
   text patterns are easy to get around with quoting, aliases or scripts).
+- **Amended 2026-10-31:** the destroy category adds `git stash drop`/`clear` (a dropped stash is gone
+  short of `git fsck`); a restore or checkout of one path still passes, since undoing one file is routine
+  and an ask on each would be noise. The protected files add `~/.claude/CLAUDE.md` and `~/.claude/agents`,
+  `skills` and `commands`, which load into every session like `rules`; a brain-setup or session-retro
+  line written there now costs one click. In the read-only agents, `--write`, `--fix` and snapshot
+  updates ask, the commonest way a reviewer that runs lint or tests rewrites files.
 
 ## D7. One wrap-up nudge per long session
 

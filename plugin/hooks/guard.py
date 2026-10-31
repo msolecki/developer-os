@@ -6,20 +6,22 @@ a force push (--force, -f, a +refspec or remote.<name>.push=+; a --force-with-le
 `git commit -n`, or any --no-verify, HUSKY=0, LEFTHOOK=0, SKIP= or core.hooksPath in any form, and before a
 command that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag,
 `git reset --hard`, `git clean -f` (not a dry run), `git checkout -f`, `git switch --discard-changes`,
-`git worktree remove --force`, `find -delete`, and `git checkout` or `git restore` of `.`, `:/` or `*` (an unstage-only restore passes). Branch
+`git worktree remove --force`, `git stash drop`/`clear`, `find -delete`, and `git checkout` or `git restore` of `.`, `:/` or `*` (an unstage-only restore passes). Branch
 deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
 An Edit or Write asks when its `file_path` is a secret or the agent's own user-level config: a `.env` or
 `.env.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
-`~/.gnupg`, `~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, or anything under
-`~/.claude/hooks` or `~/.claude/rules`.
+`~/.gnupg`, `~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude/CLAUDE.md`,
+or anything under `~/.claude/hooks`, `rules`, `agents`, `skills` or `commands`.
 
 Inside the read-only agents (code-reviewer, database-reviewer, infra-reviewer, performance-engineer,
 security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
 file-changing binary (unless every path it writes is in a temp directory) or `sed -i` in command
-position, a git command that changes state, `gh pr checkout`, or a redirect to anything but `/dev/null`,
-the standard streams or a temp directory. A redirect inside single quotes (`awk '$1>3'`) is not one.
+position, a git command that changes state, `gh pr checkout`, a formatter or test run that rewrites files
+(`--write`, `--fix`, `--update-snapshots`, `-u` next to a test runner), or a redirect to anything but
+`/dev/null`, the standard streams or a temp directory. A redirect inside quotes (`awk '$1>3'`,
+`grep "<a>" f`) is not one, unless the shell runs the quoted text (`sh -c "..."`, `"$(...)"`).
 
 A `git commit` that passes every check gets no decision, only a one-line `additionalContext` reminding the
 agent to run the project's fast check first; the rule loaded at session start fades in a long session.
@@ -47,8 +49,14 @@ READ_ONLY = {"code-reviewer", "database-reviewer", "infra-reviewer", "performanc
 GIT_WRITE = {"add", "am", "apply", "checkout", "cherry-pick", "clean", "commit", "merge", "mv", "pull", "push", "rebase",
              "reset", "restore", "revert", "rm", "switch", "update-ref"}
 WRITE_BIN = {"tee", "rm", "mv", "cp", "install", "ln", "truncate", "touch", "mkdir", "dd"}
-# A word after one of these is a command name, as is the first word of a segment.
+# A word after one of these (and its options) is a command name, as is the first word of a segment.
 PRECMD = {"sudo", "xargs", "command", "nohup", "time", "exec", "env", "-exec", "-execdir"}
+# Options of a PRECMD word that take a value: the word after one is not the command.
+PRE_VALUE = {"sudo": {"-u", "-g", "-h", "-p", "-C", "-D", "-U", "-r", "-t"},
+             "xargs": {"-n", "-I", "-P", "-L", "-d", "-s", "-E", "-a"}, "env": {"-u", "-C", "-S"}}
+# Flags that make a formatter, linter or test runner rewrite files (`prettier --write`, `eslint --fix`).
+FIX_FLAGS = {"--write", "--fix", "--update-snapshots", "--updateSnapshot"}
+TEST_RUNNERS = {"test", "jest", "vitest", "playwright"}
 # A view reads `$TMPDIR` as `TMPDIR`. ponytail: a relative directory literally named TMPDIR also counts as temp.
 TEMP = ("/tmp/", "/private/tmp/", "/var/folders/", "TMPDIR/")
 WHOLE_TREE = (".", "./", ":/", "*")
@@ -106,7 +114,7 @@ def git_subs(words):
 def destroys(words):
     """`git reset --hard`, a forced `git clean` that is not a dry run, `git checkout` of the whole tree or
     with `-f`, `git switch -f`/`--discard-changes`, `git restore` of the whole tree unless it only
-    unstages (`--staged` without `--worktree`), or `find ... -delete`."""
+    unstages (`--staged` without `--worktree`), `git stash drop`/`clear`, or `find ... -delete`."""
     for sub, rest in git_subs(words):
         whole = any(x in WHOLE_TREE for x in rest)
         force = any(x == "--force" or short(x, "f") for x in rest)
@@ -117,6 +125,8 @@ def destroys(words):
         if sub == "checkout" and (whole or force):
             return True
         if sub == "switch" and (force or "--discard-changes" in rest):
+            return True
+        if sub == "stash" and rest[:1] in (["drop"], ["clear"]):
             return True
         if sub == "worktree" and rest[:1] == ["remove"] and force:
             return True
@@ -217,31 +227,48 @@ def git_writes(sub, rest):
 
 
 def unquoted(cmd):
-    """The command, JSON-unescaped, with each single-quoted string replaced by `q` and then quotes, `$` and
-    braces dropped; double quotes and backslashes are tracked as the shell does. None when the quotes do
-    not balance."""
+    """The command, JSON-unescaped, with each single-quoted string replaced by `q`, `<` and `>` blanked in
+    each double-quoted one unless it follows `-c` or `eval`, and then quotes, `$` and braces dropped.
+    Backslashes are tracked as the shell does. None when the quotes do not balance, when a double-quoted
+    string holds `$(...)` or a backtick (its own quotes nest), or when text may be fed to a shell (`<<<`,
+    `| sh`): the caller then checks every view."""
     try:
         s = json.loads('"%s"' % cmd)
     except ValueError:
         return None
-    out, i, dq = [], 0, False
+    if re.search(r"<<<|\|\s*(\S*/)?(ba|z|da|k)?sh(\s|$)", s):
+        return None
+    out, i = [], 0
     while i < len(s):
         c = s[i]
         if c == "\\":
             out.append(s[i:i + 2])
             i += 2
             continue
-        if c == "'" and not dq:
+        if c == "'":
             j = s.find("'", i + 1)
             if j < 0:
                 return None
             out.append("q")
             i = j + 1
             continue
-        dq ^= c == '"'
+        if c == '"':
+            j = i + 1
+            while j < len(s) and s[j] != '"':
+                j += 2 if s[j] == "\\" else 1
+            if j >= len(s):
+                return None
+            body = s[i + 1:j]
+            if "$(" in body or "`" in body:
+                return None
+            # The shell runs the text after `-c` or `eval`.
+            run = re.search(r"(^|\s)(-[a-zA-Z]*c|eval)\s*$", "".join(out))
+            out.append(body if run else re.sub(r"[<>]", " ", body))
+            i = j + 1
+            continue
         out.append(c)
         i += 1
-    return None if dq else re.sub(r"[\"\\${}]", "", "".join(out))
+    return re.sub(r"[\"\\${}]", "", "".join(out))
 
 
 def scratch(path):
@@ -264,14 +291,29 @@ def redirects(line):
 
 def writes(line):
     """A write-shaped command in any segment: a file-changing binary that writes outside scratch or
-    `sed -i`/`perl -i` in command position, a git subcommand that changes state, or `gh pr checkout`.
-    Command position is the first word of a segment, a word after a PRECMD word, or one after a leading
-    `NAME=value`."""
+    `sed -i`/`perl -i` in command position, a git subcommand that changes state, `gh pr checkout`, or a
+    formatter or test run that rewrites files (FIX_FLAGS; `-u`/`--update` next to a test runner).
+    Command position is the first word of a segment, a word after a PRECMD word and its options (past
+    the value of a PRE_VALUE option: `sudo -u x rm`; `command -v` only looks a name up), or one after a
+    leading `NAME=value`."""
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
-        at = True
+        if any(w.split("=")[0] in FIX_FLAGS for w in words) or (
+                {"-u", "--update"} & set(words) and TEST_RUNNERS & {w.rsplit("/", 1)[-1] for w in words}):
+            return True
+        at, pre, value = False, None, False
         for i, x in enumerate(words):
-            here, at = at, x in PRECMD or (at and re.fullmatch(r"[A-Za-z_]\w*=.*", x) is not None)
+            if value:  # an option's value; the command comes next
+                value = False
+                continue
+            here = at or i == 0
+            if x in PRECMD:
+                at, pre = True, x
+            elif here and pre and x.startswith("-"):
+                at = not (pre == "command" and x in ("-v", "-V"))
+                value, pre = x in PRE_VALUE.get(pre, ()), pre if at else None
+            else:
+                at, pre = here and re.fullmatch(r"[A-Za-z_]\w*=.*", x) is not None, None
             if not here:
                 continue
             name = x.rsplit("/", 1)[-1]
@@ -313,9 +355,11 @@ def protected(path):
     if base == ".env" or (base.startswith(".env.") and base.rsplit(".", 1)[1] not in ("example", "sample", "template", "dist")):
         return True
     claude = os.path.join(home, ".claude")
-    if p in (os.path.join(home, ".claude.json"), os.path.join(claude, "settings.json"), os.path.join(claude, "settings.local.json")):
+    if p in (os.path.join(home, ".claude.json"), os.path.join(claude, "settings.json"), os.path.join(claude, "settings.local.json"),
+             os.path.join(claude, "claude.md")):
         return True
-    dirs = [os.path.join(home, d) for d in (".ssh", ".aws", ".gnupg")] + [os.path.join(claude, d) for d in ("hooks", "rules")]
+    dirs = [os.path.join(home, d) for d in (".ssh", ".aws", ".gnupg")] + [
+        os.path.join(claude, d) for d in ("hooks", "rules", "agents", "skills", "commands")]
     return any(p == d or p.startswith(d + os.sep) for d in dirs)
 
 
@@ -343,7 +387,7 @@ def main():
         if hit:
             ask(hit)
             return
-    # A redirect inside single quotes is a program's text (`awk '$1>3'`); unbalanced quotes check every view.
+    # A redirect inside quotes is a program's text (`awk '$1>3'`); unbalanced quotes check every view.
     u = unquoted(cmd)
     redirect = redirects(u) if u is not None else any(redirects(v) for v in views)
     if read_only(raw) and (redirect or any(writes(v) for v in views)):

@@ -89,7 +89,7 @@ def main():
 
     if n != LIMIT:
         return 0
-    msg = ("developer-os: this exact %s call has now failed %d times in this session. Do not run it again "
+    msg = ("developer-os: this exact %s call has now failed %d times in a row. Do not run it again "
            "unchanged: read the error, find the cause, then change the approach or ask the user." % (tool, n))
     sys.stdout.write(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUseFailure", "additionalContext": msg}}))
     return 0
