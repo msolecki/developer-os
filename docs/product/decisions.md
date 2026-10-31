@@ -112,6 +112,14 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   another host or in a container (`ssh`, `docker exec`) no longer does. `git rm -f`
   asks, since it removes files with uncommitted changes. The install, push and hook-bypass categories
   still ask on a mention.
+- **Amended 2026-10-31:** the protected files add `~/.claude/plugins` and `~/.claude/output-styles`:
+  an installed plugin's hooks run code in every session and an output style enters the system prompt, a
+  stronger reason than for `rules`. In the read-only agents, `chmod`, `chown`, `chgrp` and the git
+  subcommands `bisect`, `clone`, `init`, `gc`, `prune`, `sparse-checkout` and `submodule` ask. A wrapper
+  word (`sudo`, `xargs`, `watch`, …) starts a command only in command position, so `grep -rn "xargs -n 1
+  rm"` passes in a reviewer, and quoted text after `-c` is read as a script only after a shell or `su`,
+  so `python3 -c "print(1>2)"` passes. Downloads, unpacking and installs without a package stay known
+  misses: a review may need them to run tests.
 
 ## D7. One wrap-up nudge per long session
 

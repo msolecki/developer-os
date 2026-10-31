@@ -399,5 +399,24 @@ for c in '/usr/bin/env git add x' 'timeout 5 -- git add x' 'exec -a x git add y'
 done
 check pass "$(fx 'command -v rm -rf')"
 
+# review findings: plugins and output-styles, more git and chmod writes, -c only after a shell, PRECMD only in command position
+check ask "$(fe Edit "$HOME/.claude/plugins/cache/x/hooks/hooks.json")" "secrets"
+check ask "$(fe Write "$HOME/.claude/output-styles/x.md")" "secrets"
+for c in 'git bisect start' 'git submodule update --init' 'git sparse-checkout set a' 'git clone https://x/y.git' \
+  'git init' 'git gc --prune=now' 'chmod -R 777 .' 'chown me x' 'sudo chgrp staff x' 'sh -c \"echo x > f\"' \
+  'su root -c \"echo x > f\"' 'eval \"echo x > f\"'; do
+  check ask "$(fa $r "$c")" "read-only"
+done
+for c in 'chmod +x /tmp/x' 'python3 -c \"print(1>2)\"' 'jq -c \".a > 1\" f' 'grep -rn \"xargs -n 1 rm\" tests' \
+  'echo sudo rm x'; do
+  check pass "$(fa $r "$c")"
+done
+check pass "$(fx 'echo watch rm -rf x')"
+check pass "$(fx 'grep -rn \"sudo rm -rf\" docs')"
+check ask "$(fx 'find . -exec rm -rf {} +')" "deletes"
+check ask "$(fx 'sudo rm -rf x')" "deletes"
+check ask "$(fx 'cd x && sudo -u y rm -rf z')" "deletes"
+check ask "$(fa $r 'builtin exec rm x')" "read-only"
+
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

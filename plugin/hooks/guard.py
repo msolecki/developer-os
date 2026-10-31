@@ -14,7 +14,7 @@ flow applies.
 An Edit or Write asks when its `file_path` is a secret or the agent's own user-level config: a `.env`,
 `.envrc`, `.env.*` or `.envrc.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
 `~/.gnupg`, `~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude/CLAUDE.md`,
-or anything under `~/.claude/hooks`, `rules`, `agents`, `skills` or `commands`; the same files under
+or anything under `~/.claude/hooks`, `rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`; the same files under
 `$CLAUDE_CONFIG_DIR` when it is set.
 
 Inside the read-only agents (code-reviewer, database-reviewer, infra-reviewer, performance-engineer,
@@ -23,7 +23,8 @@ file-changing binary (unless every path it writes is in a temp directory; `patch
 position, a git command in command position that changes state, `gh pr checkout`, a formatter or test run that rewrites files
 (`--write`, `--fix`, `--update-snapshots`, `-u` next to a test runner), or a redirect to anything but
 `/dev/null`, the standard streams or a temp directory. A redirect inside quotes (`awk '$1>3'`,
-`grep "<a>" f`) is not one, unless the shell runs the quoted text (`sh -c "..."`, `"$(...)"`).
+`grep "<a>" f`, `python3 -c "print(1>2)"`) is not one, unless the shell runs the quoted text
+(`sh -c "..."`, `eval "..."`, `"$(...)"`). `chmod`, `chown` and `chgrp` write too.
 
 A `git commit` that passes every check gets no decision, only a one-line `additionalContext` reminding the
 agent to run the project's fast check first; the rule loaded at session start fades in a long session.
@@ -49,11 +50,13 @@ INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnt
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
 COMMIT = "Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."
 READ_ONLY = {"code-reviewer", "database-reviewer", "infra-reviewer", "performance-engineer", "security-auditor"}
-GIT_WRITE = {"add", "am", "apply", "checkout", "cherry-pick", "clean", "commit", "merge", "mv", "pull", "push", "rebase",
-             "reset", "restore", "revert", "rm", "switch", "update-ref"}
-WRITE_BIN = {"tee", "rm", "mv", "cp", "install", "ln", "truncate", "touch", "mkdir", "dd", "unlink", "rmdir", "patch"}
+GIT_WRITE = {"add", "am", "apply", "bisect", "checkout", "cherry-pick", "clean", "clone", "commit", "gc", "init", "merge",
+             "mv", "prune", "pull", "push", "rebase", "reset", "restore", "revert", "rm", "sparse-checkout", "submodule",
+             "switch", "update-ref"}
+WRITE_BIN = {"tee", "rm", "mv", "cp", "install", "ln", "truncate", "touch", "mkdir", "dd", "unlink", "rmdir", "patch",
+             "chmod", "chown", "chgrp"}
 # A word after one of these (and its options) is a command name, as is the first word of a segment.
-PRECMD = {"sudo", "doas", "xargs", "command", "nohup", "time", "timeout", "nice", "ionice", "stdbuf", "exec", "env",
+PRECMD = {"builtin", "sudo", "doas", "xargs", "command", "nohup", "time", "timeout", "nice", "ionice", "stdbuf", "exec", "env",
           "eval", "watch", "setsid", "flock", "strace", "unshare", "chroot", "busybox", "parallel", "-exec", "-execdir"}
 # PRECMD words whose first non-option word is a value, not the command (`timeout 5 rm`, `flock /tmp/l rm`).
 POSITIONAL = {"timeout", "flock", "chroot"}
@@ -113,7 +116,8 @@ def short(x, c):
 
 def starts(words):
     """Indices of the words in command position: the first word of a segment, a word after a PRECMD word
-    (matched by its name, so `/usr/bin/env` counts) and its options (past the value of a PRE_VALUE option:
+    that is itself in command position (`-exec` anywhere; matched by its name, so `/usr/bin/env` counts,
+    and `echo watch rm` is no command) and its options (past the value of a PRE_VALUE option:
     `sudo -u x rm`; past the first operand of a POSITIONAL word, `timeout 5 -- rm`;
     `command -v` only looks a name up), after a keyword in command position (`then rm`), after a shell's
     `-c` (`sh -c "rm -rf x"` once quotes are dropped), or after a leading `NAME=value`. A word anywhere
@@ -125,7 +129,7 @@ def starts(words):
             out.append(i)
         if value:  # an option's value, or the command when a view dropped it (`xargs -I{} rm`); either may come next
             value = False
-        elif x.rsplit("/", 1)[-1] in PRECMD or (here and x in KEYWORDS) or (
+        elif (x.rsplit("/", 1)[-1] in PRECMD and (here or x in ("-exec", "-execdir"))) or (here and x in KEYWORDS) or (
                 re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", x) and any(re.search(SHELL, w) for w in words[:i])):
             at, pre = True, x.rsplit("/", 1)[-1]
         elif here and pre and x.startswith("-"):
@@ -307,8 +311,10 @@ def unquoted(cmd):
             body = s[i + 1:j]
             if "$(" in body or "`" in body:
                 return None
-            # The shell runs the text after `-c` or `eval`.
-            run = re.search(r"(^|\s)(-[a-zA-Z]*c|eval)\s*$", "".join(out))
+            # The shell runs the text after its own `-c` (not `python3 -c`) or after `eval`.
+            before = "".join(out)
+            run = re.search(r"(^|\s)eval\s*$", before) or (re.search(r"(^|\s)-[a-zA-Z]*c\s*$", before) and any(
+                re.search(SHELL, w) for w in re.split(r"[\s;&|()`]+", before)))
             out.append(body if run else re.sub(r"[<>]", " ", body))
             i = j + 1
             continue
@@ -353,6 +359,8 @@ def writes(line):
                 args = [w for w in words[i + 1:] if not w.startswith("-")]
                 if name == "dd":
                     args = [w[3:] for w in args if w.startswith("of=")]
+                elif name in ("chmod", "chown", "chgrp"):
+                    args = args[1:]  # the first operand is the mode or owner
                 elif name == "patch":
                     args = []  # it writes the files its diff names, not its arguments
                 elif name in ("cp", "mv", "install", "ln"):
@@ -394,7 +402,7 @@ def protected(path):
     other = os.environ.get("CLAUDE_CONFIG_DIR")
     for claude in {os.path.join(home, ".claude"), os.path.realpath(os.path.expanduser(other)).lower() if other else ""} - {""}:
         files += [os.path.join(claude, f) for f in (".claude.json", "settings.json", "settings.local.json", "claude.md")]
-        dirs += [os.path.join(claude, d) for d in ("hooks", "rules", "agents", "skills", "commands")]
+        dirs += [os.path.join(claude, d) for d in ("hooks", "rules", "agents", "skills", "commands", "plugins", "output-styles")]
     return p in files or any(p == d or p.startswith(d + os.sep) for d in dirs)
 
 

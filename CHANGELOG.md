@@ -10,10 +10,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   whole tree (`git restore --staged .` passes). D6 amended.
 - The guard also runs on Edit and Write and asks before a change to a `.env*` or `.envrc` file, `~/.ssh`, `~/.aws`,
   `~/.gnupg`, `~/.claude.json`, `~/.claude/settings*.json`, `~/.claude/CLAUDE.md`, or `~/.claude/` `hooks`,
-  `rules`, `agents`, `skills` or `commands`, also under `$CLAUDE_CONFIG_DIR`. D6 amended.
+  `rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`, also under `$CLAUDE_CONFIG_DIR`. D6 amended.
 - Inside the five read-only review agents, the guard asks before a Bash call that writes files outside
   the temp directories, changes git state or remotes, runs a formatter or test run that rewrites files (`--write`, `--fix`,
-  `-u` next to a test runner), or runs `gh pr checkout`, `unlink`, `rmdir` or `patch`. D6 amended.
+  `-u` next to a test runner), or runs `gh pr checkout`, `unlink`, `rmdir`, `patch`, `chmod`, `chown`, `chgrp`, or `git bisect`, `clone`, `init`, `gc`, `prune`,
+  `sparse-checkout` or `submodule`. D6 amended.
 - A `git commit` the guard does not ask about gets a one-line reminder, as agent context, to run the
   project's fast check first.
 - project-baseline checks for an after-edit lint hook, and the project templates ship
@@ -37,7 +38,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The guard's destructive and read-only-agent checks match only a command in command position, so a
   mention such as `grep -rn "rm -rf"` or `git commit -m "… reset --hard"` no longer asks. They also
   follow `timeout`, `nice`, `stdbuf`, `doas`, `eval`, `watch`, `setsid`, `flock`, `chroot`, shell keywords,
-  `sh -c` and `su -c`, and `git rm -f` asks; `ssh` and `docker exec` commands no longer ask. D6 amended.
+  `sh -c` and `su -c`, and `git rm -f` asks; `ssh` and `docker exec` commands no longer ask. A wrapper
+  word counts only in command position, so `echo watch rm -rf x` passes, and in a read-only agent a `>`
+  in double quotes after `-c` asks only after a shell (`sh -c`), not after `python3 -c`. D6 amended.
 - project-baseline accepts `sandbox.credentials.files` deny entries as well as `sandbox.filesystem.denyRead`.
 - audit-to-backlog names a perspective whose reviewer failed, was blocked or hit its turn cap under
   `Not covered:` instead of presenting the backlog as a complete audit.

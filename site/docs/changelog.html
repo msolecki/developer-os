@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@4c59443b1f5b">
+<meta name="dos-source" content="CHANGELOG.md@780f62f86ce9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -55,9 +55,10 @@
 and a force flag, <code>git reset --hard</code>, <code>git clean -f</code>, <code>git worktree remove --force</code>, <code>git stash drop</code>/<code>clear</code>, and <code>git checkout</code>/<code>git restore</code> of the whole tree (<code>git restore --staged .</code> passes). D6 amended.</li>
 <li>The guard also runs on Edit and Write and asks before a change to a <code>.env*</code> or <code>.envrc</code> file, <code>~/.ssh</code>, <code>~/.aws</code>,
 <code>~/.gnupg</code>, <code>~/.claude.json</code>, <code>~/.claude/settings*.json</code>, <code>~/.claude/CLAUDE.md</code>, or <code>~/.claude/</code> <code>hooks</code>,
-<code>rules</code>, <code>agents</code>, <code>skills</code> or <code>commands</code>, also under <code>$CLAUDE_CONFIG_DIR</code>. D6 amended.</li>
+<code>rules</code>, <code>agents</code>, <code>skills</code>, <code>commands</code>, <code>plugins</code> or <code>output-styles</code>, also under <code>$CLAUDE_CONFIG_DIR</code>. D6 amended.</li>
 <li>Inside the five read-only review agents, the guard asks before a Bash call that writes files outside the temp directories, changes git state or remotes, runs a formatter or test run that rewrites files (<code>--write</code>, <code>--fix</code>,
-<code>-u</code> next to a test runner), or runs <code>gh pr checkout</code>, <code>unlink</code>, <code>rmdir</code> or <code>patch</code>. D6 amended.</li>
+<code>-u</code> next to a test runner), or runs <code>gh pr checkout</code>, <code>unlink</code>, <code>rmdir</code>, <code>patch</code>, <code>chmod</code>, <code>chown</code>, <code>chgrp</code>, or <code>git bisect</code>, <code>clone</code>, <code>init</code>, <code>gc</code>, <code>prune</code>,
+  <code>sparse-checkout</code> or <code>submodule</code>. D6 amended.</li>
 <li>A <code>git commit</code> the guard does not ask about gets a one-line reminder, as agent context, to run the
 project's fast check first.</li>
 <li>project-baseline checks for an after-edit lint hook, and the project templates ship
@@ -82,7 +83,9 @@ retries, and authorization from client-held values.</li>
 <li>The guard's destructive and read-only-agent checks match only a command in command position, so a
   mention such as <code>grep -rn "rm -rf"</code> or <code>git commit -m "… reset --hard"</code> no longer asks. They also
   follow <code>timeout</code>, <code>nice</code>, <code>stdbuf</code>, <code>doas</code>, <code>eval</code>, <code>watch</code>, <code>setsid</code>, <code>flock</code>, <code>chroot</code>, shell keywords,
-  <code>sh -c</code> and <code>su -c</code>, and <code>git rm -f</code> asks; <code>ssh</code> and <code>docker exec</code> commands no longer ask. D6 amended.</li>
+  <code>sh -c</code> and <code>su -c</code>, and <code>git rm -f</code> asks; <code>ssh</code> and <code>docker exec</code> commands no longer ask. A wrapper
+  word counts only in command position, so <code>echo watch rm -rf x</code> passes, and in a read-only agent a <code>&gt;</code>
+  in double quotes after <code>-c</code> asks only after a shell (<code>sh -c</code>), not after <code>python3 -c</code>. D6 amended.</li>
 <li>project-baseline accepts <code>sandbox.credentials.files</code> deny entries as well as <code>sandbox.filesystem.denyRead</code>.</li>
 <li>audit-to-backlog names a perspective whose reviewer failed, was blocked or hit its turn cap under
 <code>Not covered:</code> instead of presenting the backlog as a complete audit.</li>
