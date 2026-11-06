@@ -15,6 +15,8 @@
 
 - Treat any authentication, 2FA, or security change from a subagent as unauthorized until reviewed. A subagent can add an environment-flag bypass that disables a second factor.
 - After a subagent finishes, compare the working tree with the commit using `git status` and `git diff`. A subagent that fixes only the local tree without committing makes local tests green and every other checkout red.
+- A reviewer's finding is a hypothesis: read the code and the project's canonical helper or schema before fixing; a framework claim needs the framework's docs or source.
+- Run the area's tests before applying a reviewer's fix; a red pinned test means it reverses a decision, so surface it. Before changing test config, coverage or CI gates, update the governing `docs/adr` decision in the same change.
 
 ### External repositories (clients and OSS) — first-session procedure
 
@@ -26,14 +28,14 @@
 
 - Stop when the fast check passes and you can give the closing status block (see Communication). A session that must end earlier stops at its last green commit, with the rest recorded in the plan.
 - When a decision is open, ask with options A/B/C instead of assuming.
-- Before changing over 50 lines of code, write a plan: one per task, in the project's git-ignored planning location (default `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage. The active plan is the most recently updated plan there whose task is not done; specs go to `docs/specs/` or the project's spec location. After a context reset, resume with "continue from <plan path>". When the task is done, delete the plan; move unfinished items to `TODO.md` or the backlog. A project may override this in its `AGENTS.md`.
+- Before changing over 50 lines of code, write a plan: one per task, in the project's git-ignored planning location (default `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage. The active plan is the most recently updated plan there whose task is not done; specs go to `docs/specs/` or the project's spec location. After a context reset, resume with "continue from <plan path>". When the task is done, check that every step landed in committed code, then delete the plan; move unfinished items to `TODO.md` or the backlog. A project may override this in its `AGENTS.md`.
 - Every plan step states What (deliverable), Where (files), How (approach), and **Test** (verification). The system stays deployable after every step. Use S/M/L complexity instead of time estimates.
 - A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
 - An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, and expected output format. Exclude debugging history, rejected approaches, and full conversation dumps.
 - Before a large task, look for earlier decisions: when a `Brain vault:` line is configured, search the vault with the `brain-search` skill and read the selected note (otherwise skip this silently), then read the project's active plan. Search raw session transcripts only when the user asks.
 - During compaction, preserve the modified-file list, the project's test commands, the current objective, and the user's language. Task state that must survive it lives in `docs/plans/.devos-state.md`, not only in chat.
 - Show only failures from tests and builds, never a full passing log.
-- Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence.
+- Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence. A new or changed gate or test counts only after you saw it fail: mutate, watch it go red, revert.
 - Before saying done, list the background shells and tasks you started and stop those no longer needed.
 - Never promise to report back later ("I'll let you know"): you cannot act between turns. Run the work as a background task that notifies on completion, or give an ETA and what the user should check.
 - If the user asks for the same thing three times, say so and propose a skill or hook.
@@ -41,9 +43,12 @@
 ### Parallel agents — one checkout each
 
 - Run every parallel agent in its own git worktree (`git worktree add`, or the project's worktree script). Two sessions in one checkout corrupt each other's staging area, and a push from one restarts CI on the other's older state.
+- Stage explicit paths, never `git add -A` or `git add .`; with a shared checkout, commit with `git commit -F <msg> -- <paths>`. Re-run `git status` right before the first edit.
+- No `git stash` in a lane: worktrees share one stash; compare with `git show HEAD:<path>` instead.
 - One orchestrator owns push and integrate. Agents produce commits inside their worktree and stop there; they do not push, merge, or rebase shared branches.
 - Before dispatching parallel agents, state which worktree each one gets. "Both in the main repository" is not a plan, it is the failure above.
 - When the project provisions per-worktree resources (ports, a compose project name, an environment file), use those instead of the default ports, and release them with the project's cleanup command when the branch is done.
+- After integrating lanes, run the repository-wide gate on the result. Never resume an interrupted lane; start a fresh, smaller one.
 
 ### Conventions skills
 
@@ -77,4 +82,4 @@ Stack- and file-specific conventions are skills: `typescript-conventions`, `next
 - Follow the project's existing UI, backend, and database stack; introduce a new framework or service only with an explicit decision.
 - Use the project's existing test runner.
 
-Override this section with your own defaults in your user-level `CLAUDE.md` or `AGENTS.md`.
+Override this section with your own defaults in your user-level `CLAUDE.md`.

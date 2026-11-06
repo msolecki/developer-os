@@ -52,7 +52,7 @@ index, binary, background job or network call in the plugin itself.
    a second, unreviewed store, so the recommended setup turns it off and brain-import-memory moves
    what it holds into the vault (D24;
    [workflow.md, Where knowledge belongs](../workflow.md#where-knowledge-belongs)).
-6. **Small fixed cost per session.** The core rules are capped at 8192 bytes and the skill
+6. **Small fixed cost per session.** The core rules are capped at 8900 bytes and the skill
    descriptions at 12000 characters in total, because both load into every session.
 7. **No runtime.** Anything that would need a process, a schedule or the network is either left to
    Claude Code itself (routines, the marketplace) or not built. Vault upkeep is not scheduled: a

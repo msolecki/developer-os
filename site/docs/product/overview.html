@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/overview.md@c69790bf0c45">
+<meta name="dos-source" content="docs/product/overview.md@c1d9316ebc06">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -67,7 +67,7 @@
 <li><strong>Propose, then act on a named yes.</strong> Every skill that changes files, git state or anything outside the machine stops at a defined point and asks; silence or "looks good" is not approval. Each action skill states its <code>## Stop point</code> and <code>## Never</code> sections, and <code>scripts/check.sh</code> fails without them.</li>
 <li><strong>Evidence over declaration.</strong> Findings carry a file and line, reviews rate on one P0–P3 scale, blocking findings go to a fresh verifier, and "works" needs test output.</li>
 <li><strong>One fact in one place.</strong> Code facts and plans stay in the repository; lessons that outlive a repository go to the vault; user preferences go to <code>~/.claude/CLAUDE.md</code>. Claude Code's auto memory is a second, unreviewed store, so the recommended setup turns it off and brain-import-memory moves what it holds into the vault (D24; <a href="../workflow.html#where-knowledge-belongs">workflow.md, Where knowledge belongs</a>).</li>
-<li><strong>Small fixed cost per session.</strong> The core rules are capped at 8192 bytes and the skill descriptions at 12000 characters in total, because both load into every session.</li>
+<li><strong>Small fixed cost per session.</strong> The core rules are capped at 8900 bytes and the skill descriptions at 12000 characters in total, because both load into every session.</li>
 <li><strong>No runtime.</strong> Anything that would need a process, a schedule or the network is either left to Claude Code itself (routines, the marketplace) or not built. Vault upkeep is not scheduled: a startup hook reminds you when it is due, and you run it (D22).</li>
 </ol>
 <h2 id="scope">Scope</h2>
