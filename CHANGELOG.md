@@ -4,6 +4,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- session-retro proposes a vault lesson only when it cost a retry, a correction or a re-derivation and
+  `brain-search` finds no note that already says it; otherwise it proposes an update to that note.
+
 ## [0.2.7] - 2026-10-31
 
 ### Added
