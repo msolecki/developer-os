@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@530aec0a66ec">
+<meta name="dos-source" content="docs/product/decisions.md@3bdda522370a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -172,7 +172,7 @@
 <li><strong>Amended 2026-10-16:</strong> the card comes from its own hook, <code>state-card.py</code>, matched to <code>compact</code> and <code>resume</code>; the core rules print from a separate <code>cat</code> hook (D2), so the card is no longer guaranteed to follow them.</li>
 <li><strong>Amended 2026-10-24:</strong> the state card also runs on a forked session (source <code>fork</code>).</li>
 <li><strong>Rejected:</strong> a <code>PreCompact</code> hook (its input and output are undocumented); <code>.claude/devos-state.md</code> (one more <code>.gitignore</code> entry per project).</li>
-<li><strong>Amended 2026-11-07:</strong> <code>PreCompact</code> is now documented (its stdout steers the summary), but it is still not used: D27 found no state lost across a compaction.</li>
+<li><strong>Amended 2026-11-07:</strong> <code>PreCompact</code> is now documented (its stdout steers the summary), but it is still not used: D27 found no evidence of state lost across a compaction.</li>
 </ul>
 <h2 id="d17-one-backlog-item-format-defined-in-the-skills-only">D17. One backlog item format, defined in the skills only</h2>
 <ul>
@@ -247,8 +247,8 @@
 <li><strong>Date:</strong> 2026-11-07 · Issue #114 · Claude Code 2.1.319</li>
 <li><strong>Decision:</strong> the <code>*-conventions</code> skills keep description matching, <code>guard.py</code> runs on every Bash, Edit and Write call, and no <code>PreCompact</code> hook is added.</li>
 <li><strong>Why, <code>paths:</code>:</strong> tested with <code>claude -p --setting-sources project</code>: a project skill with <code>paths:</code> stays out of the skill listing until a matching file is read. A plugin skill (<code>--plugin-dir</code>) with the same field is listed with its full description before any match, and reading a matching file loads nothing. A plugin skill saves no description characters. <code>claude plugin validate --strict</code> accepts the field. Recheck first with a marketplace install, the case not tested.</li>
-<li><strong>Why, <code>if:</code>:</strong> <code>guard.py</code> takes 22 ms a call (median of 40, about 15 ms of it Python start-up). An <code>if</code> holds one permission rule and is best-effort. Bash calls must all be scanned, because the guard undoes obfuscation (<code>np""m i</code>, <code>$IFS</code>). The protected Edit and Write paths depend on <code>realpath</code>, <code>~</code> and <code>CLAUDE_CONFIG_DIR</code>, which a glob cannot express. No call can be skipped without weakening D6.</li>
-<li><strong>Why, <code>PreCompact</code>:</strong> 81 compactions in 1244 local sessions over 30 days. A keyword scan of the first eight user messages after each one found no complaint of lost state. The state card (D16) is enough.</li>
+<li><strong>Why, <code>if:</code>:</strong> <code>guard.py</code> takes 22 ms a call (median of 40, about 15 ms of it Python start-up). An <code>if</code> holds one permission rule and is best-effort. Bash calls must all be scanned, because the guard undoes obfuscation (<code>np""m i</code>, <code>$IFS</code>). A rule such as <code>Edit(**/.env*)</code> or <code>Edit(~/.claude/**)</code> covers the literal protected paths, but not a symlink to one (the guard checks the <code>realpath</code>) or a <code>CLAUDE_CONFIG_DIR</code> outside <code>~/.claude</code>. A filter would also drop the reminder on a plain <code>git commit</code>. No call can be skipped without weakening D6.</li>
+<li><strong>Why, <code>PreCompact</code>:</strong> 81 compactions in 1244 local sessions over 30 days. A keyword scan of the first eight user messages after each one found no complaint of lost state. That is no evidence of loss, not proof of none (a silent loss would not show), so the state card (D16) stays the mechanism.</li>
 </ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>

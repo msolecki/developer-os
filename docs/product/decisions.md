@@ -239,7 +239,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Rejected:** a `PreCompact` hook (its input and output are undocumented); `.claude/devos-state.md`
   (one more `.gitignore` entry per project).
 - **Amended 2026-11-07:** `PreCompact` is now documented (its stdout steers the summary), but it is still
-  not used: D27 found no state lost across a compaction.
+  not used: D27 found no evidence of state lost across a compaction.
 
 ## D17. One backlog item format, defined in the skills only
 
@@ -389,10 +389,13 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   accepts the field. Recheck first with a marketplace install, the case not tested.
 - **Why, `if:`:** `guard.py` takes 22 ms a call (median of 40, about 15 ms of it Python start-up). An
   `if` holds one permission rule and is best-effort. Bash calls must all be scanned, because the guard
-  undoes obfuscation (`np""m i`, `$IFS`). The protected Edit and Write paths depend on `realpath`,
-  `~` and `CLAUDE_CONFIG_DIR`, which a glob cannot express. No call can be skipped without weakening D6.
+  undoes obfuscation (`np""m i`, `$IFS`). A rule such as `Edit(**/.env*)` or `Edit(~/.claude/**)`
+  covers the literal protected paths, but not a symlink to one (the guard checks the `realpath`) or a
+  `CLAUDE_CONFIG_DIR` outside `~/.claude`. A filter would also drop the reminder on a plain `git commit`.
+  No call can be skipped without weakening D6.
 - **Why, `PreCompact`:** 81 compactions in 1244 local sessions over 30 days. A keyword scan of the first
-  eight user messages after each one found no complaint of lost state. The state card (D16) is enough.
+  eight user messages after each one found no complaint of lost state. That is no evidence of loss, not
+  proof of none (a silent loss would not show), so the state card (D16) stays the mechanism.
 
 ## Rules history
 
