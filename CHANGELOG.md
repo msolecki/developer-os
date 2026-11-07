@@ -14,6 +14,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - The core-rules cap is 8900 bytes (was 8192). D10 amended.
 - The core rules point user-level overrides at `CLAUDE.md` only; Claude Code reads no user-level `AGENTS.md`.
+- session-retro proposes a vault lesson only when it cost a retry, a correction or a re-derivation and
+  `brain-search` finds no note that already says it; otherwise it proposes an update to that note. A decision needs no such cost,
+  only the same `brain-search` check. Eval case `session-retro-capture-gate`.
 
 ## [0.2.7] - 2026-10-31
 
