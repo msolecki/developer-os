@@ -122,7 +122,8 @@ architecture and dead code, UI and accessibility. Every finding needs `file:line
 evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. Each P0 and
 P1 goes to a fresh verifier (the `verifier` agent); refuted ones are listed
 as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
-its done file. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
+its done file; one already fixed in the done file or in flight in an open pull request (`gh pr list`,
+skipped when `gh` is unavailable) is dropped and named in the report. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
 `Not covered:` at the top of the backlog and in the report.
 
 ## Code review and pull requests
@@ -188,6 +189,11 @@ steps into `FEAT-` backlog items.
   auth/security items.
 - **`Check` screening:** never runs a `Check` that pipes into a shell, fetches from the network or
   writes outside the repository; reads any script a `Check` calls first.
+- **Triage:** before the claim, checks every batch item itself, read-only: its `Where` still
+  exists, its `Check` fails now, no open pull request touches its files (skipped when `gh` is
+  unavailable), and no project decision record or doc contradicts it. A failing item leaves the
+  batch, is never claimed or dispatched, and is reported as `stale: <ID> · <point> · <evidence>`
+  for you to close, amend or keep; the batch is topped up from the next ready items.
 - **While running:** runs each item's `Check` itself on a `DONE` report, then the full build, types,
   tests and lint for the batch; classifies a failure before editing; stops after three failed
   repair cycles.

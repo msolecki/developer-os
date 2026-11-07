@@ -78,7 +78,7 @@ While reviewers run, keep `Plan:` (the backlog path), `Agents:` (perspective →
 - **Owner:** absent when the item is written; only implement-backlog writes it, before dispatch, and clears an orphaned one after the user confirms.
 - **Done when:** never edited or deleted. A change is appended as `Amended YYYY-MM-DD: <new criterion> — <reason and evidence>`, with the user's approval.
 
-- Deduplicate by file and root cause; keep the higher severity.
+- Deduplicate by file and root cause; keep the higher severity. Compare each new finding with the done file's items and with the files of open pull requests (`gh pr list --state open --json number,title,files`, skipped silently when `gh` is missing or not authenticated or the repository has no GitHub remote): drop a finding already fixed there or in flight, and name the done item or pull request in the report.
 - Continue existing category numbering.
 - Group 5–7 related tasks per implementation session without mixing P0 and P3, one line per session under `## Implementation sessions`: `Session N: <ID>, <ID>, …`. A session is done when every ID is checked or in the done file.
 - Report only measured metrics.
