@@ -12,6 +12,22 @@ export function formatPrice(cents) {
   return String(cents / 100);
 }
 JS
+cat > "$d/checks/format.check.js" <<'JS'
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { formatPrice } from '../src/format.js';
+test('two decimals', () => {
+  assert.equal(formatPrice(500), '5.00');
+});
+JS
+cat > "$d/checks/negative.check.js" <<'JS'
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { cartTotal } from '../src/cart.js';
+test('negative quantity throws', () => {
+  assert.throws(() => cartTotal([{ priceCents: 100, quantity: -1 }]), RangeError);
+});
+JS
 cat > "$d/TODO.md" <<'MD'
 # Backlog
 
@@ -24,7 +40,7 @@ cat > "$d/TODO.md" <<'MD'
   - Fix: throw a RangeError for a quantity below zero.
   - Size: S
   - Done when: `cartTotal` throws a RangeError for any negative quantity.
-  - Check: `node --test`
+  - Check: `node --test checks/negative.check.js`
 
 - [ ] FMT-02 · P2 · Always show two decimals
   - Where: `src/format.js:3`
@@ -33,7 +49,7 @@ cat > "$d/TODO.md" <<'MD'
   - Fix: use `toFixed(2)`.
   - Size: S
   - Done when: `formatPrice(500)` returns `5.00`.
-  - Check: `node --test`
+  - Check: `node --test checks/format.check.js`
 
 ## Implementation sessions
 MD

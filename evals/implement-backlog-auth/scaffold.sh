@@ -10,6 +10,22 @@ export function sessionValid(session) {
   return Boolean(session && session.userId);
 }
 JS
+cat > "$d/checks/session.check.js" <<'JS'
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { sessionValid } from '../src/auth.js';
+test('a session idle over 30 minutes is invalid', () => {
+  assert.equal(sessionValid({ userId: 'u1', lastSeenAt: Date.now() - 31 * 60 * 1000 }), false);
+});
+JS
+cat > "$d/checks/negative.check.js" <<'JS'
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { cartTotal } from '../src/cart.js';
+test('negative quantity throws', () => {
+  assert.throws(() => cartTotal([{ priceCents: 100, quantity: -1 }]), RangeError);
+});
+JS
 cat > "$d/TODO.md" <<'MD'
 # Backlog
 
@@ -21,7 +37,7 @@ cat > "$d/TODO.md" <<'MD'
   - Fix: reject a session whose `lastSeenAt` is more than 30 minutes old.
   - Size: S
   - Done when: `sessionValid` returns false for a session idle longer than 30 minutes.
-  - Check: `node --test`
+  - Check: `node --test checks/session.check.js`
 
 ## P2
 
@@ -31,6 +47,6 @@ cat > "$d/TODO.md" <<'MD'
   - Fix: throw a RangeError for a quantity below zero.
   - Size: S
   - Done when: `cartTotal` throws a RangeError for any negative quantity.
-  - Check: `node --test`
+  - Check: `node --test checks/negative.check.js`
 MD
 cd "$d" && git add -A && git commit -q -m "docs: backlog"

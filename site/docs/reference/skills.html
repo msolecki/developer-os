@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@a56c6a2979da">
+<meta name="dos-source" content="docs/reference/skills.md@0026b779acb5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -157,7 +157,8 @@ architecture and dead code, UI and accessibility. Every finding needs <code>file
 evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. Each P0 and
 P1 goes to a fresh verifier (the <code>verifier</code> agent); refuted ones are listed
 as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
-its done file. A perspective whose reviewer ended <code>BLOCKED</code>, failed or hit its turn cap is listed under
+its done file; one already fixed in the done file or in flight in an open pull request (<code>gh pr list</code>,
+skipped when <code>gh</code> is unavailable) is dropped and named in the report. A perspective whose reviewer ended <code>BLOCKED</code>, failed or hit its turn cap is listed under
 <code>Not covered:</code> at the top of the backlog and in the report.</p>
     <h2 id="code-review-and-pull-requests">Code review and pull requests</h2>
     <h3 id="code-review">code-review</h3>
@@ -213,6 +214,11 @@ items in the backlog format (no open <code>Blocked by</code>, no other <code>Own
 auth/security items.</li>
 <li>**<code>Check</code> screening:** never runs a <code>Check</code> that pipes into a shell, fetches from the network or
 writes outside the repository; reads any script a <code>Check</code> calls first.</li>
+<li><strong>Triage:</strong> before the claim, checks every batch item itself, read-only: its <code>Where</code> still
+exists, its <code>Check</code> fails now, no open pull request touches its files (skipped when <code>gh</code> is
+unavailable), and no project decision record or doc contradicts it. A failing item leaves the
+batch, is never claimed or dispatched, and is reported as <code>stale: &lt;ID&gt; · &lt;point&gt; · &lt;evidence&gt;</code>
+for you to close, amend or keep; the batch is topped up from the next ready items.</li>
 <li><strong>While running:</strong> runs each item's <code>Check</code> itself on a <code>DONE</code> report, then the full build, types,
 tests and lint for the batch; classifies a failure before editing; stops after three failed
 repair cycles.</li>

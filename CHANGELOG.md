@@ -5,6 +5,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- implement-backlog triages the batch before the claim: an item whose `Where` is gone, whose `Check`
+  already passes, whose files an open pull request touches, or which a project doc contradicts is
+  reported as `stale:` and never claimed or dispatched; audit-to-backlog drops a finding the done file
+  or an open pull request already covers. New eval case `implement-backlog-stale-items`; the
+  implement-backlog owner, roles and auth cases get red-first `Check`s. (#115)
 - Core rules: a reviewer's finding is a hypothesis to check against the code and the canonical helper; run the
   area's tests before applying a reviewer's fix and update the governing ADR when changing test gates; a new or
   changed gate counts only after it was seen to fail; a plan is deleted only after its steps landed.
