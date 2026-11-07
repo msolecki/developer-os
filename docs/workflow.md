@@ -178,7 +178,7 @@ something at the end.
 
 Work from a plan file in the repository's planning location (for example
 `docs/plans/2026-10-14-checkout-retry.md`): goal, decisions, steps, next action. Update it after
-each step. Plans are local and gitignored by default; when the task is finished, delete the plan and
+each step. Plans are local and gitignored by default; when the task is finished and every step landed in committed code, delete the plan and
 move unfinished items to `TODO.md` or the backlog. A project may override this in its `AGENTS.md`.
 A spec from the **spec** skill is named `<date>-<feature>-spec.md`. Before each commit run the fast
 check (lint, types, tests of the changed area); before a push or PR run the full suite. End a

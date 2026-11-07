@@ -25,7 +25,7 @@ Two hooks on the same event, run independently, so the card is not guaranteed to
 | Command | `cat "${CLAUDE_PLUGIN_ROOT}/rules/core.md"`, timeout 10 s | `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state-card.py"`, timeout 10 s |
 | Input | none | the hook JSON on stdin; uses `source` and `cwd` |
 | Output | stdout becomes session context | stdout becomes session context |
-| Limit | Claude Code caps hook output at 10,000 characters; `scripts/check.sh` caps `core.md` at 8192 bytes and checks that `CAP` in `state-card.py` still fits beside it | |
+| Limit | Claude Code caps hook output at 10,000 characters; `scripts/check.sh` caps `core.md` at 8900 bytes and checks that `CAP` in `state-card.py` still fits beside it | |
 | Off switch | disable the plugin; override single rules in `~/.claude/CLAUDE.md` | disable the plugin |
 
 **Core rules:** prints `plugin/rules/core.md` on every source; it does not depend on Python.

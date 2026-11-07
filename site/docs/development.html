@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@918c25ffc8e7">
+<meta name="dos-source" content="docs/development.md@aad9d750cfe0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -78,7 +78,7 @@
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>
           <tr><td>Stale names</td><td>A skill, agent or output-style name removed from <code>plugin/SURFACE.txt</code> in the uncommitted diff (in a pull request, since the merge base with <code>origin/$GITHUB_BASE_REF</code>) still appears as a bare word (the prefixed form fails in References) in <code>plugin/</code>, <code>templates/</code> or <code>README.md</code>; the check runs before the rename is committed</td></tr>
           <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code> or a page under <code>site/</code> ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk</td></tr>
-          <tr><td>Core-rules size</td><td><code>plugin/rules/core.md</code> exceeds 8192 bytes, or <code>CAP</code> in <code>state-card.py</code> no longer fits under the 10,000-character hook output limit</td></tr>
+          <tr><td>Core-rules size</td><td><code>plugin/rules/core.md</code> exceeds 8900 bytes, or <code>CAP</code> in <code>state-card.py</code> no longer fits under the 10,000-character hook output limit</td></tr>
           <tr><td>References</td><td>A <code>developer-os:&lt;name&gt;</code> string in <code>plugin/</code> (Markdown and hook scripts), <code>docs/</code>, <code>templates/</code>, <code>evals/</code>, <code>README.md</code>, <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code> or <code>SECURITY.md</code> names no skill, agent or output style</td></tr>
           <tr><td>Links</td><td>A relative Markdown link outside fenced or inline code does not resolve from its own file, or its <code>#fragment</code> matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, <code>-1</code>, <code>-2</code> for repeated headings)</td></tr>
           <tr><td>Site</td><td>A doc, root document, skill, agent or output style has no page under <code>site/</code> that names it in a <code>dos-source</code> meta; a page's hash differs from its source's; a relative <code>href</code> or <code>src</code> in <code>site/</code>, or a page in <code>NAV</code> in <code>site/assets/site.js</code>, does not resolve to a file inside <code>site/</code> (in exact case) or names no <code>id</code> in the target page; a page names a source that belongs to another page; a page lacks its canonical URL or an <code>og:image</code> that exists under <code>site/</code>; <code>site/sitemap.xml</code> does not list exactly the pages' canonical URLs. It reports every failure at once</td></tr>
@@ -142,8 +142,8 @@
       <li>Add an eval case when the skill has a behavior worth protecting (a gate, a refusal, a trigger).</li>
       <li>Add the name to <code>plugin/SURFACE.txt</code> (the check prints the line), and update the README component list, <code>CHANGELOG.md</code>, and <a href="product/functional-spec.html">product/functional-spec.md</a>. Counts written as digits are checked; fix any the check reports.</li>
     </ol>
-    <p>Changing <code>plugin/rules/core.md</code>: it sits just under the 8192-byte cap (<code>wc -c &lt; plugin/rules/core.md</code>).
-    Every added line must replace or shorten another; run <code>instruction-review --prune</code> on it inside this repository.</p>
+    <p>Changing <code>plugin/rules/core.md</code>: it sits just under the 8900-byte cap (<code>wc -c &lt; plugin/rules/core.md</code>).
+    Every added line must replace or shorten another, unless a D10 amendment raises the cap; run <code>instruction-review --prune</code> on it inside this repository.</p>
     <h2 id="branches-and-releases">Branches and releases</h2>
     <ul>
       <li><code>main</code> is the default branch and what the marketplace installs; it moves only on a release (D20).</li>

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@1019f3277fb5">
+<meta name="dos-source" content="docs/workflow.md@9d6e5a7ecf7c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -197,7 +197,7 @@ something at the end.</p>
     <h3 id="2-during-work-the-plan-lives-in-the-repository">2. During work: the plan lives in the repository</h3>
     <p>Work from a plan file in the repository's planning location (for example
 <code>docs/plans/2026-10-14-checkout-retry.md</code>): goal, decisions, steps, next action. Update it after
-each step. Plans are local and gitignored by default; when the task is finished, delete the plan and
+each step. Plans are local and gitignored by default; when the task is finished and every step landed in committed code, delete the plan and
 move unfinished items to <code>TODO.md</code> or the backlog. A project may override this in its <code>AGENTS.md</code>.
 A spec from the <strong>spec</strong> skill is named <code>&lt;date&gt;-&lt;feature&gt;-spec.md</code>. Before each commit run the fast
 check (lint, types, tests of the changed area); before a push or PR run the full suite. End a
