@@ -4,7 +4,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Core rules: a reviewer's finding is a hypothesis to check against the code and the canonical helper; run the
+  area's tests before applying a reviewer's fix and update the governing ADR when changing test gates; a new or
+  changed gate counts only after it was seen to fail; a plan is deleted only after its steps landed.
+- Core rules for parallel lanes: stage explicit paths, re-run `git status` before the first edit, no `git stash`
+  in a lane, run the repository-wide gate after integrating, never resume an interrupted lane.
+
 ### Changed
+- The core-rules cap is 8900 bytes (was 8192). D10 amended.
+- The core rules point user-level overrides at `CLAUDE.md` only; Claude Code reads no user-level `AGENTS.md`.
 - session-retro proposes a vault lesson only when it cost a retry, a correction or a re-derivation and
   `brain-search` finds no note that already says it; otherwise it proposes an update to that note.
 

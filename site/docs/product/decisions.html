@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@88a3a3f4ba53">
+<meta name="dos-source" content="docs/product/decisions.md@70785b99ff7a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -124,6 +124,7 @@
 <li><strong>Date:</strong> 2026-10-15 · <strong>Commits:</strong> <code>c8129daf</code>, <code>1c324a89</code></li>
 <li><strong>Decision:</strong> <code>plugin/rules/core.md</code> is at most 8192 bytes; each skill description is 80–1024 characters and all descriptions together at most 12000.</li>
 <li><strong>Why:</strong> both load into every session; <code>SessionStart</code> hook output is capped at 10,000 characters.</li>
+<li><strong>Amended 2026-11-06:</strong> the core-rules cap is 8900 bytes, to take the lessons on parallel lanes, reviewer findings and red-first gates; 8900 plus the 1024-byte state card and 64 bytes of margin stays under the 10,000-character hook limit.</li>
 </ul>
 <h2 id="d11-plans-are-local">D11. Plans are local</h2>
 <ul>

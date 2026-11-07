@@ -12,7 +12,7 @@ copyable project templates under `templates/`. No runtime and no build; see [REA
 
 ## Likely agent mistakes here
 
-- Growing `plugin/rules/core.md` past 8192 bytes: it loads into every session. Evidence: D10, the Core-rules size stage.
+- Growing `plugin/rules/core.md` past 8900 bytes: it loads into every session. Evidence: D10, the Core-rules size stage.
 - Lengthening skill descriptions past 12000 characters in total. Evidence: D10, the Skill descriptions stage.
 - Making a hook deny instead of ask. Evidence: D6, `tests/guard.test.sh`.
 

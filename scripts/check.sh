@@ -222,9 +222,9 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
 # Claude Code caps hook output at 10,000 characters; the core rules and the state card land in the same context, so
 # together they must fit.
 size=$(wc -c < plugin/rules/core.md | tr -d " ")
-[ "$size" -le 8192 ] || fail size plugin/rules/core.md "$size bytes, limit 8192"
+[ "$size" -le 8900 ] || fail size plugin/rules/core.md "$size bytes, limit 8900"
 cap=$(sed -n 's/^CAP = //p' plugin/hooks/state-card.py)
-[ -n "$cap" ] && [ $((8192 + cap + 64)) -le 10000 ] || fail size plugin/hooks/state-card.py "state card cap ${cap:-unset} leaves no room under 10000"
+[ -n "$cap" ] && [ $((8900 + cap + 64)) -le 10000 ] || fail size plugin/hooks/state-card.py "state card cap ${cap:-unset} leaves no room under 10000"
 
 files 'plugin/*.md' 'plugin/*.py' 'docs/*.md' README.md 'templates/*.md' 'evals/*' CHANGELOG.md CONTRIBUTING.md SECURITY.md | ruby -e '
   $stdin.read.split("\0").each do |f|

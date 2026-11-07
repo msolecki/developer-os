@@ -159,6 +159,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Decision:** `plugin/rules/core.md` is at most 8192 bytes; each skill description is 80–1024
   characters and all descriptions together at most 12000.
 - **Why:** both load into every session; `SessionStart` hook output is capped at 10,000 characters.
+- **Amended 2026-11-06:** the core-rules cap is 8900 bytes, to take the lessons on parallel lanes,
+  reviewer findings and red-first gates; 8900 plus the 1024-byte state card and 64 bytes of margin stays
+  under the 10,000-character hook limit.
 
 ## D11. Plans are local
 
