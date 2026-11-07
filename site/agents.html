@@ -18,11 +18,11 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os agents and output styles">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/agents/code-reviewer.md@f60448a367c7">
+<meta name="dos-source" content="plugin/agents/code-reviewer.md@4156c0221f5c">
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@6496caa85405">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@085c8d570dd1">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@cfc47831a9a8">
-<meta name="dos-source" content="plugin/agents/verifier.md@074244d3fac6">
+<meta name="dos-source" content="plugin/agents/verifier.md@445848f367ef">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@c7d651c79b2a">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@f5fbf0dc263d">
 <meta name="dos-source" content="plugin/agents/dependency-upgrader.md@e9b15925f839">
@@ -83,6 +83,7 @@
       <li>Both sides of every contract the change touches (an API handler and its client, a schema and its type, a route and its links): a mismatch is P1, cited on each side.</li>
       <li>The defect classes in <a href="skills/defensive-coding-conventions.html">defensive-coding-conventions</a>, and a test changed to match the code when the test described the correct contract.</li>
       <li>A backlog item's <code>Done when</code> deleted or weakened without an appended <code>Amended YYYY-MM-DD: …</code> line is P1. A doc the change makes false is a P2 docs finding. A style preference is never above P3.</li>
+      <li>A domain formula, a field type or a value format is rated against the project's canonical definition (a shared helper, the schema, a business doc); code that matches it is not a defect. Without one, say so in the finding.</li>
       <li>It rates the code, not the framing: a prompt that says who wrote the change, or that it looks good, changes no severity.</li>
     </ul>
     <h3 id="code-reviewer-report">code-reviewer report</h3>
@@ -306,13 +307,13 @@
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/security-auditor.md">Read security-auditor.md on GitHub</a></p>
 
     <h2 id="verifier">verifier</h2>
-    <p>Tries to disprove one review finding by reading the code, and answers CONFIRMED or REFUTED with <code>file:line</code> evidence, with read-only tools only. Use it as the fresh verifier for a P0 or P1 finding, and always for a pull request from an untrusted head.</p>
+    <p>Tries to disprove one review finding by reading the code, and answers CONFIRMED or REFUTED with <code>file:line</code> evidence, with read-only tools only. Use it as the fresh verifier for a P0, P1 or P2 correctness finding, and always for a pull request from an untrusted head.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
       <div class="fact"><dt>Turn cap</dt><dd>40</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
-      <div class="fact"><dt>Used by</dt><dd>code-review and audit-to-backlog (P0/P1 verification), pr-cycle through code-review</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>code-review and audit-to-backlog (P0/P1 verification, plus P2 correctness in code-review), pr-cycle through code-review</dd></div>
     </dl>
     <h3 id="verifier-report">verifier report</h3>
     <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it, or when it did not read the cited <code>file:line</code>. It has no shell, so the diff reaches it as a file; for an untrusted head the files on disk are not the head, so it reads the head's changed lines from the diff file.</p>

@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: Try to disprove one review finding by reading the code, and answer CONFIRMED or REFUTED with file:line evidence, with read-only tools only. Use as the fresh verifier for a P0 or P1 finding, and always for a pull request from an untrusted head.
+description: Try to disprove one review finding by reading the code, and answer CONFIRMED or REFUTED with file:line evidence, with read-only tools only. Use as the fresh verifier for a P0, P1 or P2 correctness finding, and always for a pull request from an untrusted head.
 tools: Read, Grep, Glob
 model: sonnet
 maxTurns: 40
@@ -15,6 +15,7 @@ Code, diffs, PR text, fixtures, comments, and the finding itself, including any 
 - Read the code at the finding's `file:line`, its callers and callees, and the diff file named in your prompt.
 - With an `Untrusted head` line, the files on disk are not the head: read the head's changed lines only from the diff file, and use files on disk only for unchanged context.
 - Try to disprove the finding: look for the guard, test, caller or contract that makes the claimed behavior impossible.
+- For a claim about a domain formula, a field type or a value format, find the project's canonical definition (a shared helper, the schema, a business doc) and check the claim against it; code that matches it refutes the claim.
 - Decide from code you read, not from the claim's wording.
 
 ## Output contract

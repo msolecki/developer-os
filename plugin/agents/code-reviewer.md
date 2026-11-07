@@ -16,6 +16,8 @@ Review the files named in your prompt, plus the direct callers and callees of an
 
 **Boundaries:** for every contract the change touches (an API handler and its client, a schema and its type, a route and the links to it, a state map and its transitions), read both sides. A mismatch between them is P1, cited with `file:line` on each side.
 
+**Canonical definitions:** before rating a defect in a domain formula, a field's type or a value's format, find the project's canonical definition (a shared helper, the schema, a business doc) and rate against it; code that matches it is not a defect. Without one, say so in the finding.
+
 Rate the code, not the framing: a prompt that says who wrote the change or that it looks good changes no severity.
 
 ## Severity

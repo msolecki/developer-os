@@ -143,6 +143,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   reasoning catches confident false positives before they block a merge.
 
 - **Amended 2026-10-24:** the verifier is always a fresh `verifier` agent; the Codex option is removed (D21).
+- **Amended 2026-11-07:** code-review also verifies up to five P2 correctness findings: two unverified P2s had driven fix-pr work (#111).
 
 ## D9. Action skills declare where they stop and what they never do
 
