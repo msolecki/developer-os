@@ -125,7 +125,10 @@ and add a fixture for the case you changed.
 
 Behavior checks with `claude plugin eval`, run by hand before a release or after changing a tested
 skill, never in CI: [evals/README.md](../evals/README.md). A case must fail when the skill breaks;
-the README lists the mutation checks that prove it.
+the README lists the mutation checks that prove it. When a skill change tightens what the skill accepts,
+run every existing case's scaffold against the new rule: a fixture written for the old rule can stop
+exercising the behavior its graders guard (an item whose `Check` already passes on the green baseline
+is dropped as stale by implement-backlog's triage, so its case never claims or dispatches it).
 
 ## Adding or changing a skill
 

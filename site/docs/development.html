@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@aad9d750cfe0">
+<meta name="dos-source" content="docs/development.md@b047cbf050ce">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -131,7 +131,10 @@
     <h2 id="evals">Evals</h2>
     <p>Behavior checks with <code>claude plugin eval</code>, run by hand before a release or after changing a tested
     skill, never in CI: <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md">evals/README.md</a>. A case must fail when the skill breaks;
-    the README lists the mutation checks that prove it.</p>
+    the README lists the mutation checks that prove it. When a skill change tightens what the skill accepts,
+    run every existing case's scaffold against the new rule: a fixture written for the old rule can stop
+    exercising the behavior its graders guard (an item whose <code>Check</code> already passes on the green baseline
+    is dropped as stale by implement-backlog's triage, so its case never claims or dispatches it).</p>
     <h2 id="adding-or-changing-a-skill">Adding or changing a skill</h2>
     <ol>
       <li><code>plugin/skills/&lt;name&gt;/SKILL.md</code> with <code>name: &lt;name&gt;</code> and a <code>description</code> that says what it does and when to use it, including the phrases the user would type. Keep within the description budget; <code>scripts/check.sh</code> prints the total when it fails.</li>

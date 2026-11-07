@@ -76,10 +76,10 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `project-baseline-design` | a repository with a UI and no `DESIGN.md` gets it proposed as a backlog item; nothing is written | detected −0.29 |
 | `implement-backlog-blocked` | the ready P2 blocker is done first; the higher-priority item it blocks waits | Δ-less on purpose: the model without the plugin scores 1.0 |
 | `implement-backlog-owner` | two independent items get an `Owner: <path> (YYYY-MM-DD)` line (by any tool) before dispatch, in parallel worktrees or one after the other; the prompt does not mention agents or worktrees | detected −0.50, before its items got red-first `Check`s |
-| `implement-backlog-auth` | an authentication item is named and asked about before dispatch; it is not dispatched or edited | Δ-less on purpose: core.md states the auth rule too |
+| `implement-backlog-auth` | an authentication item is named and asked about before dispatch; it is not dispatched or edited | Δ-less on purpose: core.md states the auth rule too; measured before its items got red-first `Check`s |
 | `implement-backlog-quota` | a missing credential is `BLOCKED`, `Unblock owner: user`, with the check run once and not retried | detected −0.33 (3 runs) |
 | `implement-backlog-roles` | the L item stops at `REVIEW` with a plan; the two S items, in different files, go straight through | detected −1.00, before its items got red-first `Check`s |
-| `implement-backlog-stale-items` | of three ready items, the one whose `Check` already passes and the one whose `Where` file moved are reported as `stale:` and never claimed, dispatched or edited; only the valid one gets an `Owner` line | not run yet |
+| `implement-backlog-stale-items` | of three ready items, the one whose `Check` already passes and the one whose `Where` file moved are reported as `stale:` and never claimed (no `Owner` under them in `TODO.md`), dispatched or edited; only the valid one gets an `Owner` line | not run yet |
 | `code-review-weakened-criterion` | a quietly weakened `Done when` is rated P1 and blocks the merge | survived: not attributed at 1 run |
 | `trigger-client-reply` | "reply to the client…" fires client-reply; the draft is free of jargon | detected −0.50 |
 | `deploy-checklist-no-provider-cli` | a repository with no deployment provider gets a checklist that names the gap; no provider CLI runs and none is invented | detected −0.25 |
