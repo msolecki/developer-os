@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@528d268b268a">
+<meta name="dos-source" content="docs/product/decisions.md@530aec0a66ec">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -172,6 +172,7 @@
 <li><strong>Amended 2026-10-16:</strong> the card comes from its own hook, <code>state-card.py</code>, matched to <code>compact</code> and <code>resume</code>; the core rules print from a separate <code>cat</code> hook (D2), so the card is no longer guaranteed to follow them.</li>
 <li><strong>Amended 2026-10-24:</strong> the state card also runs on a forked session (source <code>fork</code>).</li>
 <li><strong>Rejected:</strong> a <code>PreCompact</code> hook (its input and output are undocumented); <code>.claude/devos-state.md</code> (one more <code>.gitignore</code> entry per project).</li>
+<li><strong>Amended 2026-11-07:</strong> <code>PreCompact</code> is now documented (its stdout steers the summary), but it is still not used: D27 found no state lost across a compaction.</li>
 </ul>
 <h2 id="d17-one-backlog-item-format-defined-in-the-skills-only">D17. One backlog item format, defined in the skills only</h2>
 <ul>
@@ -240,6 +241,14 @@
 <li><strong>Why:</strong> a model that keeps calling the same failing tool is the commonest runaway loop (Harness Patterns 1.01 Game Loop); a rule loaded at session start fades, a reminder tied to the event does not. Checked in <code>claude -p</code>: a non-zero Bash fires the event and the text reaches the model.</li>
 <li><strong>Alternatives:</strong> two failures (the second retry of a flaky command is often legitimate); counting the whole session (a test run that is red now and then over an hour is not a loop); resetting on success (a second hook on every tool call); a <code>PostToolUse</code> hook (it does not fire for a failed call); a rule in <code>core.md</code> (no room, and it fades).</li>
 <li><strong>Amended 2026-10-31:</strong> a success does not reset the count, so a test run that is red, green and red again within 10 minutes during test-first work reaches three. The message says so ("each within 10 minutes of the last") and tells the agent to stop only if nothing changed between the runs; a reset on success would cost a hook process on every Bash call.</li>
+</ul>
+<h2 id="d27-no-skill-paths-hook-if-or-precompact-hook-yet">D27. No skill <code>paths:</code>, hook <code>if:</code> or <code>PreCompact</code> hook yet</h2>
+<ul>
+<li><strong>Date:</strong> 2026-11-07 · Issue #114 · Claude Code 2.1.319</li>
+<li><strong>Decision:</strong> the <code>*-conventions</code> skills keep description matching, <code>guard.py</code> runs on every Bash, Edit and Write call, and no <code>PreCompact</code> hook is added.</li>
+<li><strong>Why, <code>paths:</code>:</strong> tested with <code>claude -p --setting-sources project</code>: a project skill with <code>paths:</code> stays out of the skill listing until a matching file is read. A plugin skill (<code>--plugin-dir</code>) with the same field is listed with its full description before any match, and reading a matching file loads nothing. A plugin skill saves no description characters. <code>claude plugin validate --strict</code> accepts the field. Recheck first with a marketplace install, the case not tested.</li>
+<li><strong>Why, <code>if:</code>:</strong> <code>guard.py</code> takes 22 ms a call (median of 40, about 15 ms of it Python start-up). An <code>if</code> holds one permission rule and is best-effort. Bash calls must all be scanned, because the guard undoes obfuscation (<code>np""m i</code>, <code>$IFS</code>). The protected Edit and Write paths depend on <code>realpath</code>, <code>~</code> and <code>CLAUDE_CONFIG_DIR</code>, which a glob cannot express. No call can be skipped without weakening D6.</li>
+<li><strong>Why, <code>PreCompact</code>:</strong> 81 compactions in 1244 local sessions over 30 days. A keyword scan of the first eight user messages after each one found no complaint of lost state. The state card (D16) is enough.</li>
 </ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>

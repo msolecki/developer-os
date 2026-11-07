@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-24
+last-verified: 2026-11-07
 ---
 
 # Decisions
@@ -238,6 +238,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-10-24:** the state card also runs on a forked session (source `fork`).
 - **Rejected:** a `PreCompact` hook (its input and output are undocumented); `.claude/devos-state.md`
   (one more `.gitignore` entry per project).
+- **Amended 2026-11-07:** `PreCompact` is now documented (its stdout steers the summary), but it is still
+  not used: D27 found no state lost across a compaction.
 
 ## D17. One backlog item format, defined in the skills only
 
@@ -374,6 +376,23 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   again within 10 minutes during test-first work reaches three. The message says so ("each within 10
   minutes of the last") and tells the agent to stop only if nothing changed between the runs; a reset
   on success would cost a hook process on every Bash call.
+
+## D27. No skill `paths:`, hook `if:` or `PreCompact` hook yet
+
+- **Date:** 2026-11-07 · Issue #114 · Claude Code 2.1.319
+- **Decision:** the `*-conventions` skills keep description matching, `guard.py` runs on every Bash,
+  Edit and Write call, and no `PreCompact` hook is added.
+- **Why, `paths:`:** tested with `claude -p --setting-sources project`: a project skill with `paths:`
+  stays out of the skill listing until a matching file is read. A plugin skill (`--plugin-dir`) with
+  the same field is listed with its full description before any match, and reading a matching file
+  loads nothing. A plugin skill saves no description characters. `claude plugin validate --strict`
+  accepts the field. Recheck first with a marketplace install, the case not tested.
+- **Why, `if:`:** `guard.py` takes 22 ms a call (median of 40, about 15 ms of it Python start-up). An
+  `if` holds one permission rule and is best-effort. Bash calls must all be scanned, because the guard
+  undoes obfuscation (`np""m i`, `$IFS`). The protected Edit and Write paths depend on `realpath`,
+  `~` and `CLAUDE_CONFIG_DIR`, which a glob cannot express. No call can be skipped without weakening D6.
+- **Why, `PreCompact`:** 81 compactions in 1244 local sessions over 30 days. A keyword scan of the first
+  eight user messages after each one found no complaint of lost state. The state card (D16) is enough.
 
 ## Rules history
 
