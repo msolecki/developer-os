@@ -15,6 +15,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The core-rules cap is 8900 bytes (was 8192). D10 amended.
 - The core rules point user-level overrides at `CLAUDE.md` only; Claude Code reads no user-level `AGENTS.md`.
 
+### Fixed
+- Every agent with Bash (code-reviewer, database-reviewer, infra-reviewer, security-auditor, performance-engineer,
+  qa-expert, docs-writer, dependency-upgrader) is told never to change git state — no `checkout`, `switch`,
+  `reset`, `stash`, `restore`, `worktree add`, `commit` or `merge` — and to read another revision with `git show`
+  or `git diff`. An infra-reviewer had detached the orchestrator's HEAD mid-integration (#110).
+
 ## [0.2.7] - 2026-10-31
 
 ### Added
