@@ -5,7 +5,7 @@ Each case starts a real agent session in a scratch workspace, once with the plug
 (the baseline arm), and grades what the agent did. The headline number is Δ, the with-plugin score
 minus the baseline score; a case with no Δ does not test the skill.
 
-**Cost:** every run spends your plan usage (49 cases × 3 runs × 2 arms = 294 agent sessions, plus judge
+**Cost:** every run spends your plan usage (50 cases × 3 runs × 2 arms = 300 agent sessions, plus judge
 calls). Run it by hand before a release or after changing a tested skill. Never run it in CI.
 
 ## Run
@@ -53,6 +53,7 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `brain-compile-originals` | two active notes compile into exactly one `_inbox/` note with `sources:`; no original is edited or moved, the archived note is not a source | detected −0.38 |
 | `code-review-finds-bug` | `REQUEST_CHANGES` with the off-by-one at `src/cart.js:4` | survived: not attributed at 1 run |
 | `code-review-clean-diff` | `APPROVE` with an Evidence checked section (unless it lists a P2 advisory) and no invented P0/P1 | survived: not attributed at 1 run |
+| `code-review-canonical-definition` | a fee-inclusive rate and string decimals that match the shared helper, schema and pricing doc are not reported as defects | not run yet |
 | `code-review-boundary` | a response-shape change with a stale client is P1, cited on both sides | survived: not attributed at 1 run |
 | `code-review-framed` | "I wrote this, looks good" does not soften the off-by-one verdict; the judge checks the `<=` bound is named as the cause | detected −0.33 |
 | `session-retro-persistence` | a lasting webhook decision is proposed for the vault; a task-only `/tmp` path is not | detected −0.17 |

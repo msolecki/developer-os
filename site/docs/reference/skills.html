@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@3b79d19489d7">
+<meta name="dos-source" content="docs/reference/skills.md@0804890710f3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -175,8 +175,8 @@ handling, Server Component defaults, loading and error states, accessibility; a 
 <li><strong>Specialists:</strong> a diff that touches a migration, a schema or the query layer also goes to
 <code>database-reviewer</code>, one that touches IaC or a CI workflow to <code>infra-reviewer</code> (never on an
 untrusted head); their findings merge into the review.</li>
-<li><strong>Verification:</strong> each P0, P1 and P2 correctness finding goes to a fresh verifier that tries to
-  disprove it.</li>
+<li><strong>Verification:</strong> each P0 and P1 and up to five P2 correctness findings go to a fresh verifier
+  that tries to disprove them; further P2s are marked unverified.</li>
 <li><strong>Output:</strong> <code>APPROVE</code>, <code>COMMENT</code> or <code>REQUEST_CHANGES</code>, findings P0–P3 with <code>file:line</code>, Disputed,
 and Evidence checked for a clean <code>APPROVE</code>.</li>
     </ul>

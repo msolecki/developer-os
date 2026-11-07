@@ -143,8 +143,8 @@ its done file. A perspective whose reviewer ended `BLOCKED`, failed or hit its t
 - **Specialists:** a diff that touches a migration, a schema or the query layer also goes to
   `database-reviewer`, one that touches IaC or a CI workflow to `infra-reviewer` (never on an
   untrusted head); their findings merge into the review.
-- **Verification:** each P0, P1 and P2 correctness finding goes to a fresh verifier that tries to
-  disprove it.
+- **Verification:** each P0 and P1 and up to five P2 correctness findings go to a fresh verifier
+  that tries to disprove them; further P2s are marked unverified.
 - **Output:** `APPROVE`, `COMMENT` or `REQUEST_CHANGES`, findings P0–P3 with `file:line`, Disputed,
   and Evidence checked for a clean `APPROVE`.
 

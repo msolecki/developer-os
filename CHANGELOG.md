@@ -20,8 +20,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - code-review rates a domain formula, a field type or a value format against the project's canonical helper,
-  schema or business doc, and sends P2 correctness findings to the verifier too; two unverified P2s had driven
-  fix-pr work that was then dropped (#111). code-reviewer reads the canonical definition the same way.
+  schema or business doc, and sends up to five P2 correctness findings to the verifier too; two unverified P2s had driven
+  fix-pr work that was then dropped (#111). code-reviewer and the verifier read the canonical definition the same way.
 - Every agent with Bash (code-reviewer, database-reviewer, infra-reviewer, security-auditor, performance-engineer,
   qa-expert, docs-writer, dependency-upgrader) runs only read-only git (`diff`, `log`, `show`, `status`, `blame`,
   `grep`, `ls-files`) and reads another revision with `git show` or `git diff`. An infra-reviewer had detached the

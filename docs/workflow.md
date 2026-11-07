@@ -433,8 +433,9 @@ Link from the vault to the repository by path or URL; do not copy repository con
 The full list of skills, agents and output styles is in the
 [README](../README.md#whats-inside).
 
-code-review and audit-to-backlog send every P0/P1 finding (code-review also every P2 correctness finding) to a fresh verifier that sees only the
-claim (the read-only `verifier` agent); refuted findings move to a
+code-review and audit-to-backlog send every P0/P1 finding (code-review also up to five P2
+correctness findings) to a fresh verifier that sees only the claim (the read-only `verifier`
+agent); refuted findings move to a
 Disputed list and do not block the verdict or enter the backlog.
 
 Run `instruction-review --prune` when the default model changes and every six months: it gives each

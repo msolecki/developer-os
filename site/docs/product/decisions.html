@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@46d90f287759">
+<meta name="dos-source" content="docs/product/decisions.md@528d268b268a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -112,7 +112,7 @@
 <li><strong>Decision:</strong> every review, audit and triage skill and every reviewer agent rates P0–P3 with the same definitions; verdicts are <code>APPROVE</code>, <code>COMMENT</code>, <code>REQUEST_CHANGES</code>. code-review and audit-to-backlog send each P0/P1 finding to a verifier that sees only the claim (Codex when its plugin is installed, otherwise a fresh subagent); refuted findings move to a Disputed list.</li>
 <li><strong>Why:</strong> one scale makes findings comparable across skills; a verifier without the reviewer's reasoning catches confident false positives before they block a merge.</li>
 <li><strong>Amended 2026-10-24:</strong> the verifier is always a fresh <code>verifier</code> agent; the Codex option is removed (D21).</li>
-<li><strong>Amended 2026-11-07:</strong> code-review also verifies every P2 correctness finding: two unverified P2s had driven fix-pr work (#111).</li>
+<li><strong>Amended 2026-11-07:</strong> code-review also verifies up to five P2 correctness findings: two unverified P2s had driven fix-pr work (#111).</li>
 </ul>
 <h2 id="d9-action-skills-declare-where-they-stop-and-what-they-never-do">D9. Action skills declare where they stop and what they never do</h2>
 <ul>
