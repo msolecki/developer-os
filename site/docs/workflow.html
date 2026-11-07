@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@9d6e5a7ecf7c">
+<meta name="dos-source" content="docs/workflow.md@e6268b8f123d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -420,7 +420,7 @@ manager, entry X"), never to its value.</li>
     <h2 id="what-else-the-plugin-ships">What else the plugin ships</h2>
     <p>The full list of skills, agents and output styles is in the
 <a href="readme.html#whats-inside">README</a>.</p>
-    <p>code-review and audit-to-backlog send every P0/P1 finding to a fresh verifier that sees only the
+    <p>code-review and audit-to-backlog send every P0/P1 finding (code-review also every P2 correctness finding) to a fresh verifier that sees only the
 claim (the read-only <code>verifier</code> agent); refuted findings move to a
 Disputed list and do not block the verdict or enter the backlog.</p>
     <p>Run <code>instruction-review --prune</code> when the default model changes and every six months: it gives each

@@ -134,7 +134,8 @@ its done file. A perspective whose reviewer ended `BLOCKED`, failed or hit its t
 - **Reviewer:** code written in this session goes to the `code-reviewer` agent with a neutral brief
   (diff, spec or `Done when`, rubric; no author, no rationale).
 - **What it reads:** both sides of every contract the change touches (handler and client, schema
-  and type, route and links, state map and transitions); a mismatch is P1.
+  and type, route and links, state map and transitions); a mismatch is P1. A domain formula, a field type
+  or a value format is rated against the project's canonical helper, schema or business doc.
 - **What it checks:** auth, middleware, migrations, tenant boundaries and destructive paths; tenant
   scoping, soft-delete filters, query ownership, breaking API changes, missing tests, error
   handling, Server Component defaults, loading and error states, accessibility; a weakened
@@ -142,7 +143,8 @@ its done file. A perspective whose reviewer ended `BLOCKED`, failed or hit its t
 - **Specialists:** a diff that touches a migration, a schema or the query layer also goes to
   `database-reviewer`, one that touches IaC or a CI workflow to `infra-reviewer` (never on an
   untrusted head); their findings merge into the review.
-- **Verification:** each P0 and P1 goes to a fresh verifier that tries to disprove it.
+- **Verification:** each P0, P1 and P2 correctness finding goes to a fresh verifier that tries to
+  disprove it.
 - **Output:** `APPROVE`, `COMMENT` or `REQUEST_CHANGES`, findings P0–P3 with `file:line`, Disputed,
   and Evidence checked for a clean `APPROVE`.
 

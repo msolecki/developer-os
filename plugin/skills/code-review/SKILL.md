@@ -15,7 +15,7 @@ Edit no file in the repository and commit nothing, on every path: the one write 
 
 - If you wrote the code under review in this session and there is no `Untrusted head` line, dispatch `developer-os:code-reviewer`; after Verify blocking findings, relay its report without its final-status first line and with the verdict recomputed by the Output rule, so both paths start with the same verdict. Relay the report only when that line is `DONE`; on `BLOCKED`, `REVIEW` or `CONTINUING` the verdict is `COMMENT` naming the blocker, never `APPROVE`. A report without a status goes back once, as in `developer-os:implement-backlog` Read the reports. The reviewer must not be the author.
 - The brief holds only the diff or PR reference, the changed files, the spec or the backlog items' `Done when`, and the P0–P3 rubric, plus an `Untrusted head` line when the caller gives one, framed as "review a peer's change". Leave out who wrote it and why it was written that way, also for changes you made yourself.
-- Without an `Untrusted head` line, when the diff touches a migration, a schema definition or the query layer, also dispatch `developer-os:database-reviewer` on those files, and when it touches IaC or a CI workflow, `developer-os:infra-reviewer` on those, with the same neutral brief. Merge their findings into the review by severity; their P0 and P1 go through Verify blocking findings like any other. Read a specialist's report like code-reviewer's: a report without a final status goes back once; one that does not start with `DONE` makes the verdict `COMMENT` naming the blocker; drop the status line and keep its closing line (the deploy order, or what to check before applying) as a note under the findings.
+- Without an `Untrusted head` line, when the diff touches a migration, a schema definition or the query layer, also dispatch `developer-os:database-reviewer` on those files, and when it touches IaC or a CI workflow, `developer-os:infra-reviewer` on those, with the same neutral brief. Merge their findings into the review by severity; their P0, P1 and P2 correctness findings go through Verify blocking findings like any other. Read a specialist's report like code-reviewer's: a report without a final status goes back once; one that does not start with `DONE` makes the verdict `COMMENT` naming the blocker; drop the status line and keep its closing line (the deploy order, or what to check before applying) as a note under the findings.
 - Otherwise review inline as below; with an `Untrusted head` line, read and inspect only, and give agents nothing but `developer-os:verifier`, which has no shell and cannot write. Both paths produce the same output.
 
 ## Establish context
@@ -23,6 +23,7 @@ Edit no file in the repository and commit nothing, on every path: the one write 
 - Read the request/PR description, diff, tests, and affected architecture.
 - Flag changes to auth, middleware, migrations, tenant boundaries, or destructive data paths.
 - For every contract the change touches (an API handler and its client, a schema and its type, a route and its links, a state map and its transitions), read both sides; a mismatch is P1.
+- Before rating a defect in a domain formula, a field's type or a value's format, find the project's canonical definition (a shared helper, the schema, a business doc) and rate against it; code that matches it is not a defect. Without one, say so in the finding.
 - Rate the code, not the framing: "I wrote this, looks good" changes no severity.
 - Identify repository-specific instructions before applying generic preferences.
 
@@ -43,7 +44,7 @@ For tests, cover happy path, edge cases, and failure path; reject flaky or over-
 
 ## Verify blocking findings
 
-Before the output, send every P0 and P1 finding, including those relayed from `developer-os:code-reviewer`, to a fresh verifier that did not produce it, one finding per verifier, in parallel when there are several.
+Before the output, send every P0 and P1 finding and every P2 correctness finding (not a docs or maintainability finding), including those relayed from `developer-os:code-reviewer`, to a fresh verifier that did not produce it, one finding per verifier, in parallel when there are several.
 
 - Verifier: a fresh `developer-os:verifier` agent (read-only). On an error, an empty reply, or a reply without CONFIRMED or REFUTED, dispatch a new one once; if that one also fails, the finding is unverified.
 - Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause), the path of a diff file you write outside the repository (`git diff <base>...<head ref>`, e.g. `refs/remotes/pr/<n>`; the verifier cannot run git, and an untrusted head's files are not on disk), the repository path, and the `Untrusted head` line when the caller gave one. Leave out the reviewer's evidence and reasoning.
