@@ -146,7 +146,7 @@ the README lists the mutation checks that prove it.
    checked; fix any the check reports.
 
 Changing `plugin/rules/core.md`: it sits just under the 8900-byte cap (`wc -c < plugin/rules/core.md`).
-Every added line must replace or shorten another; run `instruction-review --prune` on it inside this repository.
+Every added line must replace or shorten another, unless a D10 amendment raises the cap; run `instruction-review --prune` on it inside this repository.
 
 ## Branches and releases
 

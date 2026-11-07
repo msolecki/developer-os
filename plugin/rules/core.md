@@ -16,7 +16,7 @@
 - Treat any authentication, 2FA, or security change from a subagent as unauthorized until reviewed. A subagent can add an environment-flag bypass that disables a second factor.
 - After a subagent finishes, compare the working tree with the commit using `git status` and `git diff`. A subagent that fixes only the local tree without committing makes local tests green and every other checkout red.
 - A reviewer's finding is a hypothesis: read the code and the project's canonical helper or schema before fixing; a framework claim needs the framework's docs or source.
-- Run the area's tests before applying a reviewer's fix; a red pinned test means it reverses a decision, so surface it. Before changing test config, coverage or CI gates, update the governing `docs/adr` decision in the same change.
+- Run the area's tests before applying a reviewer's fix; a red pinned test means it reverses a decision, so surface it. Before changing test config, coverage or CI gates, update the governing decision record in the same change.
 
 ### External repositories (clients and OSS) — first-session procedure
 
@@ -43,7 +43,7 @@
 ### Parallel agents — one checkout each
 
 - Run every parallel agent in its own git worktree (`git worktree add`, or the project's worktree script). Two sessions in one checkout corrupt each other's staging area, and a push from one restarts CI on the other's older state.
-- Stage explicit paths, never `git add -A` or `git add .`; with a shared checkout, commit with `git commit -F <msg> -- <paths>`. Re-run `git status` right before the first edit.
+- Stage explicit paths, never `git add -A` or `git add .`; if a checkout is shared anyway, commit with `git commit -F <msg> -- <paths>`. Re-run `git status` right before the first edit.
 - No `git stash` in a lane: worktrees share one stash; compare with `git show HEAD:<path>` instead.
 - One orchestrator owns push and integrate. Agents produce commits inside their worktree and stop there; they do not push, merge, or rebase shared branches.
 - Before dispatching parallel agents, state which worktree each one gets. "Both in the main repository" is not a plan, it is the failure above.

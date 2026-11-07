@@ -13,6 +13,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - The core-rules cap is 8900 bytes (was 8192). D10 amended.
+- The core rules point user-level overrides at `CLAUDE.md` only; Claude Code reads no user-level `AGENTS.md`.
 
 ## [0.2.7] - 2026-10-31
 

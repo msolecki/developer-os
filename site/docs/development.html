@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@79b5ca26854d">
+<meta name="dos-source" content="docs/development.md@aad9d750cfe0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -143,7 +143,7 @@
       <li>Add the name to <code>plugin/SURFACE.txt</code> (the check prints the line), and update the README component list, <code>CHANGELOG.md</code>, and <a href="product/functional-spec.html">product/functional-spec.md</a>. Counts written as digits are checked; fix any the check reports.</li>
     </ol>
     <p>Changing <code>plugin/rules/core.md</code>: it sits just under the 8900-byte cap (<code>wc -c &lt; plugin/rules/core.md</code>).
-    Every added line must replace or shorten another; run <code>instruction-review --prune</code> on it inside this repository.</p>
+    Every added line must replace or shorten another, unless a D10 amendment raises the cap; run <code>instruction-review --prune</code> on it inside this repository.</p>
     <h2 id="branches-and-releases">Branches and releases</h2>
     <ul>
       <li><code>main</code> is the default branch and what the marketplace installs; it moves only on a release (D20).</li>
