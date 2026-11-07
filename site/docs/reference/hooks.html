@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@b5290b456ced">
+<meta name="dos-source" content="docs/reference/hooks.md@6ea1f067254d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -192,6 +192,9 @@ Worktrees:
     quotes run by a shell (<code>bash -c 'echo x &gt; f'</code>), a formatter that writes by default (<code>prettier -w</code>,
     <code>black</code>, <code>gofmt -w</code>, <code>cargo fmt</code>), a download or unpack into the tree (<code>curl -o</code>, <code>wget</code>, <code>tar x</code>,
     <code>unzip</code>), and an install without a package (<code>npm ci</code>, <code>pnpm install</code>), which a review may need to run tests. The sandbox, not the guard, stops these.</p>
+    <p><strong>Git state in the other agents:</strong> qa-expert, docs-writer and dependency-upgrader also have Bash, but the guard does not
+    cover them (two of them write files); only their prompts limit them to read-only git. In every agent the prompt is the
+    first layer: an ask that is approved, by the user or by auto mode, still runs the command (#110).</p>
     <p><strong>Failure:</strong> any exception exits 0; input without <code>{…}</code> or without a <code>command</code> string produces no
     output.</p>
     <p><strong>Not a security boundary.</strong> The guard matches command text, so it decides only what needs your

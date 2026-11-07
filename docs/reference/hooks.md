@@ -178,6 +178,10 @@ quotes run by a shell (`bash -c 'echo x > f'`), a formatter that writes by defau
 `black`, `gofmt -w`, `cargo fmt`), a download or unpack into the tree (`curl -o`, `wget`, `tar x`,
 `unzip`), and an install without a package (`npm ci`, `pnpm install`), which a review may need to run tests. The sandbox, not the guard, stops these.
 
+**Git state in the other agents:** qa-expert, docs-writer and dependency-upgrader also have Bash, but the guard does not
+cover them (two of them write files); only their prompts limit them to read-only git. In every agent the prompt is the
+first layer: an ask that is approved, by the user or by auto mode, still runs the command (#110).
+
 **Failure:** any exception exits 0; input without `{…}` or without a `command` string produces no
 output.
 
