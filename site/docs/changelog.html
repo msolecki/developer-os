@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@f1ac4af44cc9">
+<meta name="dos-source" content="CHANGELOG.md@46f1e5950914">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -67,6 +67,11 @@ only the same <code>brain-search</code> check. Eval case <code>session-retro-cap
     </ul>
     <h3 id="unreleased-fixed">Fixed</h3>
     <ul>
+<li>parallel-lanes gives each lane a runnable <code>Check</code> next to its <code>Done when</code> and runs it itself at integrate;
+a lane with a red or <code>Manual</code> <code>Check</code> goes to Needs you even when it reports <code>DONE</code> with a green fast check.
+A lane no longer gets <code>--add-dir</code> on the run directory (its report goes to a git-ignored file in its worktree),
+and the status table flags a <code>LANES.md</code> or prompt changed since launch (#116). Eval case
+<code>parallel-lanes-check-gates-integrate</code>.</li>
 <li>code-review rates a domain formula, a field type or a value format against the project's canonical helper,
 schema or business doc, and sends up to five P2 correctness findings to the verifier too; two unverified P2s had driven
 fix-pr work that was then dropped (#111). code-reviewer and the verifier read the canonical definition the same way.</li>

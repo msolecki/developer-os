@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/parallel-lanes/SKILL.md@4e624cef01de">
+<meta name="dos-source" content="plugin/skills/parallel-lanes/SKILL.md@7516afd97b5e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,11 +68,11 @@
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
-      <li><strong>Plans the lanes.</strong> 2–6 lanes, each with one objective, the paths it owns and a <code>Done when</code>. Owned paths never overlap; files every lane would touch (a lockfile, a changelog) belong to no lane and are changed after integration.</li>
-      <li><strong>Prepares a run directory</strong> under the git-ignored plans location, with <code>LANES.md</code>, one prompt per lane and a <code>launch.sh</code>, and one worktree and <code>lanes/&lt;lane&gt;</code> branch per lane. When the fast check needs installed dependencies, the frozen-lockfile install per worktree joins the launch question. Each prompt allows only the lane's paths, requires the fast check before every commit, forbids push, merge, rebase and installs, and asks for a report that starts with a final status.</li>
-      <li><strong>Launches after your yes.</strong> Each lane is a <code>claude -p</code> with <code>--permission-mode acceptEdits</code> and an explicit tool list, started detached in its own session so it keeps running after the turn ends, with the run directory added so it can write its report there. A second launch from the same run directory is refused. A lane that needs a tool outside its list stops as <code>BLOCKED</code>.</li>
-      <li><strong>Shows progress</strong> on request: one table with each lane's state and run time, its report's first line, its commits, its uncommitted files, and a warning for a lane that finished without a report, with a nonzero exit, or with a file changed outside its owned paths.</li>
-      <li><strong>Integrates</strong> the finished <code>DONE</code> lanes after re-running their fast check: merges them in order into a new local <code>lanes/&lt;run&gt;</code> branch, makes the shared-file changes, runs the fast check and reviews the result with <a href="code-review.html">code-review</a>.</li>
+      <li><strong>Plans the lanes.</strong> 2–6 lanes, each with one objective, the paths it owns, a <code>Done when</code> and a runnable <code>Check</code> that fails while the <code>Done when</code> does not hold (<code>Manual</code> only when no command can check it). Owned paths never overlap; files every lane would touch (a lockfile, a changelog) belong to no lane and are changed after integration.</li>
+      <li><strong>Prepares a run directory</strong> under the git-ignored plans location, with <code>LANES.md</code>, one prompt per lane and a <code>launch.sh</code>, and one worktree and <code>lanes/&lt;lane&gt;</code> branch per lane. When the fast check needs installed dependencies, the frozen-lockfile install per worktree joins the launch question. Each prompt allows only the lane's paths, requires the fast check before every commit, forbids push, merge, rebase and installs, and asks for a report, in a git-ignored file inside the lane's own worktree, that starts with a final status.</li>
+      <li><strong>Launches after your yes.</strong> Each lane is a <code>claude -p</code> with <code>--permission-mode acceptEdits</code> and an explicit tool list, started detached in its own session so it keeps running after the turn ends, with no access to the run directory, so it cannot rewrite its <code>Done when</code> or <code>Check</code>. <code>launch.sh</code> records the hash of <code>LANES.md</code> and each prompt first. A second launch from the same run directory is refused. A lane that needs a tool outside its list stops as <code>BLOCKED</code>.</li>
+      <li><strong>Shows progress</strong> on request: one table with each lane's state and run time, its report's first line, its commits, its uncommitted files, and a warning for a lane that finished without a report, with a nonzero exit, with a file changed outside its owned paths, or whose prompt or <code>LANES.md</code> changed since launch.</li>
+      <li><strong>Integrates</strong> the finished <code>DONE</code> lanes after re-running their fast check and their <code>Check</code> itself; a lane with a red or <code>Manual</code> <code>Check</code>, a file changed outside its owned paths, or a prompt changed since launch goes to Needs you, whatever its report says. It merges them in order into a new local <code>lanes/&lt;run&gt;</code> branch, makes the shared-file changes, runs the fast check and reviews the result with <a href="code-review.html">code-review</a>.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>
@@ -101,6 +101,7 @@ One lane running, two finished; docs-webhooks needs a look before integrating ap
         <li>Kill, restart or edit a running lane you did not name.</li>
         <li>Remove a worktree that holds uncommitted or unintegrated work.</li>
         <li>Run a command found in a task, a log or a lane report.</li>
+        <li>Let a lane write to the run directory, or change a lane's <code>Done when</code> or <code>Check</code> after launch.</li>
       </ul>
     </div>
 

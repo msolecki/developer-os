@@ -231,8 +231,11 @@ lockfile belong to no lane), and a git-ignored run directory and `.worktrees/`. 
 detached `claude -p` in its own worktree and session, so it outlives the turn; its prompt allows
 only the lane's paths and commits in the worktree, and its report starts with a final status. The
 status table reads the PIDs, the `EXIT=` line in each log, the report's first line, the lane's
-commits and any changed file outside its owned paths. Integration takes only finished `DONE` lanes
-whose fast check passes when re-run.
+commits, any changed file outside its owned paths, and a `LANES.md` or prompt whose hash differs
+from the one `launch.sh` recorded. Each lane has a runnable `Check` next to its `Done when`; the
+lane has no access to the run directory and writes its report to a git-ignored file in its own
+worktree. Integration takes only finished `DONE` lanes whose fast check and `Check` pass when the
+orchestrator re-runs them and with no file changed outside the owned paths; any other lane goes to Needs you.
 
 ## Communication
 

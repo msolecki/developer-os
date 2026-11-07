@@ -19,6 +19,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   only the same `brain-search` check. Eval case `session-retro-capture-gate`.
 
 ### Fixed
+- parallel-lanes gives each lane a runnable `Check` next to its `Done when` and runs it itself at integrate;
+  a lane with a red or `Manual` `Check` goes to Needs you even when it reports `DONE` with a green fast check.
+  A lane no longer gets `--add-dir` on the run directory (its report goes to a git-ignored file in its worktree),
+  and the status table flags a `LANES.md` or prompt changed since launch (#116). Eval case
+  `parallel-lanes-check-gates-integrate`.
 - code-review rates a domain formula, a field type or a value format against the project's canonical helper,
   schema or business doc, and sends up to five P2 correctness findings to the verifier too; two unverified P2s had driven
   fix-pr work that was then dropped (#111). code-reviewer and the verifier read the canonical definition the same way.
