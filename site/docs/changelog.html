@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@f1ac4af44cc9">
+<meta name="dos-source" content="CHANGELOG.md@98adec29878a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -51,6 +51,11 @@
     <h2 id="unreleased">[Unreleased]</h2>
     <h3 id="unreleased-added">Added</h3>
     <ul>
+<li>implement-backlog triages the batch before the claim: an item whose <code>Where</code> is gone, whose <code>Check</code>
+already passes, whose files an open pull request touches, or which a project doc contradicts is
+reported as <code>stale:</code> and never claimed or dispatched; audit-to-backlog drops a finding the done file
+or an open pull request already covers. New eval case <code>implement-backlog-stale-items</code>; the
+implement-backlog owner, roles and auth cases get red-first <code>Check</code>s. (#115)</li>
 <li>Core rules: a reviewer's finding is a hypothesis to check against the code and the canonical helper; run the
 area's tests before applying a reviewer's fix and update the governing ADR when changing test gates; a new or
 changed gate counts only after it was seen to fail; a plan is deleted only after its steps landed.</li>
