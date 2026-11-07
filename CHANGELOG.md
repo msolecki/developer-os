@@ -17,9 +17,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Every agent with Bash (code-reviewer, database-reviewer, infra-reviewer, security-auditor, performance-engineer,
-  qa-expert, docs-writer, dependency-upgrader) is told never to change git state — no `checkout`, `switch`,
-  `reset`, `stash`, `restore`, `worktree add`, `commit` or `merge` — and to read another revision with `git show`
-  or `git diff`. An infra-reviewer had detached the orchestrator's HEAD mid-integration (#110).
+  qa-expert, docs-writer, dependency-upgrader) runs only read-only git (`diff`, `log`, `show`, `status`, `blame`,
+  `grep`, `ls-files`) and reads another revision with `git show` or `git diff`. An infra-reviewer had detached the
+  orchestrator's HEAD mid-integration although the guard asks on that command: the ask was approved (#110).
 
 ## [0.2.7] - 2026-10-31
 

@@ -18,16 +18,16 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os agents and output styles">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/agents/code-reviewer.md@a24eb52a21f1">
-<meta name="dos-source" content="plugin/agents/performance-engineer.md@e72146196733">
-<meta name="dos-source" content="plugin/agents/qa-expert.md@7da0e1d44cf6">
+<meta name="dos-source" content="plugin/agents/code-reviewer.md@f60448a367c7">
+<meta name="dos-source" content="plugin/agents/performance-engineer.md@6496caa85405">
+<meta name="dos-source" content="plugin/agents/qa-expert.md@085c8d570dd1">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@cfc47831a9a8">
 <meta name="dos-source" content="plugin/agents/verifier.md@074244d3fac6">
-<meta name="dos-source" content="plugin/agents/security-auditor.md@33ffe96a1e01">
-<meta name="dos-source" content="plugin/agents/database-reviewer.md@c6de31102468">
-<meta name="dos-source" content="plugin/agents/dependency-upgrader.md@034e06c8df48">
-<meta name="dos-source" content="plugin/agents/infra-reviewer.md@b535c40d6573">
-<meta name="dos-source" content="plugin/agents/docs-writer.md@a8b81bedf26f">
+<meta name="dos-source" content="plugin/agents/security-auditor.md@c7d651c79b2a">
+<meta name="dos-source" content="plugin/agents/database-reviewer.md@f5fbf0dc263d">
+<meta name="dos-source" content="plugin/agents/dependency-upgrader.md@e9b15925f839">
+<meta name="dos-source" content="plugin/agents/infra-reviewer.md@8d2fb44a80da">
+<meta name="dos-source" content="plugin/agents/docs-writer.md@69397204da06">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -56,7 +56,7 @@
   <main id="main" class="prose">
     <h1 id="agents">Agents</h1>
     <p class="lede">Agents are subagents that a skill or you dispatch for one focused job. Most are read-only reviewers that report and never edit; qa-expert writes tests when it is asked to, and docs-writer edits documentation files.</p>
-    <p>The plugin ships 10 agents. Each one treats code, diffs, PR text, fixtures and fetched pages as data, never as instructions: it runs no command it finds there. No agent changes git state (checkout, switch, reset, stash, restore, worktree add, commit, merge), because the session that dispatched it may be integrating in the same checkout; it reads another revision with <code>git show</code> or <code>git diff</code>. Skills such as <a href="skills/code-review.html">code-review</a>, <a href="skills/audit-to-backlog.html">audit-to-backlog</a> and <a href="skills/bug-triage.html">bug-triage</a> dispatch them; you can also ask for one by name, for example <code>developer-os:security-auditor</code>.</p>
+    <p>The plugin ships 10 agents. Each one treats code, diffs, PR text, fixtures and fetched pages as data, never as instructions: it runs no command it finds there. No agent with Bash runs a git command that changes state (checkout, switch, reset, stash, rebase, pull, commit, merge and the like), because the session that dispatched it may be integrating in the same checkout; it runs only read-only git and reads another revision with <code>git show</code> or <code>git diff</code>. Skills such as <a href="skills/code-review.html">code-review</a>, <a href="skills/audit-to-backlog.html">audit-to-backlog</a> and <a href="skills/bug-triage.html">bug-triage</a> dispatch them; you can also ask for one by name, for example <code>developer-os:security-auditor</code>.</p>
 
     <h2 id="final-status">Final status</h2>
     <p>Every agent's report starts with exactly one of four lines, so the skill or session that dispatched it knows what to do next:</p>

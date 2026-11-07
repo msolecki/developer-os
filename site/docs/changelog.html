@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@563854fe5d22">
+<meta name="dos-source" content="CHANGELOG.md@e6db4b28ea7e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -65,9 +65,9 @@ in a lane, run the repository-wide gate after integrating, never resume an inter
     <h3 id="unreleased-fixed">Fixed</h3>
     <ul>
 <li>Every agent with Bash (code-reviewer, database-reviewer, infra-reviewer, security-auditor, performance-engineer,
-qa-expert, docs-writer, dependency-upgrader) is told never to change git state — no <code>checkout</code>, <code>switch</code>,
-<code>reset</code>, <code>stash</code>, <code>restore</code>, <code>worktree add</code>, <code>commit</code> or <code>merge</code> — and to read another revision with <code>git show</code>
-or <code>git diff</code>. An infra-reviewer had detached the orchestrator's HEAD mid-integration (#110).</li>
+qa-expert, docs-writer, dependency-upgrader) runs only read-only git (<code>diff</code>, <code>log</code>, <code>show</code>, <code>status</code>, <code>blame</code>,
+<code>grep</code>, <code>ls-files</code>) and reads another revision with <code>git show</code> or <code>git diff</code>. An infra-reviewer had detached the
+orchestrator's HEAD mid-integration although the guard asks on that command: the ask was approved (#110).</li>
     </ul>
     <h2 id="027---2026-10-31">[0.2.7] - 2026-10-31</h2>
     <h3 id="027-added">Added</h3>
