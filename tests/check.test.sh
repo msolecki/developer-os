@@ -42,7 +42,7 @@ case $out in *"implement-backlog was removed from plugin/SURFACE.txt"*) ;; *) go
 if [ "$got" = fail ]; then echo "ok   a committed rename fails in a pull request"; else echo "FAIL a committed rename fails in a pull request: got $got" >&2; failed=1; fi
 g reset -q --hard origin/development && g update-ref -d refs/remotes/origin/development
 
-edit plugin/skills/brain-garden/SKILL.md '/^Find the line `Brain vault:/s/ once / twice /'
+edit plugin/skills/brain-garden/SKILL.md '/^Use a vault path the user/s/ once / twice /'
 run "a brain skill drifts from the shared vault paragraph" fail "vault: plugin/skills/brain-garden/SKILL.md"
 
 edit templates/project/docs/decisions/0001-template.md 's/^## Revisit when$/## Revisit/'
