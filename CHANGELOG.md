@@ -4,6 +4,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `site/workflow.html`: an animated overview of how knowledge moves between the session, the vault and
+  the repository, the daily loop, the life of a note and the hooks in one session.
+- `docs/getting-started.md`, "Your first 30 minutes": a guided path from install to a first search,
+  review, capture and code review.
+- The landing page plays one session in a terminal, with the hooks' own wording, shows the knowledge flow
+  and the daily loop animated, and folds the skill library and agents into one section that lists all
+  ten agents and the verifier's three answers.
+- The Counts stage fails when the release the landing page names differs from `plugin.json`.
+
 ### Changed
 
 - The Site stage compares the words of every `site/docs/` page with its source, so a refreshed hash

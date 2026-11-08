@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your first 30 minutes · developer-os</title>
+<meta name="description" content="A guided first session: install, vault, first search, review and capture, a project and a code review.">
+<link rel="canonical" href="https://msolecki.github.io/developer-os/docs/getting-started.html">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="developer-os">
+<meta property="og:title" content="Your first 30 minutes · developer-os">
+<meta property="og:description" content="A guided first session: install, vault, first search, review and capture, a project and a code review.">
+<meta property="og:url" content="https://msolecki.github.io/developer-os/docs/getting-started.html">
+<meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/docs.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="developer-os documentation">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="dos-source" content="docs/getting-started.md@c40d054f6955">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="your-first-30-minutes">Your first 30 minutes</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/getting-started.md">docs/getting-started.md</a></span><span>Verified 2026-11-08</span></p>
+    <p>A guided path from an empty install to a first review. Each step says what to type and what you
+should see. Examples of output are marked as examples; your text will differ.</p>
+    <h2 id="install">Install</h2>
+    <p>In Claude Code, type:</p>
+<pre><code>/plugin marketplace add msolecki/developer-os
+/plugin install developer-os@developer-os</code></pre>
+    <p>An install takes the latest release, from <code>main</code>. Later releases arrive with
+<code>claude plugin update developer-os@developer-os</code>; auto-update is off unless you turn it on under <code>/plugin</code>.</p>
+    <h2 id="set-up-the-vault">Set up the vault</h2>
+    <p>Ask Claude Code to run <code>brain-setup</code>. It asks for the vault's absolute path. An empty or missing
+directory becomes a new vault copied from the template. A non-empty one is connected only after you
+say so, and only missing folders, views and the note template are added; no file is overwritten.</p>
+    <p>Then it shows a diff and changes nothing until you approve: a <code>Brain vault: &lt;path&gt;</code> line in
+<code>~/.claude/CLAUDE.md</code> and the vault path in <code>permissions.additionalDirectories</code> in
+<code>~/.claude/settings.json</code>. It asks separately whether to set <code>"autoMemoryEnabled": false</code>, which
+stops Claude Code's auto memory from keeping a second, unreviewed store.</p>
+    <p>It ends with a smoke test: a search for "webhooks" in a new vault. If auto memory files already
+exist, it gives a count per project and offers <code>brain-import-memory</code>, which moves what is worth
+keeping into the vault.</p>
+    <h2 id="open-the-vault-in-obsidian">Open the vault in Obsidian</h2>
+    <p>Open the vault folder with "Open folder as vault"; Bases needs Obsidian 1.9.10 or later. In
+Settings, Core plugins, enable <strong>Bases</strong> and <strong>Templates</strong>, and set the Templates folder to <code>templates</code>.</p>
+    <h2 id="search">Search</h2>
+    <p>Ask: <code>brain-search webhooks</code>. In a new vault it finds the template's example note,
+<code>_inbox/process-webhooks-once-per-event-id.md</code>. The answer cites the note's path and marks it as
+unreviewed, because it is in <code>_inbox/</code> and nobody has checked it. Example:</p>
+<pre><code>Payment webhooks are processed once per event ID.
+  — _inbox/process-webhooks-once-per-event-id.md (inbox, unreviewed)</code></pre>
+    <h2 id="review">Review</h2>
+    <p>Ask: <code>brain-review</code>. It lists each inbox note with its summary, the topic folder that fits and any
+likely duplicate, then asks which to approve. Answer, for example, <code>promote 1</code>. Silence or "looks good"
+is not approval. For the named note it moves the file from <code>_inbox/</code> to its topic folder, then sets
+<code>status: active</code> and today's <code>updated</code>.</p>
+    <h2 id="capture">Capture</h2>
+    <p>Ask: "capture the decision about X", with a real decision of yours. brain-capture checks that the
+note outlives the task and has a written reason, redacts secrets, and writes one new file,
+<code>_inbox/&lt;kebab-case-topic&gt;.md</code>, with the headings Context, Decision, Why and Links. It tells you what it redacted.
+The note stays an unreviewed draft until you run brain-review on it.</p>
+    <h2 id="bring-a-project-in">Bring a project in</h2>
+    <p>In a terminal, copy the project template into your repository:</p>
+<pre><code>cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/</code></pre>
+    <p><code>-n</code> keeps any file that already exists. Then ask Claude Code to run <code>project-init</code> in that
+repository. It detects the stack, runs project-baseline, docs-sync and instruction-review, audits
+the code against the conventions that apply, and gives one numbered report. It writes nothing until
+you approve items from that one report.</p>
+    <h2 id="review-a-change">Review a change</h2>
+    <p>Make a small change, then ask for <code>code-review</code> on it. If the agent wrote the change in this
+session, an independent reviewer agent reviews it. The report starts with a verdict, <code>APPROVE</code>, <code>COMMENT</code>
+or <code>REQUEST_CHANGES</code>, then lists findings under P0, P1, P2 and P3. Each finding has a
+<code>file:line</code>, evidence, impact and a fix.</p>
+    <h2 id="wrap-up">Wrap up</h2>
+    <p>Ask for <code>session-retro</code> when you finish. It checks for uncommitted, unpushed and unmerged work,
+proposes cleanup, and gives a Done, Not done and Needs you status. After 30 tool calls the <code>Stop</code>
+hook offers it once per session.</p>
+    <h2 id="where-next">Where next</h2>
+    <ul>
+<li><a href="workflow.html">workflow.md</a>: the daily loop, the vault layout and the recommended configuration.</li>
+<li><a href="reference/skills.html">reference/skills.md</a>: what each skill checks and how.</li>
+    </ul>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -183,7 +183,7 @@ grep '<meta name="dos-source"' "$r/site/docs/pitfalls.html" > "$tmp/m"
 edit site/docs/glossary.html "/<meta name=\"dos-source\"/r $tmp/m"
 run "a page naming another page's source" fail "site: site/docs/glossary.html: names docs/pitfalls.md, which belongs to site/docs/pitfalls.html"
 
-edit site/index.html 's|<h2>The skill library.</h2>|<h2>The 99 skills.</h2>|'
+edit site/index.html 's|<h2>What ships in the plugin.</h2>|<h2>The 99 skills.</h2>|'
 run "a wrong count on the site" fail "says 99 skills"
 
 edit site/index.html 's|<li><span>Agents, output styles</span><span>[0-9]*, |<li><span>Agents, output styles</span><span>99, |'
@@ -191,6 +191,12 @@ run "a wrong count in a landing-page fact row" fail "says 99 agents"
 
 edit site/index.html 's|<li><span>Brain skills</span><span>[0-9]*</span>|<li><span>Brain skills</span><span>99</span>|'
 run "a wrong brain-skill count in a landing-page fact row" fail "says 99 brain skills"
+
+edit site/index.html 's/at release [0-9][0-9.]*/at release 9.9.9/'
+run "a landing page naming another release than plugin.json" fail "says release 9.9.9, plugin.json has"
+
+edit site/index.html 's/at release [0-9][0-9.]*/at the latest release/'
+run "a landing page naming no release" fail "names no release"
 
 edit site/index.html 's|<li><span>Hooks</span>|<li><span>Hook scripts</span>|'
 run "a renamed landing-page fact row" fail "unknown label: Hook scripts"

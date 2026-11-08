@@ -46,7 +46,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
 | Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff (in a pull request, since the merge base with `origin/$GITHUB_BASE_REF`) still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
-| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md` or `site/docs/changelog.html` (both are read only up to the first released section), `CONTRIBUTING.md`, `SECURITY.md` or a page under `site/` ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk |
+| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md` or `site/docs/changelog.html` (both are read only up to the first released section), `CONTRIBUTING.md`, `SECURITY.md` or a page under `site/` ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk; the landing page names no release, or one other than `plugin.json`'s `version` |
 | Core-rules size | `plugin/rules/core.md` exceeds 8900 bytes, or `CAP` in `state-card.py` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
@@ -78,7 +78,10 @@ only a branch ruleset that requires review of `.github/` stops a PR that edits t
 - `docs/`, one page per `docs/*.md` at the same path, plus `readme.html`, `changelog.html`,
   `contributing.html` and `security.html` for the root documents;
 - `skills/`, an index and one page per skill; `agents.html` and `output-styles.html`;
-- `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons);
+- `workflow.html`, an animated overview of the daily loop, the life of a note and the hooks, restating
+  `docs/workflow.md` and `docs/reference/hooks.md` without a hash (update it by hand when they change);
+- `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons), and
+  `assets/wf.js`, the animated diagrams and the terminal session on the landing page and `workflow.html`;
 - `assets/og/`, the 1200×630 link-preview cards (`home`, `docs`, `skills`, `agents`), and the favicons;
 - `sitemap.xml`, one `<loc>` per page.
 
@@ -172,7 +175,9 @@ Release, by hand:
    `CHANGELOG.md` to `[<version>] - <date>` under a new empty `[Unreleased]`, refresh the site pages
    the Site stage names, run `bash scripts/check.sh`, and merge the pull request. In
    `site/docs/changelog.html`, add the version's `<h2>` under `[Unreleased]` and rename that section's
-   `unreleased-*` heading ids to `<version>-*` (e.g. `025-added`); the Site stage checks only the hash.
+   `unreleased-*` heading ids to `<version>-*` (e.g. `025-added`); the Site stage compares the words, not
+   the ids. Set the release in the landing page's "Is it stable?" answer; the Counts stage compares it
+   with `plugin.json`.
 2. When `check` is green on `development`: `git push origin origin/development:main`. Only a fast-forward
    is accepted; the `main` ruleset lets the repository admin push without a pull request (bypass mode "Always"), so `main`
    keeps the same SHAs as `development`.

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@0f0b611b8000">
+<meta name="dos-source" content="CHANGELOG.md@9a18fb93fd70">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -49,6 +49,17 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h3 id="unreleased-added">Added</h3>
+    <ul>
+<li><code>site/workflow.html</code>: an animated overview of how knowledge moves between the session, the vault and
+the repository, the daily loop, the life of a note and the hooks in one session.</li>
+<li><code>docs/getting-started.md</code>, &quot;Your first 30 minutes&quot;: a guided path from install to a first search,
+review, capture and code review.</li>
+<li>The landing page plays one session in a terminal, with the hooks' own wording, shows the knowledge flow
+and the daily loop animated, and folds the skill library and agents into one section that lists all
+ten agents and the verifier's three answers.</li>
+<li>The Counts stage fails when the release the landing page names differs from <code>plugin.json</code>.</li>
+    </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
 <li>The Site stage compares the words of every <code>site/docs/</code> page with its source, so a refreshed hash
