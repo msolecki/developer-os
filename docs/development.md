@@ -43,6 +43,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Evals | An `evals/<case>/` directory lacks a `case.yaml` whose `name` is the folder, a `prompt.md`, the `scaffold_script` it names, or `graders/*.md`; a grader's `type` is not `llm`, `regex`, `file_exists` or `tool_used`; every grader of a case is `llm`; a case has no row in the Cases table of `evals/README.md`, or a row names no case; a case has no positive deterministic grader (one that fails a run that does nothing: not `not_contains`, `exists: false`, `min: 0`, `tool: Skill` or a regex over a scaffolded file), except `injection-fix-pr` and `injection-pr-cycle` |
 | Imports | A `plugin/hooks/*.py` import is outside the standard-library allowlist in `scripts/check.sh`, or a hook names `urllib`, `socket`, `http.client`, `requests`, `httpx`, `importlib` or `__import__` (D2) |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
+| Tool versions | The `claude-code` version `.github/workflows/check.yml` installs differs from `claude_code` under `[tool_versions]` in `.agnix.toml` |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
 | Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff (in a pull request, since the merge base with `origin/$GITHUB_BASE_REF`) still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
@@ -70,6 +71,9 @@ release verified by SHA-256, and, on a pull request, `gitleaks git` over the PR'
 removed inside one PR still fails. The same step fails a PR that changes `.gitleaks.toml` or
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
 only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
+`.github/dependabot.yml` proposes weekly updates of the SHA-pinned actions, each release at least 7 days old.
+Dependabot does not read the agnix, gitleaks and claude-code versions in the run steps: bump them by hand, and
+the claude-code one together with `claude_code` in `.agnix.toml` (the Tool versions stage).
 
 ## The site
 

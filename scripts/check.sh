@@ -185,6 +185,11 @@ for p in $targets; do
   [ -e "plugin/$p" ] || fail hooks plugin/hooks/hooks.json "missing target plugin/$p"
 done
 
+# The Claude Code version CI installs is the one agnix lints against in .agnix.toml; nothing else ties the two.
+ci=$(sed -n 's/.*@anthropic-ai\/claude-code@\([0-9.]*\).*/\1/p' .github/workflows/check.yml)
+lint=$(sed -n 's/^claude_code = "\(.*\)"$/\1/p' .agnix.toml)
+[ -n "$ci" ] && [ "$ci" = "$lint" ] || fail versions .agnix.toml "claude_code ${lint:-unset} differs from claude-code ${ci:-unset} in .github/workflows/check.yml"
+
 # Every agent ends its report contract with the four final statuses that orchestrating skills read.
 for f in plugin/agents/*.md; do
   grep -q '^## Final status$' "$f" || fail agents "$f" "no ## Final status section"

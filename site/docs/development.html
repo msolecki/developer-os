@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@ea2ff9a64f4c">
+<meta name="dos-source" content="docs/development.md@cf75c7714d7c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -76,6 +76,7 @@
           <tr><td>Evals</td><td>An <code>evals/&lt;case&gt;/</code> directory lacks a <code>case.yaml</code> whose <code>name</code> is the folder, a <code>prompt.md</code>, the <code>scaffold_script</code> it names, or <code>graders/*.md</code>; a grader's <code>type</code> is not <code>llm</code>, <code>regex</code>, <code>file_exists</code> or <code>tool_used</code>; every grader of a case is <code>llm</code>; a case has no row in the Cases table of <code>evals/README.md</code>, or a row names no case; a case has no positive deterministic grader (one that fails a run that does nothing: not <code>not_contains</code>, <code>exists: false</code>, <code>min: 0</code>, <code>tool: Skill</code> or a regex over a scaffolded file), except <code>injection-fix-pr</code> and <code>injection-pr-cycle</code></td></tr>
           <tr><td>Imports</td><td>A <code>plugin/hooks/*.py</code> import is outside the standard-library allowlist in <code>scripts/check.sh</code>, or a hook names <code>urllib</code>, <code>socket</code>, <code>http.client</code>, <code>requests</code>, <code>httpx</code>, <code>importlib</code> or <code>__import__</code> (D2)</td></tr>
           <tr><td>Hook targets</td><td>A <code>${CLAUDE_PLUGIN_ROOT}/…</code> path in <code>hooks.json</code> does not exist</td></tr>
+          <tr><td>Tool versions</td><td>The <code>claude-code</code> version <code>.github/workflows/check.yml</code> installs differs from <code>claude_code</code> under <code>[tool_versions]</code> in <code>.agnix.toml</code></td></tr>
           <tr><td>Agents</td><td>An agent lacks <code>## Final status</code> or one of <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code></td></tr>
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>
           <tr><td>Stale names</td><td>A skill, agent or output-style name removed from <code>plugin/SURFACE.txt</code> in the uncommitted diff (in a pull request, since the merge base with <code>origin/$GITHUB_BASE_REF</code>) still appears as a bare word (the prefixed form fails in References) in <code>plugin/</code>, <code>templates/</code> or <code>README.md</code>; the check runs before the rename is committed</td></tr>
@@ -102,7 +103,10 @@
     release verified by SHA-256, and, on a pull request, <code>gitleaks git</code> over the PR's commits, so a secret added and
     removed inside one PR still fails. The same step fails a PR that changes <code>.gitleaks.toml</code> or
     <code>.gitleaksignore</code> or adds a <code>gitleaks&#58;allow</code> marker; the workflow file itself comes from the PR, so
-    only a branch ruleset that requires review of <code>.github/</code> stops a PR that edits the step away.</p>
+    only a branch ruleset that requires review of <code>.github/</code> stops a PR that edits the step away.
+    <code>.github/dependabot.yml</code> proposes weekly updates of the SHA-pinned actions, each release at least 7 days old.
+    Dependabot does not read the agnix, gitleaks and claude-code versions in the run steps: bump them by hand, and
+    the claude-code one together with <code>claude_code</code> in <code>.agnix.toml</code> (the Tool versions stage).</p>
     <h2 id="the-site">The site</h2>
     <p><code>site/</code> is the public documentation site, hand-written HTML with no build:</p>
     <ul>

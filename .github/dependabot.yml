@@ -1,0 +1,11 @@
+# Pull requests for the SHA-pinned actions in .github/workflows/. agnix, gitleaks and claude-code are
+# pinned inside run steps, which Dependabot does not read: bump those by hand (docs/development.md, CI).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # A release is at least a week old before it is proposed, so a compromised one has time to be pulled.
+    cooldown:
+      default-days: 7

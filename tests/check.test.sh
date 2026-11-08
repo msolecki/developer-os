@@ -238,6 +238,9 @@ run "a hook importing a network module" fail "imports: plugin/hooks: import outs
 printf 'x = __import__("socket")\n' >> "$r/plugin/hooks/notices.py"
 run "a hook loading a module dynamically" fail "imports: plugin/hooks: network module or dynamic import"
 
+edit .agnix.toml 's/^claude_code = .*/claude_code = "9.9.9"/'
+run "the agnix Claude Code version differs from CI's" fail "versions: .agnix.toml: claude_code 9.9.9 differs"
+
 # An ignored doc (docs/superpowers/ is in .gitignore) has no site page; reset keeps ignored files, so remove it.
 mkdir -p "$r/docs/superpowers/plans"
 printf '# Local plan\n' > "$r/docs/superpowers/plans/x.md"
