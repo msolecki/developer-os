@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@d49ca4952811">
+<meta name="dos-source" content="CHANGELOG.md@2edb1a74f75f">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -130,12 +130,11 @@ orchestrator's HEAD mid-integration although the guard asks on that command: the
 <li>The guard reads a shell backslash (<code>\rm -rf x</code>, <code>\npm i zod</code>) as the command it escapes; checks every symlink
 hop and the real path of an Edit or Write target, so a link to <code>.env</code> asks; lets <code>perl -M…</code> and <code>-I…</code> pass in a
 read-only agent; counts a prefix of four or more characters of <code>--hard</code>, <code>--force</code>, <code>--dry-run</code>,
-<code>--discard-changes</code>, <code>--worktree</code>, and rm's <code>--recursive</code>; asks on a <code>git fetch</code> refspec that writes outside
+<code>--discard-changes</code>, <code>--worktree</code>, and rm's <code>--recursive</code>; asks in a read-only agent on a <code>git fetch</code> refspec that writes outside
 <code>refs/remotes/</code>; and scans long git option lists in linear time.</li>
 <li>capture-nudge counts only the <code>tool_use</code> blocks of assistant lines, so tool calls quoted in tool results no
 longer bring the wrap-up nudge forward.</li>
-<li>CI looks for gitleaks allow markers only in the pull request's own changes (<code>base...head</code>), not in the
-workflow file that names them.</li>
+<li>CI looks for gitleaks allow markers only in the pull request's own changes (<code>base...head</code>), and the marker pattern no longer matches its own line, so the workflow file stays scanned.</li>
     </ul>
     <h2 id="027---2026-10-31">[0.2.7] - 2026-10-31</h2>
     <h3 id="027-added">Added</h3>

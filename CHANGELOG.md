@@ -82,12 +82,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The guard reads a shell backslash (`\rm -rf x`, `\npm i zod`) as the command it escapes; checks every symlink
   hop and the real path of an Edit or Write target, so a link to `.env` asks; lets `perl -M…` and `-I…` pass in a
   read-only agent; counts a prefix of four or more characters of `--hard`, `--force`, `--dry-run`,
-  `--discard-changes`, `--worktree`, and rm's `--recursive`; asks on a `git fetch` refspec that writes outside
+  `--discard-changes`, `--worktree`, and rm's `--recursive`; asks in a read-only agent on a `git fetch` refspec that writes outside
   `refs/remotes/`; and scans long git option lists in linear time.
 - capture-nudge counts only the `tool_use` blocks of assistant lines, so tool calls quoted in tool results no
   longer bring the wrap-up nudge forward.
-- CI looks for gitleaks allow markers only in the pull request's own changes (`base...head`), not in the
-  workflow file that names them.
+- CI looks for gitleaks allow markers only in the pull request's own changes (`base...head`), and the marker pattern no longer matches its own line, so the workflow file stays scanned.
 
 ## [0.2.7] - 2026-10-31
 
