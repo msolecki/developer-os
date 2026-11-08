@@ -4,6 +4,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The Site stage compares the words of every `site/docs/` page with its source, so a refreshed hash
+  on an unedited page fails; code-review rates a site page the diff makes false as a docs finding (D28).
+
+### Fixed
+
+- Docs and site pages describe the hooks, skills and check as the code behaves: the marker cleanup age,
+  implement-backlog's L-item approval, brain-setup's `.obsidian/types.json` merge, the approval and
+  "Read by" tables, the skill-composition diagram, and a leftover Codex line on the architecture page.
+
 ## [0.2.8] - 2026-11-08
 
 ### Added

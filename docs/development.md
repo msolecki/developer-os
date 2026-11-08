@@ -31,10 +31,10 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 |---|---|
 | JSON | Any `*.json` does not parse (`jq empty`) |
 | Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name; a line inside the frontmatter of an `evals/` file contains `---` (the eval loader ends frontmatter there) |
-| Last-verified (warning) | A `docs/*.md` committed after its `last-verified` date prints a warning; the exit status does not change |
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
+| Last-verified (warning) | A `docs/*.md` committed after its `last-verified` date prints a warning; the exit status does not change |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden`, `brain-import-memory`, `brain-project-refresh` or `brain-review` differs from `brain-search`'s |
 | Docs standard | A `## ` heading or bold field of `templates/project/docs/decisions/0001-template.md`, a bold field of `templates/project/docs/pitfalls.md`, or a `## ` heading of `templates/project/docs/CURRENT-STATE.md` does not appear whole, as a fixed string, on that template file's own line of `## The standard` in `docs-sync` (the plugin does not ship `templates/`, so the skill restates them) |
 | Severity | A skill, an agent or `docs/glossary.md` that writes out the P0–P3 scale (inline `P0 = …` or four `- **P0:**` bullets) words it differently from the others |
@@ -46,11 +46,11 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
 | Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff (in a pull request, since the merge base with `origin/$GITHUB_BASE_REF`) still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
-| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` or a page under `site/` ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk |
+| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md` or `site/docs/changelog.html` (both are read only up to the first released section), `CONTRIBUTING.md`, `SECURITY.md` or a page under `site/` ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk |
 | Core-rules size | `plugin/rules/core.md` exceeds 8900 bytes, or `CAP` in `state-card.py` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
-| Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
+| Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page under `site/docs/` whose words differ from its source's (D28); a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
@@ -94,7 +94,9 @@ Each page that restates a source carries `<meta name="dos-source" content="<sour
 first 12 hex digits of the source's SHA-256 with any `last-verified:` line removed, so re-verifying a
 doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style,
 the Site stage names the page to refresh: update its text, then its hash
-(`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). A new doc or skill needs a new
+(`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). A page under `site/docs/` must
+carry its source's words in order, so a new hash on an unedited page still fails; skill, agent and
+output-style pages are summaries, which code-review checks instead (D28). A new doc or skill needs a new
 page, and a new doc an entry in `NAV`. The landing page and the skills index restate many sources
 and carry no hash; update them by hand when the hooks, rules or skills they describe change.
 `CHANGELOG.md` changes on most pull requests, so its page usually does too.
@@ -159,7 +161,7 @@ Every added line must replace or shorten another, unless a D10 amendment raises 
 - `development` is the work branch. Work lands there through pull requests; the repository disallows
   merge commits.
 - `plugin/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` carry the same `version`;
-  the Validate stage fails when they differ. Claude Code caches an install by that version, so an
+  the Plugin validation stage fails when they differ. Claude Code caches an install by that version, so an
   update reaches users only when it changes.
 - `CHANGELOG.md` follows Keep a Changelog. A user pins a release by its tag:
   `/plugin marketplace add msolecki/developer-os#v<version>`.

@@ -17,7 +17,7 @@ Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh
 
 ## SessionStart — core rules and state card
 
-Two hooks on the same event, run independently, so the card is not guaranteed to follow the rules.
+The core rules and the state card are separate `SessionStart` entries that run independently on compact, resume and fork, so the card is not guaranteed to follow the rules.
 
 | | Core rules | State card |
 |---|---|---|
@@ -72,13 +72,14 @@ Claude Code has no install or update hook, so this hook stands in for one, and f
 reminds, it runs nothing. Matcher `startup`, so it never runs beside the state card (`compact|resume|fork`);
 its output is a few hundred bytes.
 
-**Input:** the hook JSON on stdin; uses `source` (anything but `startup` prints nothing). It also reads
+**Input:** the hook JSON on stdin; uses `source` (anything but `startup` prints nothing; a missing `source` does not stop the hook). It also reads
 `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` for the version and the `Brain vault:` line from
 `$CLAUDE_CONFIG_DIR/CLAUDE.md` (or `~/.claude/CLAUDE.md`), the user-level file brain-setup writes. A
 project's `CLAUDE.md` or `AGENTS.md` is never read, so a cloned repository cannot point the hook at a
-directory of its choosing.
+directory of its choosing. A `version` in `plugin.json` that does not match `[0-9A-Za-z.+-]{1,32}` makes
+the hook print nothing, the vault notices included.
 
-**Notices,** each one line, only when due:
+**Notices,** only when due, each on its own line; a first install prints the version notice and the vault line as two lines, so up to four lines can print:
 
 | Notice | When | Repeats |
 |---|---|---|
@@ -124,14 +125,15 @@ another user, the hook prints nothing, because without markers every notice woul
 ```
 
 or prints nothing and exits 0, which leaves Claude Code's normal permission flow in charge. It never
-answers `deny`. A Bash `git commit` (`commit` as git's subcommand, after `-C`/`-c` and other global options)
+answers `deny`. In `claude -p`, an `ask` resolves to a denial: the call is listed under `permission_denials` and the
+command does not run, even when `--allowedTools Bash` allows it.
+
+A Bash `git commit` (`commit` as git's subcommand, after `-C`/`-c` and other global options)
 that hits no category prints only context, which reaches the model and leaves the permission flow as is:
 
 ```json
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."}}
 ```
- In `claude -p`, an `ask` resolves to a denial: the call is listed under `permission_denials` and the
-command does not run, even when `--allowedTools Bash` allows it.
 
 | Category | Asks for | Passes |
 |---|---|---|
@@ -207,7 +209,8 @@ red again within the window counts; the message tells the agent to stop only if 
 the runs.
 
 **Exits 0 silently when** `DEVELOPER_OS_REPEAT_FAILURE=off`, `is_interrupt` is `true`, the input is not
-a JSON object, `session_id` is empty or has characters other than `A-Z a-z 0-9 _ -`, or the count for
+a JSON object, `session_id` is empty or has characters other than `A-Z a-z 0-9 _ -`, `tool_name` is not a
+string, `tool_input` is not an object, the per-session state file is a symlink, or the count for
 the key in the current run of failures is not exactly 3.
 
 **Otherwise** (the third failure of the key within one run) prints
@@ -244,7 +247,7 @@ another user. It stores hashes only, never commands or errors.
 | A Monitor started in the last 30 minutes has no terminal `<task-notification>` (one carrying its `<tool-use-id>`; event notices carry only `<task-id>`) | The turn ended to wait for it; the marker stays unspent. The 30-minute bound also covers a Monitor that expires without a notice |
 | The marker cannot be written | Fail open |
 
-**Otherwise:** writes the marker, removes markers older than 7 days, prints to stdout
+**Otherwise:** writes the marker, removes markers 8 days old or older, prints to stdout
 
 ```json
 {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": "developer-os: this session made <n> tool calls. Run the developer-os:session-retro skill: propose the wrap-up to the user and apply only what they approve. If nothing qualifies, end your turn with no output."}}

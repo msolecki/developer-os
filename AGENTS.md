@@ -15,6 +15,7 @@ copyable project templates under `templates/`. No runtime and no build; see [REA
 - Growing `plugin/rules/core.md` past 8900 bytes: it loads into every session. Evidence: D10, the Core-rules size stage.
 - Lengthening skill descriptions past 12000 characters in total. Evidence: D10, the Skill descriptions stage.
 - Making a hook deny instead of ask. Evidence: D6, `tests/guard.test.sh`.
+- Refreshing a site page's `dos-source` hash without carrying the source change into its text. Evidence: commit 8456bc06 left "Codex installer" in `site/docs/architecture/overview.html`.
 
 ## Invariants
 

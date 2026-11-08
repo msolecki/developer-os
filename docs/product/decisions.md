@@ -122,6 +122,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   rm"` passes in a reviewer, and quoted text after `-c` is read as a script only after a shell or `su`,
   so `python3 -c "print(1>2)"` passes. Downloads, unpacking and installs without a package stay known
   misses: a review may need them to run tests.
+- **Amended 2026-11-08:** the destroy category also asks before `git checkout -f`, `git switch -f` or
+  `--discard-changes` and `find … -delete` (#108). The protected files match through symlink hops and
+  without case, so a link to a `.env` asks and so does a differently cased name (#123).
 
 ## D7. One wrap-up nudge per long session
 
@@ -399,6 +402,19 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   eight user messages after each one found no complaint of lost state. That is no evidence of loss, not
   proof of none (a silent loss would not show), so the state card (D16) stays the mechanism.
 
+## D28. Site pages are checked against their sources in two ways
+
+- **Date:** 2026-11-08
+- **Decision:** the Site stage compares the words of every `site/docs/` page with its source, in order,
+  outside markup, diagrams and page furniture. Skill, agent and output-style pages stay summaries: the
+  hash only flags them, and code-review rates a site page the diff makes false as a P2 docs finding.
+- **Why:** the hash proved a page was touched, not updated. A docs-sync pass found a removed Codex line
+  still on the architecture page and two hooks.md passages that disagreed with their page; the word
+  comparison caught both, and passed on every other page without exceptions.
+- **Alternatives rejected:** generating the site from Markdown (adds a build to a repository with none);
+  a docs-sync run on every PR in CI (paid, and evals stay out of CI per D13).
+- **Revisit when:** the word comparison needs a per-page exception, or skill pages drift despite review.
+
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change
@@ -435,3 +451,4 @@ here before reversing a rule.
 | 2026-11-08 | The full suite may also run when a skill's gate requires it | `plugin/rules/core.md` | implement-backlog and deploy-checklist run it without a push (FLOW-14) |
 | 2026-11-08 | Uncommitted subagent changes are the caller's to commit; "Agents produce commits" -> "Lanes produce commits" | `plugin/rules/core.md` | Agents never commit since #117 (RULE-01) |
 | 2026-11-08 | `-F <msg-file>`; test-config rule moved to Validation; unfinished plan items go to the `Backlog:` paths (default `TODO.md`) | `plugin/rules/core.md` | Wording fixes (RULE-02) |
+| 2026-11-08 | A site page in the repository that restates a doc or skill counts as a doc for the docs finding | `code-review` | Skill pages drifted from their `SKILL.md` while every review passed (D28) |
