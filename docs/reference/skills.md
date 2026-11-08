@@ -240,11 +240,15 @@ Proposes mitigation, root-cause fix, regression test and rollback criteria; appl
 backlog items go to implement-backlog. Before a launch: a clean tree, `claude` and `python3` on
 `PATH`, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
 lockfile belong to no lane), and a git-ignored run directory and `.worktrees/`. Each lane is a
-detached `claude -p` in its own worktree and session, so it outlives the turn; its prompt allows
-only the lane's paths and commits in the worktree, and its report starts with a final status. The
-status table reads the PIDs, the `EXIT=` line in each log, the report's first line, the lane's
-commits, any changed file outside its owned paths, and a `LANES.md` or prompt whose hash differs
-from the one `launch.sh` recorded. Each lane has a runnable `Check` next to its `Done when`; the
+detached `claude -p` in its own worktree and session, so it outlives the turn; the worktree starts
+from the base commit recorded in `LANES.md`, which `launch.sh` checks. Each lane runs with a
+recorded `--session-id`, a `--max-turns` cap, and `--disallowedTools` for edits to the manifest,
+`Makefile`, hook directories and `.claude/` unless it owns them; its prompt allows only the lane's
+paths and commits in the worktree, and its report starts with a final status. The status table reads
+the PIDs, the `EXIT=` line in each log, the time since the worktree last changed, the report's first
+line, the lane's commits, any changed file outside its owned paths, and a `LANES.md` or prompt whose
+hash differs from the one `launch.sh` recorded. A finished lane with no report or a `CONTINUING` one
+can be resumed: `resume.sh` continues its session with `claude -p --resume` after the user's yes. Each lane has a runnable `Check` next to its `Done when`; the
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished `DONE` lanes whose fast check and `Check` pass when the
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any

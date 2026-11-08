@@ -325,7 +325,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   require) so it outlives the turn, with `--permission-mode acceptEdits` and an explicit
   `--allowedTools` list. It launches only after the user approves the shown `launch.sh`; lanes commit
   in their worktree and never push, merge or install; the launching session integrates finished lanes
-  into a local branch and reviews them through code-review.
+  into a local branch and reviews them through code-review. Each lane gets a recorded `--session-id`
+  and a `--max-turns` cap; a lane cut off without a final report is continued with
+  `claude -p --resume <id>` (the Resume mode), again only after the user's yes.
 - **Why:** subagents run inside the session that dispatched them and end with it, while long lanes
   need to keep running and be watched from a later turn. A permission bypass would let an unattended
   process run any command, against the approval model; a fixed tool list makes a lane that needs more
