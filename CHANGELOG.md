@@ -14,17 +14,54 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and the daily loop animated, and folds the skill library and agents into one section that lists all
   ten agents and the verifier's three answers.
 - The Counts stage fails when the release the landing page names differs from `plugin.json`.
+- guard asks before an infrastructure, data or deploy destroy (`terraform destroy`, `prisma migrate
+  reset`, `kubectl delete`, `vercel --prod`), before an Edit that skips or focuses a test or a removal
+  of a test file, and before an install through pip, uv, poetry, cargo, go, composer, bundle, gem or
+  `npx -y` (SEC-08, SEC-09, SEC-14).
+- parallel-lanes starts each lane with a session id, a turn cap and denied edits to package manifests
+  and hook config, resumes a dead lane with `resume.sh`, shows `Idle for`, and checks that every
+  worktree starts at the recorded commit (FLOW-18, FLOW-24, FLOW-26, FLOW-27, SEC-13).
+- spec cross-checks its criteria, steps and decisions in a coverage table and splits FEAT items into
+  sessions of 5–7; implement-backlog runs a spec convergence check when the last spec item closes and
+  stops on an intent gap (FLOW-19, FLOW-20, FLOW-22, FLOW-46).
+- The check gains a Tool versions stage that ties `.agnix.toml` to CI's Claude Code version and runs
+  agnix itself; Dependabot updates the pinned actions; CI gets `concurrency` and a timeout (CHK-09,
+  CHK-10, CHK-13).
+- security-auditor has a not-a-finding list that includes rate limiting; the verifier ends a refutation
+  with `REFUTE_REASON`; code-reviewer names the trigger of every P0 and P1; infra-reviewer checks AI
+  agents in CI for prompt injection (AGT-07, AGT-08, AGT-09).
+- A handoff and the state card name what is not started, what is not verified, and what to do if a named
+  risk happens (FLOW-56).
 
 ### Changed
 
 - The Site stage compares the words of every `site/docs/` page with its source, so a refreshed hash
   on an unedited page fails; code-review rates a site page the diff makes false as a docs finding (D28).
+- The brain skills take the vault path only from the conversation or the user-level `CLAUDE.md`, set it
+  in single quotes, and validate the project slug; D5 is amended and the eval cases name `./vault` in
+  their prompt (SEC-10, SEC-11).
+- guard no longer reads a quoted commit message as an install or a hook bypass, and `git log --grep`
+  passes; read-only agents may run `git submodule status` and `git bisect log`, are asked before a git
+  output-file write, and dependency-upgrader is one of them (FLOW-39, FLOW-40, SEC-15, AGT-10).
+- capture-nudge reads the Stop input's `background_tasks`; state-card works without `cwd` (FLOW-37,
+  FLOW-41).
+- skill-usage runs in a forked context and can suggest hiding a skill; descriptions of skills with
+  `disable-model-invocation` do not count toward the 12000-character budget (FLOW-38, FLOW-52).
+- Reviewer agents preload their conventions skill, run tests with `CI=true`, and use the shared P0–P3
+  layout; the verifier omits `CLAUDE.md` (AGT-11, AGT-14, AGT-15, AGT-16).
+- Skill fixes from audit 2: FLOW-23, FLOW-28, FLOW-29, FLOW-30, FLOW-33, FLOW-34, FLOW-35, FLOW-42,
+  FLOW-43, FLOW-44, FLOW-45, FLOW-47, FLOW-48, FLOW-49, FLOW-50, SEC-12, AGT-12, AGT-13, BRAIN-11 and
+  BRAIN-12; the project template ignores `.worktrees/` and asks for the fast check and the full suite
+  (DOC-08).
 
 ### Fixed
 
 - Docs and site pages describe the hooks, skills and check as the code behaves: the marker cleanup age,
   implement-backlog's L-item approval, brain-setup's `.obsidian/types.json` merge, the approval and
   "Read by" tables, the skill-composition diagram, and a leftover Codex line on the architecture page.
+- guard's quote scanner is linear, so a long command no longer runs into the hook timeout (FLOW-36).
+- hooks.md, the glossary, configuration.md, the architecture overview, D7 and the vault README match the
+  code; `__pycache__` is ignored (DOC-10, DOC-12, DOC-13, DOC-14, DOC-15, DOC-16, BRAIN-15, CHK-16).
 
 ## [0.2.8] - 2026-11-08
 
