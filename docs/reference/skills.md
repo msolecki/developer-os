@@ -234,10 +234,15 @@ A/B/C questions. It runs no test or build to get a number.
 ### bug-triage
 
 [Source](../../plugin/skills/bug-triage/SKILL.md). Severity first, then the stack trace,
-reproduction, affected users, frequency and first-known time; logs, recent commits and data
-invariants; ranked hypotheses with at least one real alternative and the observation that would
-falsify the leader. Library or vendor behaviour goes to `research-analyst` for a sourced answer.
-Proposes mitigation, root-cause fix, regression test and rollback criteria; applies none of them.
+reproduction, affected users, frequency and first-known time. Before any hypothesis, one repro
+command it has already run must fail on the exact symptom, repeatably and without a human, and is
+then shrunk; without one it stops, lists what it tried and asks for access or an artifact. Then
+logs, recent commits and data invariants; ranked hypotheses with at least one real alternative and
+the observation that would falsify the leader, each claim graded `[hypothesis]`, `[evidence: X]`,
+`[ruled out: X because Y]` or `[demonstrated]`. A root cause is `[demonstrated]` only when toggling
+one condition switches the failure on and off. Library or vendor behaviour goes to
+`research-analyst` for a sourced answer. Proposes mitigation, root-cause fix, regression test and
+rollback criteria; applies none of them.
 
 ### deploy-checklist
 
