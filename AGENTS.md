@@ -18,7 +18,7 @@ copyable project templates under `templates/`. No runtime and no build; see [REA
 
 ## Invariants
 
-- D2, hook scripts in Python 3 with the standard library only and no network: Script tests stage.
+- D2, hook scripts in Python 3 with the standard library only and no network: Imports stage.
 - D6, hooks ask, never deny, and fail open: Script tests stage (`tests/guard.test.sh`).
 - D9, action skills end with `## Stop point` and `## Never`: Skill sections stage.
 - D10, the per-session budget: Core-rules size and Skill descriptions stages.
@@ -26,6 +26,7 @@ copyable project templates under `templates/`. No runtime and no build; see [REA
 The records are in [docs/product/decisions.md](docs/product/decisions.md); the stages in [docs/development.md](docs/development.md#the-check).
 
 Backlog: docs/plans/backlog.md, docs/plans/backlog-done.md
+Both backlog files are local and git-ignored (not shared through git).
 
 ## Documentation
 
