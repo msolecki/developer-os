@@ -511,6 +511,27 @@ for c in 'pip install -r requirements.txt' 'pip install' 'uv sync' 'poetry insta
   'composer install' 'bundle install' 'npx foo' 'pip show requests' 'echo pip install x' 'grep -rn \"cargo add\" docs'; do
   check pass "$(fx "$c")"
 done
+# SEC-09: skipping, focusing or deleting a test
+fd() { printf '{"tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"%s","new_string":"%s"}}' "$1" "$2" "$3"; }
+check ask "$(fd src/a.test.ts 'it(' 'it.skip(')" "test"
+for m in 'test.skip(' 'describe.skip(' 'xit(' 'xdescribe(' 'it.only(' 'fit(' 'fdescribe(' '@pytest.mark.skip' '@pytest.mark.xfail' \
+  'pytest.skip(' '@unittest.skip' '@Disabled' '@Ignore' 't.Skip('; do
+  check ask "$(fd tests/x.py 'a' "a $m")" "test"
+done
+check ask "$(fd pkg/a_test.go 'a' 'a t.Skip(')" "test"
+check ask "$(fd test_a.py 'a' 'a pytest.skip(')" "test"
+check ask "$(fd src/a.spec.js 'it.skip(a) it(b)' 'it.skip(a) it.skip(b)')" "test"
+check pass "$(fd src/a.test.ts 'it.skip(' 'it.skip(x')"
+check pass "$(fd src/a.test.ts 'it.skip(' 'it(')"
+check pass "$(fd src/a.ts 'a' 'it.skip(')"
+check pass "$(fd src/a.test.ts 'a' 'model.fit(x)')"
+check ask "$(fx 'rm src/a.test.ts')" "test"
+check ask "$(fx 'git rm tests/x.py')" "test"
+check ask "$(fx 'mv src/a.test.ts src/a.test.ts.bak')" "test"
+check ask "$(fx 'mv a_test.go a_test.go.disabled')" "test"
+check pass "$(fx 'mv src/a.test.ts src/b.test.ts')"
+check pass "$(fx 'rm src/a.ts')"
+check pass "$(fx 'grep -rn \"rm a.test.ts\" docs')"
 
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

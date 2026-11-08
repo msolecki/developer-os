@@ -141,6 +141,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   get`/`install`, `composer require`, `bundle add`, `gem install`, each with a package argument, and
   `npx -y`/`--yes`, which runs freshly fetched code; core.md's install rule was text only in Python,
   Rust, Go and PHP repositories (SEC-14).
+- **Amended 2026-11-08:** a test category: an Edit of a test file (`*.test.*`, `*.spec.*`, `tests/`,
+  `test_*.py`, `*_test.go`) whose `new_string` holds more skip or focus markers than its `old_string`
+  (`it.skip(`, `.only(`, `xit(`, `@pytest.mark.skip`, `t.Skip(` and the like), and `rm`/`git rm` of a
+  test file or `mv` of one to `.bak`, `.disabled` or `.skip`; core.md's "do not delete or skip tests"
+  was text only (SEC-09).
 
 ## D7. One wrap-up nudge per long session
 

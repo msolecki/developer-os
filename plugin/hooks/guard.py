@@ -16,7 +16,9 @@ An Edit or Write asks when its `file_path` is a secret or the agent's own user-l
 `.envrc`, `.env.*` or `.envrc.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
 `~/.gnupg`, `~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude/CLAUDE.md`,
 or anything under `~/.claude/hooks`, `rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`; the same files under
-`$CLAUDE_CONFIG_DIR` when it is set.
+`$CLAUDE_CONFIG_DIR` when it is set. An Edit of a test file (TEST_PATH) asks when `new_string` holds more
+skip or focus markers (SKIP_MARK) than `old_string`, and so does `rm`/`git rm` of one or `mv` of one to
+`.bak`, `.disabled` or `.skip`.
 
 Inside the read-only agents (code-reviewer, database-reviewer, dependency-upgrader, infra-reviewer,
 performance-engineer, security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
@@ -46,6 +48,7 @@ REASONS = {
     "protected": "This file holds secrets or your user-level agent config; edit it only on your request.",
     "readonly": "This agent is read-only, and this command writes files or changes git state.",
     "noverify": "This skips the repository's git hooks (--no-verify, commit -n, HUSKY=0, LEFTHOOK=0, SKIP=, core.hooksPath).",
+    "tests": "This skips, focuses or removes a test; do not delete or skip tests to make a build pass.",
 }
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
@@ -220,6 +223,28 @@ def installs(words):
     return False
 
 
+TEST_PATH = re.compile(r"(^|/)(tests?|__tests__)(/|$)|\.(test|spec)\.[^/]+$|(^|/)test_[^/]*\.py$|_test\.go$")
+# A marker that skips or focuses a test (`it.skip(`, `.only(`, `@pytest.mark.skip`); `model.fit(` is none.
+SKIP_MARK = re.compile(r"\b(?:it|test|describe)\.skip\(|(?<![\w.])(?:xit|xdescribe|fit|fdescribe)\(|\.only\(|"
+                       r"@pytest\.mark\.(?:skip|xfail)|pytest\.skip\(|@unittest\.skip|@Disabled|@Ignore|\bt\.Skip")
+
+
+def drops_tests(words):
+    """`rm` or `git rm` of a test file, or `mv` of one to `.bak`, `.disabled` or `.skip`, in command position;
+    a path in a temp directory is none."""
+    pos = starts(words)
+    for i in pos:
+        name = words[i].rsplit("/", 1)[-1]
+        args = [w for w in words[i + 1:] if not w.startswith("-") and not scratch(w)]
+        if name == "rm" and any(TEST_PATH.search(a) for a in args):
+            return True
+        if name == "mv" and len(args) > 1 and re.search(r"\.(bak|disabled|skip)$", args[-1]) and any(
+                TEST_PATH.search(a) for a in args[:-1]):
+            return True
+    return any(sub == "rm" and any(TEST_PATH.search(x) for x in rest if not x.startswith("-"))
+               for sub, rest in git_subs(words, pos))
+
+
 def scan(line):
     """Word scanner: install, push, noverify or destroy for the first hit, None otherwise."""
     for seg in re.split(r"[;&|()`]", line):
@@ -230,6 +255,8 @@ def scan(line):
             return "destroy"
         if installs(words):
             return "install"
+        if drops_tests(words):
+            return "tests"
         pos = starts(words)
         for i, x in enumerate(words):
             if rm and x == "--":
@@ -511,9 +538,13 @@ def ask(reason):
 def main():
     raw = sys.stdin.buffer.read().decode("utf-8", "replace")
     if re.search(r'"tool_name"\s*:\s*"(Edit|Write)"', raw):
-        path = json.loads(raw).get("tool_input", {}).get("file_path")
+        inp = json.loads(raw).get("tool_input", {})
+        path, old, new = inp.get("file_path"), inp.get("old_string"), inp.get("new_string")
         if isinstance(path, str) and protected(path):
             ask("protected")
+        elif isinstance(path, str) and TEST_PATH.search(path) and isinstance(old, str) and isinstance(new, str) and (
+                len(SKIP_MARK.findall(new)) > len(SKIP_MARK.findall(old))):
+            ask("tests")
         return
     cmd = command(raw)
     if not cmd:
