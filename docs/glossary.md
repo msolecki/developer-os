@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-24
+last-verified: 2026-11-08
 ---
 
 # Glossary
@@ -23,7 +23,7 @@ last-verified: 2026-10-24
 | Orphan | A note outside `_inbox/` and `_archive/`, not superseded, that no wiki link targets. |
 | FOUND / GUESSED | brain-garden's tag on a proposed link: stated in both notes, or inferred. "Apply all" covers only FOUND. |
 | Vault project slug | The `project:` value for a repository's notes, recorded in its `_Context.md`. |
-| P0–P3 | The single severity scale: P0 exploitable security defect, data loss or production down; P1 wrong behavior on a common path; P2 edge case or meaningful maintainability risk; P3 minor. |
+| P0–P3 | The single severity scale, as the skills and agents state it: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup. |
 | Verdict | `APPROVE`, `COMMENT` (an open question decides P0/P1) or `REQUEST_CHANGES` (an open P0/P1). |
 | Fresh verifier | An agent that did not produce a P0/P1 (or, in code-review, a P2 correctness) finding and sees only the claim, asked to disprove it: the read-only `verifier` agent. |
 | Disputed | A finding the verifier refuted; listed with evidence, does not block the verdict or enter the backlog. |

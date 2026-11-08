@@ -9,8 +9,7 @@
 
 **Vault project slug:** `<project-slug>` (the `project:` value of this project's notes in the Brain vault)
 
-**Read first:**
-- The instruction file (<exact section, for example Key Business Rules>)
+**Key code paths:**
 - <path to the core, glossary, or key module>
 
 **Ignore:** <dependency directories, build output, backups, and unrelated deployment directories; include a reason when non-obvious>
