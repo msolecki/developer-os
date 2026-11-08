@@ -162,6 +162,16 @@ check "fires once the Monitor has a terminal notice" "$code" fire
 run "$(input s17 "$tmp/mon-old.jsonl")"
 check "Monitor started over 30 minutes ago does not block" "$code" fire
 
+# The Stop input lists in-flight tasks in background_tasks: a non-empty list defers; when the key is present,
+# the transcript's launch lines are not consulted.
+run "$(input s20 "$tmp/long.jsonl" ',"background_tasks":[{"id":"t1","type":"shell","status":"running"}],"session_crons":[]')"
+check "non-empty background_tasks defers" "$code" silent
+[ -e "$tmp/data/capture-nudge/s20" ] && r=yes || r=no
+check "background_tasks deferral keeps the marker unspent" "$r" no
+touch "$tmp/tasks/a1.output"
+run "$(input s21 "$tmp/bg-agent.jsonl" ',"background_tasks":[],"session_crons":[]')"
+check "empty background_tasks overrides the transcript's launch lines" "$code" fire
+
 touch -t 202001010000 "$tmp/data/capture-nudge/old"
 run "$(input s9 "$tmp/long.jsonl")"
 [ -e "$tmp/data/capture-nudge/old" ] && r=yes || r=no

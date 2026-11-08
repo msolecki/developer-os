@@ -167,6 +167,10 @@ check "outside a git repository: exit 0" "$code" 0
 run compact "$tmp/missing"
 check "missing cwd: nothing" "$out" ""
 
+out=$(cd "$repo" && printf '{"source":"resume"}' | env -i PATH="$PATH" python3 "$hook" 2>/dev/null)
+printf '%s' "$out" | grep -q '^## developer-os state card$' && r=yes || r=no
+check "no cwd in the input: the card for the current directory" "$r" yes
+
 out=$(printf 'not json' | env -i PATH="$PATH" python3 "$hook" 2>/dev/null); code=$?
 check "malformed input: nothing" "$out" ""
 check "malformed input: exit 0" "$code" 0

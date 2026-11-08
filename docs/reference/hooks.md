@@ -10,7 +10,7 @@ Defined in `plugin/hooks/hooks.json`. Commands run with `${CLAUDE_PLUGIN_ROOT}` 
 `plugin/` directory; each has a 10-second timeout. There are 6 hooks: one `cat` and five
 Python 3 scripts run as `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.py"`. The scripts use the
 standard library only, need `python3` 3.8 or later on `PATH`, make no network call, and fail open.
-Without `python3` the core rules still load; the state card, notices, guard and nudge fail with a
+Without `python3` the core rules still load; the state card, notices, guard, repeat-failure and nudge fail with a
 non-blocking hook error and the session goes on as if they were absent. Why Python and not `sh`:
 [decisions D2](../product/decisions.md#d2-no-runtime-small-hook-scripts-without-dependencies).
 Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh`, `tests/repeat-failure.test.sh`, `tests/capture-nudge.test.sh`.
@@ -23,7 +23,7 @@ The core rules and the state card are separate `SessionStart` entries that run i
 |---|---|---|
 | Matcher | none: every source (startup, resume, clear, compact, fork) | `compact\|resume\|fork` |
 | Command | `cat "${CLAUDE_PLUGIN_ROOT}/rules/core.md"`, timeout 10 s | `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state-card.py"`, timeout 10 s |
-| Input | none | the hook JSON on stdin; uses `source` and `cwd` |
+| Input | none | the hook JSON on stdin; uses `source` and `cwd` (when set) |
 | Output | stdout becomes session context | stdout becomes session context |
 | Limit | Claude Code caps hook output at 10,000 characters; `scripts/check.sh` caps `core.md` at 8900 bytes and checks that `CAP` in `state-card.py` still fits beside it | |
 | Off switch | disable the plugin; override single rules in `~/.claude/CLAUDE.md` | disable the plugin |
@@ -31,7 +31,7 @@ The core rules and the state card are separate `SessionStart` entries that run i
 **Core rules:** prints `plugin/rules/core.md` on every source; it does not depend on Python.
 
 **State card:** for `source` `compact`, `resume` or `fork` (a forked session carries the earlier task
-context too), when `cwd` is inside a git repository,
+context too), when `cwd` (or, without one, the directory the hook runs in) is inside a git repository,
 `state-card.py` reads from the repository root and prints a state card of at most 1024 bytes:
 
 ```
@@ -58,12 +58,12 @@ symlink on its path (`docs`, `docs/plans`, the file), not tracked by git, git-ig
 the last 7 days (an older file is left over from a finished run). A cloned repository therefore
 cannot plant instructions or a link to a local secret there. Control characters are stripped.
 
-`docs/plans/.devos-state.md` is written by implement-backlog, pr-cycle and audit-to-backlog at every
+`docs/plans/.devos-state.md` is written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes at every
 stage change (plan, current item, agents and their worktrees, unverified claims, next step) and is
 git-ignored with the plans. session-retro proposes deleting it with a finished plan. Its path is fixed,
 even when a project moves its plans; `Newest plan` reads only `docs/plans/` too.
 
-**Failure:** every error exits 0; malformed input, another `source`, a missing `cwd` or a directory
+**Failure:** every error exits 0; malformed input, another `source`, a `cwd` that does not exist or a directory
 outside git print nothing, so the session has the rules alone.
 
 ## SessionStart on startup — `notices.py`
@@ -228,7 +228,7 @@ another user. It stores hashes only, never commands or errors.
 ## Stop — `capture-nudge.py`
 
 **Input:** the hook JSON on stdin; uses `stop_hook_active`, `agent_id`, `session_id`,
-`transcript_path`.
+`transcript_path`, `background_tasks`.
 
 **Exits 0 silently when any of these holds:**
 
@@ -242,8 +242,9 @@ another user. It stores hashes only, never commands or errors.
 | `transcript_path` is not a file | Nothing to count |
 | A marker for this `session_id` exists | Already nudged in this session |
 | Fewer than `DEVELOPER_OS_CAPTURE_NUDGE_MIN` (default 30) `tool_use` blocks in the content of transcript lines whose top-level `type` is `assistant`; a `tool_use` string in a tool result or an `api-request-blob` line (a stored request body that repeats earlier turns) does not count | Short session |
-| A background agent or command launched in this session has no `<task-notification>` yet and its output file changed in the last 30 minutes; only an absolute output path under a `tasks/` directory counts | The turn ended to wait for it; the marker stays unspent, so the nudge comes later |
-| A Monitor started in the last 30 minutes has no terminal `<task-notification>` (one carrying its `<tool-use-id>`; event notices carry only `<task-id>`) | The turn ended to wait for it; the marker stays unspent. The 30-minute bound also covers a Monitor that expires without a notice |
+| `background_tasks` is a non-empty list (Claude Code lists the in-flight tasks there) | The turn ended to wait for them; the marker stays unspent, so the nudge comes later |
+| `background_tasks` is absent (an older Claude Code), and a background agent or command launched in this session has no `<task-notification>` yet and its output file changed in the last 30 minutes; only an absolute output path under a `tasks/` directory counts | The turn ended to wait for it; the marker stays unspent, so the nudge comes later |
+| `background_tasks` is absent, and a Monitor started in the last 30 minutes has no terminal `<task-notification>` (one carrying its `<tool-use-id>`; event notices carry only `<task-id>`) | The turn ended to wait for it; the marker stays unspent. The 30-minute bound also covers a Monitor that expires without a notice |
 | The marker cannot be written | Fail open |
 
 **Otherwise:** writes the marker, removes markers 8 days old or older, prints to stdout
@@ -273,5 +274,6 @@ script reads the file's modification time with `stat` and runs no other program 
 | `DEVELOPER_OS_REPEAT_FAILURE` | repeat-failure | `off` disables the repeated-failure reminder |
 | `CLAUDE_CODE_ENTRYPOINT` | capture-nudge, notices | Set by Claude Code but not in its documentation, so it may change without notice; `sdk-*` skips the hook |
 | `CLAUDE_PLUGIN_DATA` | capture-nudge, notices, repeat-failure | Set by Claude Code; marker directory root, kept across plugin updates |
-| `CLAUDE_CONFIG_DIR` | notices | Where the user-level `CLAUDE.md` with the `Brain vault:` line lives (default `~/.claude`) |
-| `CLAUDE_PLUGIN_ROOT` | hooks.json | Set by Claude Code; plugin install path |
+| `CLAUDE_CONFIG_DIR` | notices, guard | Where the user-level config lives (default `~/.claude`): notices reads the `Brain vault:` line from its `CLAUDE.md`; guard protects the same files under it |
+| `CLAUDE_PLUGIN_ROOT` | hooks.json, notices | Set by Claude Code; plugin install path |
+| `TMPDIR` | capture-nudge, notices, repeat-failure | Marker directory root when `CLAUDE_PLUGIN_DATA` is unset (default `/tmp`) |
