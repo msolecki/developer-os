@@ -47,11 +47,12 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          # A pull request must not loosen its own scan.
-          if git diff --name-only "$BASE" "$HEAD" | grep -E '(^|/)\.gitleaks(\.toml|ignore)$'; then
+          # A pull request must not loosen its own scan. BASE...HEAD diffs from the merge base: only the PR's own changes.
+          if git diff --name-only "$BASE...$HEAD" | grep -E '(^|/)\.gitleaks(\.toml|ignore)$'; then
             echo "gitleaks configuration changed in this pull request; a maintainer reviews it by hand" >&2; exit 1
           fi
-          if git diff "$BASE" "$HEAD" | grep -E '^\+.*gitleaks:allow'; then
+          # This file is excluded: the grep below names the marker itself.
+          if git diff "$BASE...$HEAD" -- . ':(exclude).github/workflows/check.yml' | grep -E '^\+.*gitleaks:allow'; then
             echo "this pull request adds a gitleaks:allow marker; a maintainer reviews it by hand" >&2; exit 1
           fi
           gitleaks git --no-banner --redact --log-opts="$BASE..$HEAD" .
