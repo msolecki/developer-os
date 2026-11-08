@@ -45,9 +45,9 @@ check ask "$(fx 'git commit -anm x')"
 check ctx "$(fx 'git commit -am x')"
 check ask "$(fx 'pnpm \\\n add x')"
 check ask "$(fx 'sh -c \"pnpm add zod\"')"
-# Quotes are stripped: a quoted mention without a package passes, with one asks.
+# Quotes are stripped: a quoted mention without a package passes; a quoted commit message is not scanned (FLOW-39).
 check pass "$(fx 'echo \"pnpm add\"')"
-check ask "$(fx 'git commit -m \"pnpm add zod\"')"
+check ctx "$(fx 'git commit -m \"pnpm add zod\"')"
 check ask "$(fx 'git push --force')"
 check ask "$(fx 'git push --no-verify')"
 check ask "$(fx 'ls; pnpm add zod')"
@@ -470,6 +470,19 @@ c=$(python3 -c "print('git ' + ' '.join(['-c x=y']*3000) + ' status')")
 t0=$(python3 -c 'import time;print(time.time())')
 check pass "$(fa $r "$c")"
 python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: git with 3000 -c pairs took over 1 s"; }
+
+# 2026-11-08 batch: FLOW-39 commit only as git's subcommand; a quoted -m value is not scanned
+check pass "$(fx 'git log --grep commit -n 5')"
+check ctx "$(fx 'git commit -m \"fix npm install bug\"')"
+check ctx "$(fx 'git commit -am \"skip --no-verify\"')"
+check ask "$(fx 'git commit -m \"x\" -n')" "skips"
+check ask "$(fx 'git commit -m \"x\"; pnpm add zod')" "Dependency install"
+check ask "$(fx 'git commit -m \"$(pnpm add zod)\"')" "Dependency install"
+# FLOW-36: 10000 double-quoted words stay linear
+c=$(python3 -c "print('echo ' + '\\\\\"a\\\\\" ' * 10000)")
+t0=$(python3 -c 'import time;print(time.time())')
+check pass "$(fa $r "$c")"
+python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: 10000 quoted words took over 1 s"; }
 
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

@@ -125,6 +125,10 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-11-08:** the destroy category also asks before `git checkout -f`, `git switch -f` or
   `--discard-changes` and `find … -delete` (#108). The protected files match through symlink hops and
   without case, so a link to a `.env` asks and so does a differently cased name (#123).
+- **Amended 2026-11-08:** a quoted commit message (`-m`, `-F`, `--message`, `--file`) is no longer
+  scanned, and `commit -n` counts only with `commit` as git's subcommand, reversing "still ask on a
+  mention" for commit messages: in `claude -p` an ask is a denial, and `git commit -m "fix npm install
+  bug"` blocked headless lanes (FLOW-39).
 
 ## D7. One wrap-up nudge per long session
 

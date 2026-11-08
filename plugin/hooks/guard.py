@@ -30,8 +30,8 @@ A `git commit` that passes every check gets no decision, only a one-line `additi
 agent to run the project's fast check first; the rule loaded at session start fades in a long session.
 
 Quotes are stripped before matching, so `sh -c "pnpm add zod"` asks, and so does a mention such as
-`git commit -m "pnpm add zod"`: install, push and hook-bypass words count anywhere. An extra prompt costs
-one click; a missed install rewrites the lockfile.
+`echo "pnpm add zod"`: install, push and hook-bypass words count anywhere, except in a quoted commit
+message (`-m "..."`, see messages()). An extra prompt costs one click; a missed install rewrites the lockfile.
 """
 import json
 import os
@@ -202,7 +202,7 @@ def scan(line):
     """Word scanner: install, push, noverify or destroy for the first hit, None otherwise."""
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
-        pm = sub = git = push = commit = force = skip = False
+        pm = sub = git = push = force = skip = False
         rm = rec = rmf = ended = False
         if destroys(words):
             return "destroy"
@@ -240,12 +240,10 @@ def scan(line):
                 force = True
             if git and x == "push" and (i == 0 or words[i - 1] != "stash"):
                 push = True
-            elif git and x == "commit":
-                commit = True
             elif push and (x in ("--force", "--mirror") or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x) or x.startswith("+")):
                 force = True
-            elif commit and re.fullmatch(r"-[a-zA-Z]*n[a-zA-Z]*", x):
-                return "noverify"
+        if any(sub == "commit" and any(re.fullmatch(r"-[a-zA-Z]*n[a-zA-Z]*", x) for x in rest) for sub, rest in git_subs(words)):
+            return "noverify"
         if force:
             return "push"
     return None
@@ -303,7 +301,10 @@ def unquoted(cmd):
         return None
     if re.search(r"<<<|\|\s*(\S*/)?(ba|z|da|k)?sh(\s|$)", s):
         return None
-    out, i = [], 0
+    # `before` would be every character so far, rebuilt per quote (quadratic); keep a 64-character tail for
+    # the `eval`/`-c` test and a flag for a shell word, fed from the text added since the last quote.
+    # ponytail: a word longer than 64 characters (a long `-c` cluster or path) is cut; lengthen if it matters.
+    out, i, tail, frag, shell, last = [], 0, "", "", False, 0
     while i < len(s):
         c = s[i]
         if c == "\\":
@@ -327,15 +328,35 @@ def unquoted(cmd):
             if "$(" in body or "`" in body:
                 return None
             # The shell runs the text after its own `-c` (not `python3 -c`) or after `eval`.
-            before = "".join(out)
-            run = re.search(r"(^|\s)eval\s*$", before) or (re.search(r"(^|\s)-[a-zA-Z]*c\s*$", before) and any(
-                re.search(SHELL, w) for w in re.split(r"[\s;&|()`]+", before)))
+            new = "".join(out[last:])
+            tail = (tail + re.sub(r"\s+", " ", new))[-64:]
+            words = re.split(r"[\s;&|()`]+", frag + new)
+            shell = shell or any(re.search(SHELL, w) for w in words)
+            run = re.search(r"(^|\s)eval\s*$", tail) or (re.search(r"(^|\s)-[a-zA-Z]*c\s*$", tail) and shell)
             out.append(body if run else re.sub(r"[<>]", " ", body))
+            frag, last = words[-1][-64:], len(out) - 1
             i = j + 1
             continue
         out.append(c)
         i += 1
     return re.sub(r"[\"\\${}]", "", "".join(out))
+
+
+MESSAGE = re.compile(r"""(\s(?:-[a-zA-Z]*m|-F|--message|--file)(?:=|\s+))("(?:[^"\\]|\\.)*"|'[^']*')""")
+
+
+def messages(cmd):
+    """In a command with `commit`, each quoted value of `-m` (or a cluster ending in m), `-F`, `--message` or
+    `--file` becomes `x`, so the words of a commit message are not scanned as commands; a double-quoted one
+    holding `$(` or a backtick stays, since the shell runs that. The command stays JSON-escaped."""
+    try:
+        s = json.loads('"%s"' % cmd)
+    except ValueError:
+        return cmd
+    if "commit" not in s:
+        return cmd
+    keep = lambda m: m.group(0) if m.group(2)[0] == '"' and ("$(" in m.group(2) or "`" in m.group(2)) else m.group(1) + "x"
+    return json.dumps(MESSAGE.sub(keep, s), ensure_ascii=False)[1:-1]
 
 
 def scratch(path):
@@ -456,6 +477,7 @@ def main():
     cmd = command(raw)
     if not cmd:
         return
+    cmd = messages(cmd)
     # Each way runs with a newline as `;` and as a space, and the shell's own `\n` as a break: seven views,
     # and a hit in any asks.
     # Quotes are not tracked: an extra ask is the price.
