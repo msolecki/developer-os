@@ -77,6 +77,9 @@ TEST_RUNNERS = {"test", "jest", "vitest", "playwright"}
 TEMP = ("/tmp/", "/private/tmp/", "/var/folders/", "TMPDIR/")
 WHOLE_TREE = (".", "./", ":/", "*")
 PM_VALUE = {"--filter", "-F", "--prefix", "--dir", "-C"}
+# `git fetch` options whose value is the next word, so it is neither the remote nor a refspec.
+FETCH_VALUE = {"--depth", "--deepen", "--shallow-since", "--shallow-exclude", "-j", "--jobs", "--negotiation-tip",
+               "--server-option", "-o", "--upload-pack", "--refmap", "--recurse-submodules-default", "--filter"}
 
 
 def command(raw):
@@ -88,7 +91,7 @@ def command(raw):
     return m.group(1) if m else ""
 
 
-def view(cmd, newline, quotes_to_space=False, join_commas=False):
+def view(cmd, newline, quotes_to_space=False, join_commas=False, shell_ws=False):
     """JSON-unescape, then delete every backslash and `$`, and either delete quotes (so `np""m`, `\\git`,
     `-\\-force` and `$'-f'` read as the word the shell runs) or turn them into spaces (so a quoted value
     such as `alias.p='push -f'` keeps its words apart). Braces go and commas split words, so a brace
@@ -101,9 +104,12 @@ def view(cmd, newline, quotes_to_space=False, join_commas=False):
     s = re.sub(r"\$(?:[1-9@*]|\{[1-9@*]\})", "", s)
     s = re.sub(r"\$'[^']*'", lambda m: re.sub(r"\\\\(?:x([0-9a-fA-F]{1,2})|([0-7]{1,3}))",
                lambda e: chr(int(e.group(1), 16) if e.group(1) else int(e.group(2), 8)), m.group(0)), s)
-    s = re.sub(r"\\\\\\n", " ", s)
-    s = re.sub(r"\\n", newline, s)
-    s = re.sub(r"\\[rt]", " ", s)
+    # One pass over the JSON escape pairs, so the shell's `\rm` (JSON `\\rm`) is not read as `\r` + `m`.
+    # With shell_ws, the shell's own `\n`, `\r`, `\t` (JSON `\\n`) also break or space, as `$'ls\nrm'`,
+    # `printf 'ls\nrm' | sh` or `eval` would run them; the caller checks both readings.
+    esc = {None: " ", "n": newline, "r": " ", "t": " "}  # None: a backslash-newline continuation
+    s = re.sub(r"(\\\\\\n)|\\\\([nrt])|\\(.)", lambda m: " " if m.group(1) else (
+        (esc[m.group(2)] if shell_ws else m.group(0)) if m.group(2) else esc.get(m.group(3), m.group(0))), s)
     s = re.sub("[\"']", " " if quotes_to_space else "", s)
     s = re.sub(r"[\\${}]", "", s)
     return s.replace(",", "" if join_commas else " ")
@@ -122,7 +128,7 @@ def starts(words):
     `command -v` only looks a name up), after a keyword in command position (`then rm`), after a shell's
     `-c` (`sh -c "rm -rf x"` once quotes are dropped), or after a leading `NAME=value`. A word anywhere
     else is an argument, so a mention (`grep -rn "git add"`, `-m "rm -rf"`) is not a command."""
-    out, at, pre, value = [], False, None, False
+    out, at, pre, value, shell = [], False, None, False, False
     for i, x in enumerate(words):
         here = at or i == 0
         if here:
@@ -130,7 +136,7 @@ def starts(words):
         if value:  # an option's value, or the command when a view dropped it (`xargs -I{} rm`); either may come next
             value = False
         elif (x.rsplit("/", 1)[-1] in PRECMD and (here or x in ("-exec", "-execdir"))) or (here and x in KEYWORDS) or (
-                re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", x) and any(re.search(SHELL, w) for w in words[:i])):
+                shell and re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", x)):
             at, pre = True, x.rsplit("/", 1)[-1]
         elif here and pre and x.startswith("-"):
             at = not (pre == "command" and x in ("-v", "-V"))
@@ -139,7 +145,13 @@ def starts(words):
             pre = "-"  # the operand is taken; a `--` may still follow
         else:
             at, pre = here and re.fullmatch(r"[A-Za-z_]\w*=.*", x) is not None, None
+        shell = shell or re.search(SHELL, x) is not None  # a shell word before a later `-c`
     return out
+
+
+def long(x, name):
+    """`x` is `name` or a prefix of it git (or GNU rm) accepts as an abbreviation (`--ha` for `--hard`)."""
+    return len(x) >= 4 and name.startswith(x)
 
 
 def git_subs(words, pos=None):
@@ -148,12 +160,11 @@ def git_subs(words, pos=None):
     for i, w in enumerate(words):
         if (pos is not None and i not in pos) or not re.search(r"(^|/)git$", w):
             continue
-        rest = words[i + 1:]
-        while rest and rest[0].startswith("-"):
-            takes = rest[0] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace")
-            rest = rest[2:] if takes else rest[1:]
-        if rest:
-            yield rest[0], rest[1:]
+        j = i + 1  # by index: slicing per option is quadratic on `git -c a=b -c a=b ...`
+        while j < len(words) and words[j].startswith("-"):
+            j += 2 if words[j] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace") else 1
+        if j < len(words):
+            yield words[j], words[j + 1:]
 
 
 def destroys(words):
@@ -164,14 +175,14 @@ def destroys(words):
     pos = starts(words)
     for sub, rest in git_subs(words, pos):
         whole = any(x in WHOLE_TREE for x in rest)
-        force = any(x == "--force" or short(x, "f") for x in rest)
-        if sub == "reset" and "--hard" in rest:
+        force = any(long(x, "--force") or short(x, "f") for x in rest)
+        if sub == "reset" and any(long(x, "--hard") for x in rest):
             return True
-        if sub == "clean" and force and not any(x == "--dry-run" or short(x, "n") for x in rest):
+        if sub == "clean" and force and not any(long(x, "--dry-run") or short(x, "n") for x in rest):
             return True
         if sub == "checkout" and (whole or force):
             return True
-        if sub == "switch" and (force or "--discard-changes" in rest):
+        if sub == "switch" and (force or any(long(x, "--discard-changes") for x in rest)):
             return True
         if sub == "rm" and force:  # `-f` removes files with uncommitted changes
             return True
@@ -181,7 +192,7 @@ def destroys(words):
             return True
         if sub == "restore" and whole:
             staged = any(x == "--staged" or short(x, "S") for x in rest)
-            worktree = any(x == "--worktree" or short(x, "W") for x in rest)
+            worktree = any(long(x, "--worktree") or short(x, "W") for x in rest)
             if worktree or not staged:
                 return True
     return any(re.search(r"(^|/)find$", words[i]) for i in pos) and "-delete" in words
@@ -199,9 +210,9 @@ def scan(line):
         for i, x in enumerate(words):
             if rm and x == "--":
                 ended = True
-            if rm and not ended and (x == "--recursive" or re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", x)):
+            if rm and not ended and (long(x, "--recursive") or re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", x)):
                 rec = True
-            if rm and not ended and (x == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x)):
+            if rm and not ended and (long(x, "--force") or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x)):
                 rmf = True
             if rm and rec and rmf:
                 return "destroy"
@@ -254,6 +265,10 @@ def git_writes(sub, rest):
     if sub in GIT_WRITE:
         return True
     args = [x for x in rest if not x.startswith("-")]
+    if sub == "fetch":  # a refspec after the remote that writes outside refs/remotes moves a local ref (`main:main`)
+        args = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in FETCH_VALUE)]
+        dsts = [x.split(":", 1)[1] for x in args[1:] if ":" in x and "://" not in x]
+        return any(d and not d.startswith("refs/remotes/") for d in dsts)
     if sub == "stash":
         return rest[:1] not in (["list"], ["show"])
     if sub == "worktree":
@@ -373,7 +388,8 @@ def writes(line):
             if name == "gh" and words[i + 1:i + 3] == ["pr", "checkout"]:
                 return True
             if name in ("sed", "perl") and any(
-                    w == "--in-place" or w.startswith("--in-place=") or re.match(r"-[a-zA-Z]*i", w) for w in words[i + 1:]):
+                    w == "--in-place" or w.startswith("--in-place=") or re.match(r"-(?![MmI])[a-zA-Z]*i", w)
+                    for w in words[i + 1:]):  # perl's -M/-m/-I take a module or path (`-MList::Util`)
                 return True
         if any(git_writes(sub, rest) for sub, rest in git_subs(words, pos)):
             return True
@@ -388,22 +404,40 @@ def commits(line):
     return False
 
 
+def hops(path, limit=8):
+    """The path and each link target it leads to in turn (`ok.txt` -> `.env` -> `secrets.txt`), at most limit."""
+    out = [path]
+    for _ in range(limit):
+        try:
+            target = os.readlink(out[-1])
+        except OSError:
+            break
+        out.append(os.path.normpath(os.path.join(os.path.dirname(out[-1]), target)))
+    return out
+
+
 def protected(path):
-    """A secret file or the agent's own user-level config, after expanding `~` and resolving links,
-    compared without case (macOS volumes ignore it)."""
-    p = os.path.realpath(os.path.expanduser(path)).lower()
-    home = os.path.realpath(os.path.expanduser("~")).lower()
-    base = os.path.basename(p)
-    if base in (".env", ".envrc") or (base.startswith((".env.", ".envrc.")) and base.rsplit(".", 1)[1] not in ("example", "sample", "template", "dist")):
+    """A secret file or the agent's own user-level config, by the path as written (`~` expanded,
+    normalized), by each link it passes through, or by the path its links resolve to, compared without case (macOS volumes ignore it).
+    A path Python cannot resolve (a NUL byte) counts as protected."""
+    try:
+        forms = lambda q: {os.path.abspath(os.path.expanduser(q)).lower(), os.path.realpath(os.path.expanduser(q)).lower()}
+        paths, homes = forms(path) | {h.lower() for h in hops(os.path.abspath(os.path.expanduser(path)))}, forms("~")
+        other = os.environ.get("CLAUDE_CONFIG_DIR")
+        configs = forms(other) if other else set()
+    except ValueError:
         return True
-    files = [os.path.join(home, ".claude.json")]
-    dirs = [os.path.join(home, d) for d in (".ssh", ".aws", ".gnupg")]
+    for p in paths:
+        base = os.path.basename(p)
+        if base in (".env", ".envrc") or (base.startswith((".env.", ".envrc.")) and base.rsplit(".", 1)[1] not in ("example", "sample", "template", "dist")):
+            return True
+    files = [os.path.join(h, ".claude.json") for h in homes]
+    dirs = [os.path.join(h, d) for h in homes for d in (".ssh", ".aws", ".gnupg")]
     # CLAUDE_CONFIG_DIR moves the config, `.claude.json` included, to another directory (a second account).
-    other = os.environ.get("CLAUDE_CONFIG_DIR")
-    for claude in {os.path.join(home, ".claude"), os.path.realpath(os.path.expanduser(other)).lower() if other else ""} - {""}:
+    for claude in {os.path.join(h, ".claude") for h in homes} | configs:
         files += [os.path.join(claude, f) for f in (".claude.json", "settings.json", "settings.local.json", "claude.md")]
         dirs += [os.path.join(claude, d) for d in ("hooks", "rules", "agents", "skills", "commands", "plugins", "output-styles")]
-    return p in files or any(p == d or p.startswith(d + os.sep) for d in dirs)
+    return any(p in files or any(p == d or p.startswith(d + os.sep) for d in dirs) for p in paths)
 
 
 def ask(reason):
@@ -422,9 +456,11 @@ def main():
     cmd = command(raw)
     if not cmd:
         return
-    # Each way runs with a newline as `;` and as a space: five views, and a hit in any asks.
+    # Each way runs with a newline as `;` and as a space, and the shell's own `\n` as a break: seven views,
+    # and a hit in any asks.
     # Quotes are not tracked: an extra ask is the price.
-    views = [view(cmd, ";"), view(cmd, " "), view(cmd, ";", True), view(cmd, " ", True), view(cmd, " ", join_commas=True)]
+    views = [view(cmd, ";"), view(cmd, " "), view(cmd, ";", True), view(cmd, " ", True), view(cmd, " ", join_commas=True),
+             view(cmd, ";", shell_ws=True), view(cmd, ";", True, shell_ws=True)]
     for v in views:
         hit = scan(v)
         if hit:

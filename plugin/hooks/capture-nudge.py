@@ -27,6 +27,19 @@ def field(text, key):
     return m.group(1) if m else ""
 
 
+def tool_uses(line):
+    """tool_use blocks in an assistant message line. A tool_result that printed a transcript, or an
+    api-request-blob line (a stored request body repeating earlier turns), has another top-level type."""
+    if '"tool_use"' not in line:  # skips the JSON parse on most lines
+        return 0
+    try:
+        entry = json.loads(line)
+        content = entry["message"]["content"] if entry.get("type") == "assistant" else []
+        return sum(1 for c in content if isinstance(c, dict) and c.get("type") == "tool_use")
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return 0
+
+
 def owned_dir(path):
     st = os.lstat(path)
     return not os.path.islink(path) and st.st_uid == os.getuid()
@@ -64,10 +77,7 @@ def main():
     finished, launches, monitors = set(), [], []
     with open(transcript, encoding="utf-8", errors="replace", newline="\n") as f:
         for line in f:
-            # An api-request-blob line stores a request body: copies of earlier turns, which would count twice.
-            if line.startswith('{"type":"api-request-blob"'):
-                continue
-            n += line.count('"type":"tool_use"')
+            n += tool_uses(line)
             finished.update(re.findall(r"<tool-use-id>([A-Za-z0-9_]+)</tool-use-id>", line))
             launches.extend(LAUNCH.findall(line))
             if MONITOR.search(line):

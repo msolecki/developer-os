@@ -62,6 +62,15 @@ done
 run "$(input s2b "$tmp/blob.jsonl")"
 check "api-request-blob copies not counted" "$code" silent
 
+transcript "$tmp/printed.jsonl" 5
+i=0
+while [ "$i" -lt 30 ]; do
+  printf '{"type":"user","message":{"content":[{"tool_use_id":"x%s","type":"tool_result","content":"{\\"type\\":\\"tool_use\\"}"}]},"toolUseResult":{"content":[{"type":"tool_use","id":"y"}]}}\n' "$i" >> "$tmp/printed.jsonl"
+  i=$((i + 1))
+done
+run "$(input s2c "$tmp/printed.jsonl")"
+check "tool_use printed inside a tool_result not counted" "$code" silent
+
 run "$(input s3 "$tmp/short.jsonl")" DEVELOPER_OS_CAPTURE_NUDGE_MIN=3
 check "custom threshold" "$code" fire
 
