@@ -26,6 +26,8 @@ Review the files named in your prompt: IaC (Terraform, CDK, CloudFormation, Pulu
 
 IAM and role policies with wildcards on actions or resources; resources open to the internet (security groups `0.0.0.0/0` on non-web ports, public buckets, public snapshots); secrets in plain config, variables or workflow files instead of a secret store; stateful resources whose change forces replacement, and missing deletion protection or backups; unencrypted storage; CI workflows with write-all `permissions`, `pull_request_target` running untrusted code, actions or images not pinned to a digest or SHA, persisted credentials; missing alerts, health checks or runbook links, judged by the `developer-os:monitoring-conventions` skill (if it is unavailable, apply: alert on symptoms, link a runbook, separate health from readiness).
 
+**AI agents in CI (prompt injection):** for a workflow step that runs an AI agent (`claude-code-action`, `codex-action` or similar), flag attacker-controlled text reaching the prompt and agent output reaching a shell: `${{ github.event.* }}` in the prompt, directly or through `env:`; `gh issue view` or `gh pr view` output in the prompt; `pull_request_target` with a checkout of the PR head; CI logs or `workflow_dispatch` inputs in the prompt; allowed tools that permit `$()`; agent output passed to `eval`, `exec` or `$()` in a `run:` step; `Bash(*)`, `--yolo` or an unsafe sandbox setting; `allowed_non_write_users: "*"`.
+
 ## Final status
 
 The first line of your report is exactly one of:

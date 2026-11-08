@@ -26,7 +26,7 @@
 <meta name="dos-source" content="plugin/agents/security-auditor.md@de2322881df6">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@a31093b64b9f">
 <meta name="dos-source" content="plugin/agents/dependency-upgrader.md@e9b15925f839">
-<meta name="dos-source" content="plugin/agents/infra-reviewer.md@c081e0ee49a5">
+<meta name="dos-source" content="plugin/agents/infra-reviewer.md@c10ec1b4f012">
 <meta name="dos-source" content="plugin/agents/docs-writer.md@69397204da06">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -189,6 +189,7 @@
     <ul>
       <li>The tool and the cloud first, and the modules, stacks or reusable workflows a change calls.</li>
       <li>Wildcard IAM, resources open to the internet, secrets in plain config, stateful resources a change replaces, unencrypted storage, CI with write-all permissions, <code>pull_request_target</code> on untrusted code, actions and images not pinned to a digest, and missing alerts judged by <a href="skills/monitoring-conventions.html">monitoring-conventions</a>.</li>
+      <li>Prompt injection in AI agent steps in CI (<code>claude-code-action</code>, <code>codex-action</code> and similar): <code>${{ github.event.* }}</code> in the prompt directly or through <code>env:</code>, <code>gh issue view</code> or <code>gh pr view</code> output, CI logs or <code>workflow_dispatch</code> inputs in the prompt, <code>pull_request_target</code> with a checkout of the PR head, allowed tools that permit <code>$()</code>, agent output passed to <code>eval</code>, <code>exec</code> or <code>$()</code> in <code>run:</code>, <code>Bash(*)</code>, <code>--yolo</code> or an unsafe sandbox, and <code>allowed_non_write_users: "*"</code>.</li>
     </ul>
     <h3 id="infra-reviewer-report">infra-reviewer report</h3>
     <p>Findings under P0–P3, each with <code>file:line</code>, the mechanism, the trigger condition and a fix, labelled MEASURED or INFERRED. It ends with what to check in the plan before applying, or <code>No destructive change found</code>.</p>
