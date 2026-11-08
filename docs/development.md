@@ -54,6 +54,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
+| agnix | `agnix --target claude-code --strict --config .agnix.toml .` reports an error or warning; the stage runs when `agnix` is on `PATH`, prints `SKIP agnix` otherwise, and fails when it is missing in CI |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
 
 The file set is tracked plus untracked-not-ignored files, so a new doc is checked before it is
@@ -63,7 +64,7 @@ committed.
 
 `.github/workflows/check.yml` runs `scripts/check.sh` on pushes to `development` and `main` and on
 every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
-Before the check it runs agnix (`agent-sh/agnix` v0.57.0, the release binary pinned by its
+Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.57.0, the release binary pinned by its
 SHA-256, `--strict`, target `claude-code`), a static lint of skills, hooks and manifests configured in
 `.agnix.toml`; every rule disabled there carries its reason. It pins `actions/checkout` to a commit SHA, does not persist credentials, has
 read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`) and a gitleaks

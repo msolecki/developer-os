@@ -93,6 +93,11 @@ printf '%s\n' '#!/bin/sh' 'case "$*" in *--strict*) printf "Found 1 warning:\n  
 chmod +x "$tmp/bin/claude"
 runpath="$tmp/bin:$PATH"
 run "a validate warning fails through the --strict exit status" fail "claude plugin validate --strict failed"
+rm "$tmp/bin/claude"
+printf '%s\n' '#!/bin/sh' 'echo "CC-SK-001 error"; exit 1' > "$tmp/bin/agnix"
+chmod +x "$tmp/bin/agnix"
+run "an agnix finding fails the check" fail "agnix: .: agnix --strict failed above"
+rm "$tmp/bin/agnix"
 runpath=
 
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'

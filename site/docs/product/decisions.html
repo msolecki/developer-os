@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@db6e9cc9b678">
+<meta name="dos-source" content="docs/product/decisions.md@d3682917c89a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -187,6 +187,7 @@
 <li><strong>Date:</strong> 2026-10-15 · Sources proposal #13, Q12</li>
 <li><strong>Decision:</strong> CI downloads the <code>agent-sh/agnix</code> v0.57.0 release binary, checks it against a SHA-256 in the workflow, and runs it strict, with suppressions in <code>.agnix.toml</code>, each with its reason. <code>scripts/check.sh</code> adds <code>plugin/SURFACE.txt</code> and digit-count checks, which need no new tool.</li>
 <li><strong>Why:</strong> a local agnix would need an install on every contributor's machine. The hash lives in the workflow because the action's own checksum file comes from the same release and proves nothing if the release is replaced.</li>
+<li><strong>Amended 2026-11-08:</strong> <code>scripts/check.sh</code> runs agnix when it is on <code>PATH</code> and fails in CI without it, so a contributor who has it sees CI's result before pushing; CI only sets up the pinned binary. A local install stays optional: without it the stage prints <code>SKIP agnix</code>.</li>
 </ul>
 <h2 id="d19-a-codex-installer-that-copies-not-symlinks-superseded-by-d21">D19. A Codex installer that copies, not symlinks (superseded by D21)</h2>
 <ul>

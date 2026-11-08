@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@cf75c7714d7c">
+<meta name="dos-source" content="docs/development.md@dd040c98e7c7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -87,6 +87,7 @@
           <tr><td>Site</td><td>A doc, root document, skill, agent or output style has no page under <code>site/</code> that names it in a <code>dos-source</code> meta; a page's hash differs from its source's; a relative <code>href</code> or <code>src</code> in <code>site/</code>, or a page in <code>NAV</code> in <code>site/assets/site.js</code>, does not resolve to a file inside <code>site/</code> (in exact case) or names no <code>id</code> in the target page; a page names a source that belongs to another page; a page lacks its canonical URL or an <code>og:image</code> that exists under <code>site/</code>; <code>site/sitemap.xml</code> does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example <code>docs/superpowers/</code>) need no page</td></tr>
           <tr><td>Script tests</td><td>Any <code>tests/*.test.sh</code> exits non-zero; <code>tests/check.test.sh</code> runs only when <code>CI</code> is set</td></tr>
           <tr><td>Plugin validation</td><td><code>claude plugin validate . --strict</code> or <code>claude plugin validate plugin --strict</code> fails when <code>--strict</code> exits non-zero, that is on any error or warning (such as an unknown manifest key)</td></tr>
+          <tr><td>agnix</td><td><code>agnix --target claude-code --strict --config .agnix.toml .</code> reports an error or warning; the stage runs when <code>agnix</code> is on <code>PATH</code>, prints <code>SKIP agnix</code> otherwise, and fails when it is missing in CI</td></tr>
           <tr><td>Secrets</td><td><code>gitleaks dir</code> finds a secret in tracked or untracked-not-ignored files</td></tr>
         </tbody>
       </table>
@@ -96,7 +97,7 @@
     <h2 id="ci">CI</h2>
     <p><code>.github/workflows/check.yml</code> runs <code>scripts/check.sh</code> on pushes to <code>development</code> and <code>main</code> and on
     every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
-    Before the check it runs agnix (<code>agent-sh/agnix</code> v0.57.0, the release binary pinned by its
+    Before the check it puts agnix on <code>PATH</code> for the agnix stage (<code>agent-sh/agnix</code> v0.57.0, the release binary pinned by its
     SHA-256, <code>--strict</code>, target <code>claude-code</code>), a static lint of skills, hooks and manifests configured in
     <code>.agnix.toml</code>; every rule disabled there carries its reason. It pins <code>actions/checkout</code> to a commit SHA, does not persist credentials, has
     read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.300</code> (with <code>--ignore-scripts</code>, then only its own <code>install.cjs</code>, which links the native binary, then <code>claude --version</code>) and a gitleaks

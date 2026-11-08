@@ -381,6 +381,15 @@ for d in . plugin; do
   out=$(claude plugin validate "$d" --strict 2>&1) || { echo "$out" >&2; fail validate "$d" "claude plugin validate --strict failed above"; }
 done
 
+# Static lint of skills, hooks and manifests (.agnix.toml). CI sets up the pinned release; locally it runs when on PATH.
+if command -v agnix >/dev/null 2>&1; then
+  agnix --target claude-code --strict --config .agnix.toml . >&2 || fail agnix . "agnix --strict failed above"
+elif [ -n "${CI:-}" ]; then
+  fail agnix . "agnix not found; CI must set it up"
+else
+  echo "SKIP agnix: not found; CI runs it" >&2
+fi
+
 # Scan only what git tracks (or stages), not ignored local files.
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

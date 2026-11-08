@@ -265,6 +265,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Why:** a local agnix would need an install on every contributor's machine. The hash lives in the
   workflow because the action's own checksum file comes from the same release and proves nothing
   if the release is replaced.
+- **Amended 2026-11-08:** `scripts/check.sh` runs agnix when it is on `PATH` and fails in CI without it, so a
+  contributor who has it sees CI's result before pushing; CI only sets up the pinned binary. A local install stays
+  optional: without it the stage prints `SKIP agnix`.
 
 ## D19. A Codex installer that copies, not symlinks (superseded by D21)
 
