@@ -153,7 +153,7 @@ required. All four set `keep-coding-instructions: true`, so Claude Code's coding
 | [architect](../../plugin/output-styles/architect.md) | ADR, Mermaid diagram, trade-off table and top-3 risk register before code, scaled to the request; waits for approval |
 | [debug](../../plugin/output-styles/debug.md) | Hypothesis before edits, failing regression test before the fix, one change at a time |
 | [direct-objective](../../plugin/output-styles/direct-objective.md) | Pushes back with file references; leads with code for implementation requests |
-| [tdd-enforcer](../../plugin/output-styles/tdd-enforcer.md) | One failing test, show the red, wait for approval, minimum code, the tests of the changed area green (the full suite stays at the push/PR gate) |
+| [tdd-enforcer](../../plugin/output-styles/tdd-enforcer.md) | One failing test, show the red, wait for approval, minimum code, the tests of the changed area with the pass count in one line (the full suite stays at the push/PR gate) |
 
 The architect and tdd-enforcer stops yield to an autonomous loop the user started through a skill
 such as implement-backlog.
