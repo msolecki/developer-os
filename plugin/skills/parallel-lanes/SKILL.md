@@ -78,7 +78,7 @@ Answer with one table, `| Lane | State | Idle for | Report | Commits | Uncommitt
 
 ## Resume
 
-For a lane cut off by a usage limit, a crash or `--max-turns`: its process has finished and its report is missing or starts with `CONTINUING`, whatever its `EXIT` line says. A `DONE`, `REVIEW` or `BLOCKED` report is final and is not resumed. Write `$R/resume.sh`, with the `TOOLS`, `DENY` and `case` lines copied unchanged from `launch.sh`:
+For a lane cut off by a usage limit, a crash or `--max-turns`: its process has finished and its report is missing or starts with `CONTINUING`, whatever its `EXIT` line says. A `DONE`, `REVIEW` or `BLOCKED` report is final and is not resumed. Write `$R/resume.sh`; its `TOOLS` and `DENY` lines, and the lane's `case` line when `launch.sh` has one, are the ones in `launch.sh`, unchanged:
 
 ```bash
 #!/usr/bin/env bash
@@ -90,7 +90,9 @@ read -r _ pid id < <(awk -v l="$lane" '$1 == l { last = $0 } END { print last }'
 [ -n "${id:-}" ] || { echo "$lane: no session id in pids.txt" >&2; exit 1; }
 ! ps -o command= -p "$pid" 2>/dev/null | grep -q 'claude -p' || { echo "$lane is still running" >&2; exit 1; }
 case "$(head -1 ".worktrees/$lane/${R#"$ROOT"/}/REPORT-$lane.md" 2>/dev/null)" in DONE*|REVIEW*|BLOCKED*) echo "$lane has a final report" >&2; exit 1;; esac
-# TOOLS, DENY and the case lines from launch.sh
+TOOLS=(Read Edit Write Glob Grep 'Bash(git status:*)' 'Bash(git diff:*)' 'Bash(git add:*)' 'Bash(git commit:*)' 'Bash(<fast check>:*)')
+DENY=()
+for p in '<package manifest>' Makefile '.husky/**' '.githooks/**' '.claude/**'; do DENY+=("Edit($p)" "Write($p)"); done
 cd "$ROOT/.worktrees/$lane"
 echo "--- resumed $(date -u +%FT%TZ)" >> "$R/log-$lane.txt"
 python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
@@ -104,8 +106,8 @@ Show the lane's Status row, its last log line and the whole `resume.sh`, then as
 
 ## Integrate
 
-1. Only lanes whose report starts with `DONE` and whose process has finished; copy each report from `.worktrees/<lane>/$R/REPORT-<lane>.md` to `$R/REPORT-<lane>.md`. A lane whose prompt or `LANES.md` changed since launch (the `hashes.txt` comparison from Status), or with a changed file outside its owned paths (a lane could weaken the files its `Check` runs), or with uncommitted changes (the merge would not carry them), moves to Needs you. Run each lane's fast check and its `Check` from `LANES.md` yourself in its worktree; the lane's own report does not count as evidence. A red fast check, a red `Check` or a `Manual` check moves the lane to Needs you, never into the merge plan.
-2. Show the plan (lanes to merge, in order, onto a new local branch `lanes/<run>` from the base) and ask before creating it. Merge or cherry-pick each lane in order; on a conflict, stop, leave the branch as it is, and report the files.
+1. Only lanes whose report starts with `DONE` and whose process has finished; copy each report from `.worktrees/<lane>/$R/REPORT-<lane>.md` to `$R/REPORT-<lane>.md`. A lane whose prompt or `LANES.md` changed since launch (the `hashes.txt` comparison from Status), or with a changed file outside its owned paths (a lane could weaken the files its `Check` runs), or with uncommitted changes (the merge would not carry them), moves to Needs you. Run each lane's fast check and its `Check` from `LANES.md` yourself from its worktree root (`cd .worktrees/<lane> && <Check>`, never by path from another checkout); the lane's own report does not count as evidence. A red fast check, a red `Check` or a `Manual` check moves the lane to Needs you, never into the merge plan.
+2. Show the plan (lanes to merge, in order, onto a new local branch `lanes/<run>` from the base) and ask before creating it. Merge or cherry-pick each lane in order; after each one, run the project's regeneration command for derived files (named in its docs, such as a script that recomputes generated hashes) and commit its output. When every conflicting hunk is a line that command rewrites, take either side and regenerate; on any other conflict, stop, leave the branch as it is, and report the files.
 3. Make the shared-file changes from Start step 2 (a lockfile changes only through the install command the user approves), then run, on `lanes/<run>`, every merged lane's `Check` and the repository-wide gate (the project's full validation, not only the fast check). A red one stops here with the failures.
 4. Review the integrated diff with `developer-os:code-review`: the lanes' code counts as written in this session. On `REQUEST_CHANGES`, or a `COMMENT` naming a blocked reviewer, list the findings under Needs you, keep every worktree and branch, and stop.
 5. After the user approves, remove each integrated worktree (`git worktree remove .worktrees/<lane>`) and its branch (`git branch -D lanes/<lane>`: a cherry-picked branch does not count as merged); keep the run directory until the plan is closed.
