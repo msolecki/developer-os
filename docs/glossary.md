@@ -28,7 +28,7 @@ last-verified: 2026-11-08
 | Fresh verifier | An agent that did not produce a P0/P1 finding or one of up to five P2 correctness findings and sees only the claim, asked to disprove it: the read-only `verifier` agent. |
 | Disputed | A finding the verifier refuted; listed with evidence, does not block the verdict or enter the backlog. |
 | Fast check | Lint, types and tests of the changed area, run before every commit. |
-| Full suite | The project's complete validation, run once before a push or PR. |
+| Full suite | The project's complete validation, run before a push or PR, or when a skill's gate requires it; never mid-task on your own. |
 | Status block | The closing **Done / Not done / Needs you** block the core rules require. |
 | Backlog | The todo and done files named by the `Backlog:` line (default `TODO.md`, `TODO-done.md`), with P0–P3 sections and implementation sessions. |
 | `BASE-NN` | A backlog item ID created by project-baseline. |

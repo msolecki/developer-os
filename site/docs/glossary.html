@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/glossary.md@30ae10d87380">
+<meta name="dos-source" content="docs/glossary.md@1421398c0f77">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -71,7 +71,7 @@
           <tr><td>Fresh verifier</td><td>An agent that did not produce a P0/P1 finding or one of up to five P2 correctness findings and sees only the claim, asked to disprove it: the read-only <code>verifier</code> agent.</td></tr>
           <tr><td>Disputed</td><td>A finding the verifier refuted; listed with evidence, does not block the verdict or enter the backlog.</td></tr>
           <tr><td>Fast check</td><td>Lint, types and tests of the changed area, run before every commit.</td></tr>
-          <tr><td>Full suite</td><td>The project's complete validation, run once before a push or PR.</td></tr>
+          <tr><td>Full suite</td><td>The project's complete validation, run before a push or PR, or when a skill's gate requires it; never mid-task on your own.</td></tr>
           <tr><td>Status block</td><td>The closing <strong>Done / Not done / Needs you</strong> block the core rules require.</td></tr>
           <tr><td>Backlog</td><td>The todo and done files named by the <code>Backlog:</code> line (default <code>TODO.md</code>, <code>TODO-done.md</code>), with P0–P3 sections and implementation sessions.</td></tr>
           <tr><td><code>BASE-NN</code></td><td>A backlog item ID created by project-baseline.</td></tr>
