@@ -139,7 +139,7 @@ run "a hook target that does not exist" fail "missing target plugin/hooks/gone.p
 edit plugin/agents/qa-expert.md '/^## Final status$/d'
 run "an agent without ## Final status" fail "agents: plugin/agents/qa-expert.md: no ## Final status section"
 
-printf '%300s\n' x >> "$r/plugin/rules/core.md"
+printf '%9000s\n' x >> "$r/plugin/rules/core.md"
 run "core.md over 8900 bytes" fail "size: plugin/rules/core.md"
 
 edit plugin/hooks/state-card.py 's/^CAP = .*/CAP = 2000/'
