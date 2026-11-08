@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@c16c66906980">
+<meta name="dos-source" content="docs/development.md@ea2ff9a64f4c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -94,7 +94,8 @@
     committed.</p>
     <h2 id="ci">CI</h2>
     <p><code>.github/workflows/check.yml</code> runs <code>scripts/check.sh</code> on pushes to <code>development</code> and <code>main</code> and on
-    every pull request. Before the check it runs agnix (<code>agent-sh/agnix</code> v0.57.0, the release binary pinned by its
+    every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
+    Before the check it runs agnix (<code>agent-sh/agnix</code> v0.57.0, the release binary pinned by its
     SHA-256, <code>--strict</code>, target <code>claude-code</code>), a static lint of skills, hooks and manifests configured in
     <code>.agnix.toml</code>; every rule disabled there carries its reason. It pins <code>actions/checkout</code> to a commit SHA, does not persist credentials, has
     read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.300</code> (with <code>--ignore-scripts</code>, then only its own <code>install.cjs</code>, which links the native binary, then <code>claude --version</code>) and a gitleaks

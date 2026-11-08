@@ -8,9 +8,15 @@ on:
 permissions:
   contents: read
 
+# A new push cancels the older run of the same ref; tests/check.test.sh makes a run long.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:

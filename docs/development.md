@@ -61,7 +61,8 @@ committed.
 ## CI
 
 `.github/workflows/check.yml` runs `scripts/check.sh` on pushes to `development` and `main` and on
-every pull request. Before the check it runs agnix (`agent-sh/agnix` v0.57.0, the release binary pinned by its
+every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
+Before the check it runs agnix (`agent-sh/agnix` v0.57.0, the release binary pinned by its
 SHA-256, `--strict`, target `claude-code`), a static lint of skills, hooks and manifests configured in
 `.agnix.toml`; every rule disabled there carries its reason. It pins `actions/checkout` to a commit SHA, does not persist credentials, has
 read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`) and a gitleaks
