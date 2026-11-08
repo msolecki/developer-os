@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@2edb1a74f75f">
+<meta name="dos-source" content="CHANGELOG.md@82f291a10685">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -127,7 +127,7 @@ fix-pr work that was then dropped (#111). code-reviewer and the verifier read th
 qa-expert, docs-writer, dependency-upgrader) runs only read-only git (<code>diff</code>, <code>log</code>, <code>show</code>, <code>status</code>, <code>blame</code>,
 <code>grep</code>, <code>ls-files</code>) and reads another revision with <code>git show</code> or <code>git diff</code>. An infra-reviewer had detached the
 orchestrator's HEAD mid-integration although the guard asks on that command: the ask was approved (#110).</li>
-<li>The guard reads a shell backslash (<code>\rm -rf x</code>, <code>\npm i zod</code>) as the command it escapes; checks every symlink
+<li>The guard reads a shell backslash (<code>\rm -rf x</code>, <code>\npm i zod</code>) as the command it escapes, and still reads the shell's own <code>\n</code> or <code>\t</code> as a break (<code>bash -c $'ls\nrm -rf x'</code>, <code>printf ... | sh</code>); checks every symlink
 hop and the real path of an Edit or Write target, so a link to <code>.env</code> asks; lets <code>perl -M…</code> and <code>-I…</code> pass in a
 read-only agent; counts a prefix of four or more characters of <code>--hard</code>, <code>--force</code>, <code>--dry-run</code>,
 <code>--discard-changes</code>, <code>--worktree</code>, and rm's <code>--recursive</code>; asks in a read-only agent on a <code>git fetch</code> refspec that writes outside

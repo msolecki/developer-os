@@ -79,7 +79,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   qa-expert, docs-writer, dependency-upgrader) runs only read-only git (`diff`, `log`, `show`, `status`, `blame`,
   `grep`, `ls-files`) and reads another revision with `git show` or `git diff`. An infra-reviewer had detached the
   orchestrator's HEAD mid-integration although the guard asks on that command: the ask was approved (#110).
-- The guard reads a shell backslash (`\rm -rf x`, `\npm i zod`) as the command it escapes; checks every symlink
+- The guard reads a shell backslash (`\rm -rf x`, `\npm i zod`) as the command it escapes, and still reads the
+  shell's own `\n` or `\t` as a break (`bash -c $'ls\nrm -rf x'`, `printf ... | sh`); checks every symlink
   hop and the real path of an Edit or Write target, so a link to `.env` asks; lets `perl -M…` and `-I…` pass in a
   read-only agent; counts a prefix of four or more characters of `--hard`, `--force`, `--dry-run`,
   `--discard-changes`, `--worktree`, and rm's `--recursive`; asks in a read-only agent on a `git fetch` refspec that writes outside
