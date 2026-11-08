@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@b9e245e365d9">
+<meta name="dos-source" content="CHANGELOG.md@455082fdf48b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -80,6 +80,7 @@ committed after its <code>last-verified</code> date prints a warning.</li>
     <h3 id="028-changed">Changed</h3>
     <ul>
 <li>The core-rules cap is 8900 bytes (was 8192). D10 amended.</li>
+<li>D27 records why skill <code>paths:</code>, hook <code>if:</code> and a <code>PreCompact</code> hook are not adopted yet. (#119)</li>
 <li>The core rules point user-level overrides at <code>CLAUDE.md</code> only; Claude Code reads no user-level <code>AGENTS.md</code>.</li>
 <li>session-retro proposes a vault lesson only when it cost a retry, a correction or a re-derivation and
 <code>brain-search</code> finds no note that already says it; otherwise it proposes an update to that note. A decision needs no such cost,
