@@ -51,8 +51,8 @@ jobs:
           if git diff --name-only "$BASE...$HEAD" | grep -E '(^|/)\.gitleaks(\.toml|ignore)$'; then
             echo "gitleaks configuration changed in this pull request; a maintainer reviews it by hand" >&2; exit 1
           fi
-          # This file is excluded: the grep below names the marker itself.
-          if git diff "$BASE...$HEAD" -- . ':(exclude).github/workflows/check.yml' | grep -E '^\+.*gitleaks:allow'; then
+          # The bracket keeps this line from matching itself, so this file stays scanned.
+          if git diff "$BASE...$HEAD" | grep -E '^\+.*gitleaks:[a]llow'; then
             echo "this pull request adds a gitleaks:allow marker; a maintainer reviews it by hand" >&2; exit 1
           fi
           gitleaks git --no-banner --redact --log-opts="$BASE..$HEAD" .
