@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@26a1606efe7e">
+<meta name="dos-source" content="docs/workflow.md@1c67afaa0aff">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -59,7 +59,8 @@ session. The agent reads it with its own file tools; no server, no index, no dat
 describe, in the repository. Plans are gitignored and deleted when done unless the project's
 <code>AGENTS.md</code> says otherwise.</li>
 <li><strong>You decide what becomes knowledge.</strong> The agent creates notes only in <code>_inbox/</code>; it edits or moves
-any other note only after you approve (brain-review, brain-garden). Nothing is trusted until you
+any other note only after you approve (brain-review, brain-garden, brain-project-refresh for the
+project hub, brain-import-memory and session-retro for an addition to a note). Nothing is trusted until you
 review it and set <code>status: active</code>. An unreviewed agent note is a draft, not a fact.</li>
 </ul>
     <h2 id="setup-in-5-minutes">Setup in 5 minutes</h2>
@@ -73,7 +74,8 @@ adds the <code>Brain vault:</code> line to <code>~/.claude/CLAUDE.md</code> and 
 <code>permissions.additionalDirectories</code> in <code>~/.claude/settings.json</code>, and asks separately whether to
 turn Claude Code's auto memory off (<code>"autoMemoryEnabled": false</code>, recommended; see
 <a href="#recommended-configuration">Recommended configuration</a>). Connecting an existing vault adds
-only the missing pieces and never overwrites your <code>.obsidian/</code> folder. Brain
+only the missing pieces (folders, views, the note template, <code>.gitignore</code> lines, and, after your
+approval, the missing property types in <code>.obsidian/types.json</code>) and never overwrites an existing file. Brain
 skills ask once for the vault path when the line is missing, and stop if you have none; the core
 rules run brain-search only when the line exists.</li>
 <li>Open the vault folder in Obsidian (&ldquo;Open folder as vault&rdquo;; Bases needs Obsidian 1.9.10 or
@@ -168,7 +170,8 @@ sources: []  # optional, compiled notes only
 template defaults to <code>status: active</code> for notes you write yourself; the agent's notes start as
 <code>status: inbox</code>.</p>
     <p>When a newer note replaces a decision, set the old note to <code>status: superseded</code> with
-<code>superseded_by: "[[new-note]]"</code> and leave it in its topic folder. brain-search follows the chain to
+<code>superseded_by: "[[new-note]]"</code> and leave it in its topic folder, by hand or with brain-review's
+&ldquo;supersede &lt;old&gt; by &lt;new&gt;&rdquo;. brain-search follows the chain to
 the current note and cites the old ones as history; a chain that breaks or loops is reported as
 incomplete history, with no note named as current.</p>
     <ul>
@@ -228,6 +231,10 @@ what to keep. For each note:</p>
 to <code>_archive/</code> with <code>status: archived</code>.</li>
 <li><strong>Reject</strong>: if it was only true for that afternoon, move it to <code>_archive/</code> with
 <code>status: archived</code>.</li>
+<li><strong>Supersede</strong>: if it replaces an active decision, keep it, then set the old note to
+<code>status: superseded</code> with <code>superseded_by: "[[new-note]]"</code> and today's <code>updated</code>; the old note stays
+in its folder as history. brain-review does this only for the notes you name (&ldquo;supersede
+DEV/queue-sqs.md by queue-kafka&rdquo;).</li>
 </ul>
     <p>The policy is archive, never delete: a merged or rejected note stays in <code>_archive/</code>, out of search
 and the views, but recoverable. brain-garden follows the same rule.</p>
@@ -378,10 +385,12 @@ files by it.</p>
 <li>Each project has a slug, for example <code>example-shop</code>. It is written once in the repository's
 <code>_Context.md</code> (<code>Vault project slug:</code>) and used as <code>project:</code> in every vault note about it.</li>
 <li><code>PROJECTS/&lt;slug&gt;.md</code> is the hub note: what the project is, who decides, links to its decision notes.</li>
-<li>brain-search and brain-capture read the <code>Vault project slug:</code> line from <code>_Context.md</code> at the
-repository root themselves, never from the directory name, so you do not type the slug.</li>
+<li>brain-search, brain-capture, brain-project-refresh and brain-import-memory read the
+<code>Vault project slug:</code> line from <code>_Context.md</code> at the repository root themselves, never from the
+directory name, so you do not type the slug.</li>
 <li><code>_views/By project.base</code> groups active notes by slug: a project's whole memory on one screen.</li>
-<li>Cross-project notes leave <code>project:</code> empty.</li>
+<li>Cross-project notes leave <code>project:</code> empty; brain-capture does so for a lesson that applies beyond
+the repository.</li>
 </ul>
     <p>Link from the vault to the repository by path or URL; do not copy repository content into notes.</p>
     <h2 id="writing-a-note-that-will-be-found">Writing a note that will be found</h2>

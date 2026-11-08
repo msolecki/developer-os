@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-24
+last-verified: 2026-11-08
 ---
 
 # How to work: brain + code
@@ -19,7 +19,8 @@ tells you when to use them and where each piece of knowledge belongs.
   describe, in the repository. Plans are gitignored and deleted when done unless the project's
   `AGENTS.md` says otherwise.
 - **You decide what becomes knowledge.** The agent creates notes only in `_inbox/`; it edits or moves
-  any other note only after you approve (brain-review, brain-garden). Nothing is trusted until you
+  any other note only after you approve (brain-review, brain-garden, brain-project-refresh for the
+  project hub, brain-import-memory and session-retro for an addition to a note). Nothing is trusted until you
   review it and set `status: active`. An unreviewed agent note is a draft, not a fact.
 
 ## Setup in 5 minutes
@@ -36,7 +37,8 @@ The [README](../README.md) has the short version; this is the full one.
    `permissions.additionalDirectories` in `~/.claude/settings.json`, and asks separately whether to
    turn Claude Code's auto memory off (`"autoMemoryEnabled": false`, recommended; see
    [Recommended configuration](#recommended-configuration)). Connecting an existing vault adds
-   only the missing pieces and never overwrites your `.obsidian/` folder. Brain skills ask once for the vault path when the line is missing, and stop if you have none; the core
+   only the missing pieces (folders, views, the note template, `.gitignore` lines, and, after your
+   approval, the missing property types in `.obsidian/types.json`) and never overwrites an existing file. Brain skills ask once for the vault path when the line is missing, and stop if you have none; the core
    rules run brain-search only when the line exists.
 3. Open the vault folder in Obsidian ("Open folder as vault"; Bases needs Obsidian 1.9.10 or
    later). In Settings, Core plugins: enable **Bases** and **Templates**; set the Templates folder
@@ -142,7 +144,8 @@ template defaults to `status: active` for notes you write yourself; the agent's 
 `status: inbox`.
 
 When a newer note replaces a decision, set the old note to `status: superseded` with
-`superseded_by: "[[new-note]]"` and leave it in its topic folder. brain-search follows the chain to
+`superseded_by: "[[new-note]]"` and leave it in its topic folder, by hand or with brain-review's
+"supersede <old> by <new>". brain-search follows the chain to
 the current note and cites the old ones as history; a chain that breaks or loops is reported as
 incomplete history, with no note named as current.
 
@@ -217,6 +220,10 @@ what to keep. For each note:
   to `_archive/` with `status: archived`.
 - **Reject**: if it was only true for that afternoon, move it to `_archive/` with
   `status: archived`.
+- **Supersede**: if it replaces an active decision, keep it, then set the old note to
+  `status: superseded` with `superseded_by: "[[new-note]]"` and today's `updated`; the old note stays
+  in its folder as history. brain-review does this only for the notes you name ("supersede
+  DEV/queue-sqs.md by queue-kafka").
 
 The policy is archive, never delete: a merged or rejected note stays in `_archive/`, out of search
 and the views, but recoverable. brain-garden follows the same rule.
@@ -388,10 +395,12 @@ files by it.
 - Each project has a slug, for example `example-shop`. It is written once in the repository's
   `_Context.md` (`Vault project slug:`) and used as `project:` in every vault note about it.
 - `PROJECTS/<slug>.md` is the hub note: what the project is, who decides, links to its decision notes.
-- brain-search and brain-capture read the `Vault project slug:` line from `_Context.md` at the
-  repository root themselves, never from the directory name, so you do not type the slug.
+- brain-search, brain-capture, brain-project-refresh and brain-import-memory read the
+  `Vault project slug:` line from `_Context.md` at the repository root themselves, never from the
+  directory name, so you do not type the slug.
 - `_views/By project.base` groups active notes by slug: a project's whole memory on one screen.
-- Cross-project notes leave `project:` empty.
+- Cross-project notes leave `project:` empty; brain-capture does so for a lesson that applies beyond
+  the repository.
 
 Link from the vault to the repository by path or URL; do not copy repository content into notes.
 
