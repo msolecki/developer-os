@@ -80,7 +80,7 @@ If the backlog files do not exist yet, ask for the paths and record them as a `B
 
 ## Stop point
 
-Stop after the report and the question. After approval, merge the approved items into the backlog file with `Session N: <ID>, …` lines of 5–7 items each under `## Implementation sessions`, grouped as audit-to-backlog groups them, show `git diff --stat`, and stop; implementation is implement-backlog's job.
+Stop after the report and the question. After approval, merge the approved items into the backlog file with `Session N: <ID>, …` lines of 5–7 items each (fewer than 5 items: one session) under `## Implementation sessions`, grouped as audit-to-backlog groups them, show `git diff --stat`, and stop; implementation is implement-backlog's job.
 
 ## Never
 

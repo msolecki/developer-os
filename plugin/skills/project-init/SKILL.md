@@ -33,7 +33,7 @@ An orchestrator: it runs other skills up to their reports, adds a conventions au
 
 ## 3. Run the process skills
 
-Run project-baseline, then docs-sync, then instruction-review (when it applies), each up to its report and no further: do not ask their questions one by one, collect their numbered items and their "needs your decision" items. Baseline items keep the `BASE` prefix. Baseline's package-manager `outdated` probe is allowed: it reads the registry and runs no project script. Its "Plan the upgrades with `developer-os:dependency-upgrader` first?" question becomes one numbered item.
+Run project-baseline, then docs-sync, then instruction-review (when it applies), each up to its report and no further: do not ask their questions one by one, collect their numbered items and their "needs your decision" items. Baseline items keep the `BASE` prefix. Baseline's package-manager `outdated` probe is allowed: it reads the registry (some managers, such as Bundler, evaluate the project's manifest). Its "Plan the upgrades with `developer-os:dependency-upgrader` first?" question becomes one numbered item.
 
 ## 4. Audit the conventions
 

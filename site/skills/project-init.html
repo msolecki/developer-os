@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/project-init/SKILL.md@22bc07f0cfd3">
+<meta name="dos-source" content="plugin/skills/project-init/SKILL.md@84902e5bc714">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -69,7 +69,7 @@
     <ol>
       <li><strong>Reads the context.</strong> The stack from the manifests and config on disk (lockfile, <code>tsconfig.json</code>, <code>next.config.*</code>, test files, CI, infrastructure code, API routes, a database and migrations, a UI), the backlog files (without them, their paths are a decision for you, and the <code>Backlog:</code> line is a numbered item), and the project's <code>AGENTS.md</code>, <code>docs/pitfalls.md</code> and decision records: anything the project rejected on purpose is reported as <code>deliberate</code>.</li>
       <li><strong>Picks the skills.</strong> project-baseline and docs-sync always; instruction-review when a <code>CLAUDE.md</code> or <code>AGENTS.md</code> exists; each conventions skill when its stack is present. comments-conventions is never audited (it governs only comments an agent adds); deploy-checklist is never run (it runs the project's gates and belongs to a release).</li>
-      <li><strong>Runs the process skills.</strong> <a href="project-baseline.html">project-baseline</a>, <a href="docs-sync.html">docs-sync</a> and <a href="instruction-review.html">instruction-review</a>, each up to its report, collecting their items instead of asking their questions one by one. Baseline's package-manager <code>outdated</code> probe is allowed (it runs no project script), and its question about planning upgrades with dependency-upgrader becomes one numbered item.</li>
+      <li><strong>Runs the process skills.</strong> <a href="project-baseline.html">project-baseline</a>, <a href="docs-sync.html">docs-sync</a> and <a href="instruction-review.html">instruction-review</a>, each up to its report, collecting their items instead of asking their questions one by one. Baseline's package-manager <code>outdated</code> probe is allowed (it reads the registry; some managers, such as Bundler, evaluate the project's manifest), and its question about planning upgrades with dependency-upgrader becomes one numbered item.</li>
       <li><strong>Audits the conventions.</strong> One probe per rule, such as <code>"strict": true</code> in <code>tsconfig.json</code>, an empty <code>catch {}</code>, date fixtures without <code>Z</code>, mock factories that do not spread the original module, or a <code>/health</code> handler that queries the database. Rules that need judgment are sampled: at most five <code>file:line</code> cases per rule. Findings are verified as in audit-to-backlog. Findings become <code>CONV-NN</code> backlog items; an unsure result is a question.</li>
       <li><strong>Reports and asks once.</strong> The stack, which skills applied and which did not, one numbered list across all of them, and one A/B/C question.</li>
     </ol>

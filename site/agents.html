@@ -313,7 +313,7 @@
       <div class="fact"><dt>Turn cap</dt><dd>40</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
-      <div class="fact"><dt>Used by</dt><dd>code-review and audit-to-backlog (P0/P1 verification, plus P2 correctness in code-review), pr-cycle through code-review</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>code-review, audit-to-backlog and project-init (P0/P1 verification, plus up to five P2 correctness findings), pr-cycle through code-review</dd></div>
     </dl>
     <h3 id="verifier-report">verifier report</h3>
     <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it, or when it did not read the cited <code>file:line</code>. <code>UNDECIDED</code> is a complete answer that goes with <code>DONE</code>; callers mark the finding unverified and do not retry. It has no shell, so the diff reaches it as a file; for an untrusted head the files on disk are not the head, so it reads the head's changed lines from the diff file.</p>
