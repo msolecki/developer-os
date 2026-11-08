@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/deploy-checklist/SKILL.md@2b3e1ebb855f">
+<meta name="dos-source" content="plugin/skills/deploy-checklist/SKILL.md@88e6ccb2ba27">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -75,13 +75,13 @@
       <li><strong>Rollback.</strong> It writes the exact rollback command, the recovery steps and the metrics that trigger it. Provider-specific commands come from the repository's configuration; if the target is unknown, it asks.</li>
       <li><strong>Window and owner.</strong> It confirms a suitable deployment window and an owner available for at least an hour of monitoring.</li>
       <li><strong>Verdict.</strong> <code>GO</code>, or <code>NO-GO</code> when any item above failed or is UNVERIFIED, with what would turn it into <code>GO</code>.</li>
-      <li><strong>After the deploy.</strong> It monitors error rate and latency against the abort thresholds, inspects new exceptions, runs a smoke test of the critical flow, and records the result: stable, or rolled back with the trigger. It offers <a href="brain-capture.html">brain-capture</a> when the deployment taught a lasting lesson.</li>
+      <li><strong>After the deploy.</strong> It monitors error rate and latency against the abort thresholds, inspects new exceptions, runs a smoke test of the critical flow, and records the result (stable, or rolled back with the trigger) in its closing status block; when <code>docs/runbooks/</code> has a deploy runbook, it offers the line for it. It offers <a href="brain-capture.html">brain-capture</a> when the deployment taught a lasting lesson.</li>
     </ol>
 
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>Before the deployment, at the <code>GO</code>/<code>NO-GO</code> verdict; after it, at the recorded result. You run the deployment.</p>
+      <p>Before the deployment, at the <code>GO</code>/<code>NO-GO</code> verdict; after it, at the result recorded in the closing status block. You run the deployment.</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>
