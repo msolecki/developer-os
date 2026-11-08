@@ -279,7 +279,7 @@ Every check result names the commit it ran on (`<command>: <result> at <short SH
 typed commands in local transcripts (deduplicated by message uuid): last 30 days, ever, last date,
 with a keep / rewrite-description / merge / remove / hide suggestion per skill (hide: only ever typed, so
 `disable-model-invocation: true` frees the shared skill listing). It prints no transcript
-content.
+content. It runs in a forked subagent (`context: fork`), so only its report reaches the conversation.
 
 ## Brain (Obsidian vault)
 

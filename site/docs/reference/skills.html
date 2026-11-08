@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@b5ef362e8ecf">
+<meta name="dos-source" content="docs/reference/skills.md@f217b2ede661">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -289,7 +289,7 @@ Every check result names the commit it ran on (<code>&lt;command&gt;: &lt;result
 typed commands in local transcripts (deduplicated by message uuid): last 30 days, ever, last date,
 with a keep / rewrite-description / merge / remove / hide suggestion per skill (hide: only ever typed, so
 <code>disable-model-invocation: true</code> frees the shared skill listing). It prints no transcript
-content.</p>
+content. It runs in a forked subagent (<code>context: fork</code>), so only its report reaches the conversation.</p>
     <h2 id="brain-obsidian-vault">Brain (Obsidian vault)</h2>
     <h3 id="brain-setup">brain-setup</h3>
     <p><a href="../../skills/brain-setup.html">Source</a>. Checks whether the path is empty (new vault)
