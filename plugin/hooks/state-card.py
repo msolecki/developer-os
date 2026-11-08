@@ -70,8 +70,10 @@ def main():
     text = sys.stdin.buffer.read().decode("utf-8", "replace").replace("\n", " ").replace("\r", " ")
     if field(text, "source") not in ("compact", "resume", "fork"):
         return
+    cwd = field(text, "cwd")  # without one, the hook already runs in the session directory
     try:
-        os.chdir(field(text, "cwd"))
+        if cwd:
+            os.chdir(cwd)
     except OSError:
         return
     code, top = git("rev-parse", "--show-toplevel")

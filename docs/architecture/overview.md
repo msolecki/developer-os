@@ -47,7 +47,7 @@ What occupies the context of a session, and when:
 |---|---|---|---|
 | `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | About 8.1 KB | 8900 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
-| Skill names and descriptions | Every session, by Claude Code's skill listing | About 11,000 characters for 32 skills | 80–1024 each, 12000 total |
+| Skill names and descriptions | Every session, by Claude Code's skill listing; a skill with `disable-model-invocation: true` lists no description | About 11,000 characters for 32 skills | 80–1024 each, 12000 total of the listed ones (`scripts/check.sh`); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10) |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
 | A skill's body | When the model or the user invokes it | 0.8–14.2 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
 | An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–4.7 KB per file | — |
@@ -91,9 +91,9 @@ sequenceDiagram
   `systemMessage`, each throttled by its own marker.
 - `guard.py` extracts `tool_input.command` with a regular expression, unescapes JSON, joins line continuations,
   drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
-  purpose, so a mention inside a commit message also asks. Any parse failure prints nothing. For Edit and Write it reads
-  `tool_input.file_path` instead and asks when the path is a secret file or part of the user-level Claude config
-  (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops. A Bash call from one of the
+  purpose, so a mention such as `echo "pnpm add zod"` also asks; a quoted commit message (`-m "..."`) is read as one word. Any parse failure prints nothing. For Edit and Write it reads
+  `tool_input.file_path` (and an Edit's `old_string`/`new_string`) instead and asks when the path is a secret file or part of the user-level Claude config
+  (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops, or when an Edit adds a skip or focus marker to a test file. A Bash call from one of the
   read-only review agents, named by `agent_type`, also asks when it writes. A `git commit` that hits no category gets an
   `additionalContext` reminder to run the fast check, with no decision.
 - `capture-nudge.py` reads `session_id` and `transcript_path` from the input, counts the
@@ -136,14 +136,16 @@ flowchart LR
   brain-setup -. offers .-> brain-import-memory
   bug-triage -. offers .-> brain-capture
   deploy-checklist -. offers .-> brain-capture
-  code-reviewer -. checks .-> defensive-coding-conventions
-  qa-expert -. loads .-> testing-conventions
+  code-reviewer -. preloads .-> defensive-coding-conventions
+  qa-expert -. preloads .-> testing-conventions
 ```
 
 Every dispatched agent answers with a final status (`DONE`, `REVIEW`, `BLOCKED`, `CONTINUING`) that
 the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog), an offer
-the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Other edges: pr-cycle sends its conflict resolutions to code-reviewer; session-retro calls brain-search and offers docs-sync; brain-garden runs brain-compile for a shared rule the user names; bug-triage offers spec; brain-compile borrows brain-capture's step 5 secret scan and brain-import-memory its steps 5 and 6. Two skills sit outside the diagram: parallel-lanes reviews its integrated branch through
-code-review, and brain-project-refresh leaves a missing hub as an inbox draft for brain-review. audit-to-backlog also
+the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Other edges: pr-cycle sends its conflict resolutions to code-reviewer; session-retro calls brain-search and offers docs-sync; brain-garden runs brain-compile for a shared rule the user names; bug-triage offers spec; brain-compile borrows brain-capture's step 5 secret scan and brain-import-memory its steps 5 and 6. Three skills sit outside the diagram: parallel-lanes reviews its integrated branch through
+code-review, brain-project-refresh leaves a missing hub as an inbox draft for brain-review, and project-init runs
+project-baseline, docs-sync and instruction-review up to their reports, loads each applicable conventions skill and
+sends blocking findings to the verifier as audit-to-backlog does. audit-to-backlog also
 dispatches database-reviewer (data) and infra-reviewer (infra); code-review adds them for migration,
 schema, query, IaC or CI diffs; docs-sync may hand approved items to docs-writer; project-baseline asks
 dependency-upgrader for the three dependencies furthest behind. The backlog contract shared by audit-to-backlog, project-baseline and
@@ -180,8 +182,8 @@ web tools could send it further, which the plugin cannot prevent ([SECURITY.md](
 | External repositories | `.claude/settings.json`, hooks, `.mcp.json` of a client or OSS repo | Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread |
 | Subagent output | A delegate's edits | Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare `git status` and `git diff` |
 | Plugin updates | A new commit's hooks and rules | `SECURITY.md`: review the diff from the installed commit before updating; auto-update is off by default |
-| Project instructions | A cloned repository's `CLAUDE.md` naming a vault | The notices hook reads the `Brain vault:` line from the user-level `CLAUDE.md` only and prints counts, never note names |
-| Session transcripts | Past conversations | Only skill-usage reads them, and only counts; session-retro and docs-sync never open them |
+| Project instructions | A cloned repository's `CLAUDE.md` naming a vault | The brain skills and the notices hook read the `Brain vault:` line from the user-level `CLAUDE.md` only (D5, D22); the hook prints counts, never note names |
+| Session transcripts | Past conversations | skill-usage reads them and reports only counts; the capture-nudge hook reads the current session's transcript for its tool-call count and background-task and Monitor state, never printing its content; session-retro and docs-sync never open them |
 
 ## 7. Validation
 

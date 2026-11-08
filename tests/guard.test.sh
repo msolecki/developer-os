@@ -45,9 +45,9 @@ check ask "$(fx 'git commit -anm x')"
 check ctx "$(fx 'git commit -am x')"
 check ask "$(fx 'pnpm \\\n add x')"
 check ask "$(fx 'sh -c \"pnpm add zod\"')"
-# Quotes are stripped: a quoted mention without a package passes, with one asks.
+# Quotes are stripped: a quoted mention without a package passes; a quoted commit message is not scanned (FLOW-39).
 check pass "$(fx 'echo \"pnpm add\"')"
-check ask "$(fx 'git commit -m \"pnpm add zod\"')"
+check ctx "$(fx 'git commit -m \"pnpm add zod\"')"
 check ask "$(fx 'git push --force')"
 check ask "$(fx 'git push --no-verify')"
 check ask "$(fx 'ls; pnpm add zod')"
@@ -470,6 +470,86 @@ c=$(python3 -c "print('git ' + ' '.join(['-c x=y']*3000) + ' status')")
 t0=$(python3 -c 'import time;print(time.time())')
 check pass "$(fa $r "$c")"
 python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: git with 3000 -c pairs took over 1 s"; }
+
+# 2026-11-08 batch: FLOW-39 commit only as git's subcommand; a quoted -m value is not scanned
+check pass "$(fx 'git log --grep commit -n 5')"
+check ctx "$(fx 'git commit -m \"fix npm install bug\"')"
+check ctx "$(fx 'git commit -am \"skip --no-verify\"')"
+check ask "$(fx 'git commit -m \"x\" -n')" "skips"
+check ask "$(fx 'git commit -m \"x\"; pnpm add zod')" "Dependency install"
+check ask "$(fx 'git commit -m \"$(pnpm add zod)\"')" "Dependency install"
+# FLOW-36: 10000 double-quoted words stay linear
+c=$(python3 -c "print('echo ' + '\\\\\"a\\\\\" ' * 10000)")
+check pass "$(fa $r "$c")"
+# CPU time, not wall time: parallel sessions load the machine, and the cost under test is the guard's own work.
+python3 -c "import json,resource,subprocess,sys
+p=json.dumps({'tool_name':'Bash','tool_input':{'command':'echo '+'\"a\" '*10000}})
+subprocess.run([sys.executable,sys.argv[1]],input=p.encode(),capture_output=True)
+u=resource.getrusage(resource.RUSAGE_CHILDREN);sys.exit(u.ru_utime+u.ru_stime>1)" "$guard" ||
+  { fail=1; echo "FAIL: 10000 quoted words took over 1 s of CPU"; }
+# FLOW-40: submodule and bisect reads
+for c in 'git submodule status' 'git submodule' 'git submodule --quiet summary' 'git bisect log' 'git bisect visualize' 'git bisect view'; do
+  check pass "$(fa $r "$c")"
+done
+check ask "$(fa $r 'git submodule foreach git pull')" "read-only"
+# SEC-15: git output files
+for c in 'git diff --output=src/x.patch' 'git diff --output src/x.patch' 'git log -p --output=x' 'git format-patch -1 -o src' \
+  'git format-patch -1 --output-directory=src' 'git format-patch -1' 'git archive -o src/x.tar HEAD' 'git archive -osrc/x.tar HEAD' \
+  'git show --output=x HEAD'; do
+  check ask "$(fa $r "$c")" "read-only"
+done
+for c in 'git diff --output=/tmp/x.patch' 'git format-patch -1 -o /tmp/p' 'git format-patch -1 --stdout' 'git archive HEAD'; do
+  check pass "$(fa $r "$c")"
+done
+# AGT-10: dependency-upgrader is read-only
+check ask "$(fa developer-os:dependency-upgrader 'git checkout main')" "read-only"
+check ask "$(fa developer-os:dependency-upgrader 'sed -i s/a/b/ package.json')" "read-only"
+check pass "$(fa developer-os:dependency-upgrader 'npm ls zod')"
+# SEC-14: other package managers and npx -y
+for c in 'pip install requests' 'pip3 install -U requests' 'uv add x' 'uv pip install x' 'poetry add x' 'cargo add x' \
+  'cargo install ripgrep' 'go get example.com/x' 'go install example.com/x@latest' 'composer require a/b' 'bundle add x' \
+  'gem install x' 'npx -y foo' 'npx --yes foo' '/usr/bin/pip install x' 'sudo pip install x'; do
+  check ask "$(fx "$c")" "Dependency install"
+done
+for c in 'pip install -r requirements.txt' 'pip install' 'uv sync' 'poetry install' 'cargo build' 'go build ./...' 'go get' \
+  'composer install' 'bundle install' 'npx foo' 'pip show requests' 'echo pip install x' 'grep -rn \"cargo add\" docs'; do
+  check pass "$(fx "$c")"
+done
+# SEC-09: skipping, focusing or deleting a test
+fd() { printf '{"tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"%s","new_string":"%s"}}' "$1" "$2" "$3"; }
+check ask "$(fd src/a.test.ts 'it(' 'it.skip(')" "test"
+for m in 'test.skip(' 'describe.skip(' 'xit(' 'xdescribe(' 'it.only(' 'fit(' 'fdescribe(' '@pytest.mark.skip' '@pytest.mark.xfail' \
+  'pytest.skip(' '@unittest.skip' '@Disabled' '@Ignore' 't.Skip('; do
+  check ask "$(fd tests/x.py 'a' "a $m")" "test"
+done
+check ask "$(fd pkg/a_test.go 'a' 'a t.Skip(')" "test"
+check ask "$(fd test_a.py 'a' 'a pytest.skip(')" "test"
+check ask "$(fd src/a.spec.js 'it.skip(a) it(b)' 'it.skip(a) it.skip(b)')" "test"
+check pass "$(fd src/a.test.ts 'it.skip(' 'it.skip(x')"
+check pass "$(fd src/a.test.ts 'it.skip(' 'it(')"
+check pass "$(fd src/a.ts 'a' 'it.skip(')"
+check pass "$(fd src/a.test.ts 'a' 'model.fit(x)')"
+check ask "$(fx 'rm src/a.test.ts')" "test"
+check ask "$(fx 'git rm tests/x.py')" "test"
+check ask "$(fx 'mv src/a.test.ts src/a.test.ts.bak')" "test"
+check ask "$(fx 'mv a_test.go a_test.go.disabled')" "test"
+check pass "$(fx 'mv src/a.test.ts src/b.test.ts')"
+check pass "$(fx 'rm src/a.ts')"
+check pass "$(fx 'grep -rn \"rm a.test.ts\" docs')"
+# SEC-08: infrastructure, data and deploy destroys
+for c in 'terraform destroy' 'tofu destroy -auto-approve' 'terraform apply -auto-approve' 'terraform -chdir=x apply --auto-approve' \
+  'terraform state rm aws_s3_bucket.x' 'npx prisma migrate reset' 'prisma migrate reset --force' 'supabase db reset' \
+  'npx supabase db reset' 'npx drizzle-kit push --force' 'php artisan migrate:fresh' 'php artisan migrate:reset' \
+  'php artisan db:wipe' 'bin/rails db:drop' 'bundle exec rails db:reset' 'dropdb app' 'docker compose down -v' \
+  'docker-compose down --volumes' 'kubectl delete pod x' 'kubectl -n prod delete deploy x' 'helm uninstall x' 'vercel --prod' \
+  'vercel deploy --prod' 'pnpm exec prisma migrate reset'; do
+  check ask "$(fx "$c")" "infrastructure"
+done
+for c in 'terraform plan' 'terraform apply' 'prisma migrate dev' 'npx drizzle-kit push' 'php artisan migrate' 'docker compose down' \
+  'kubectl get pods' 'vercel' 'vercel deploy' 'echo terraform destroy' 'grep -rn \"kubectl delete\" docs'; do
+  check pass "$(fx "$c")"
+done
+
 
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

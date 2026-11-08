@@ -5,3 +5,5 @@ allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Skill]
 ---
 
 compile the brain's notes on webhooks into one note
+
+My brain vault is ./vault.

@@ -16,8 +16,8 @@ The developer-os repository keeps copyable versions in `templates/project/`; the
 - Root `AGENTS.md` (under 100 lines): purpose, commands, `## Likely agent mistakes here`, stack, non-obvious architecture, conventions, dependency policy, do NOT, `## Invariants`, docs map with the sync rule line (behavior change = docs update). `CLAUDE.md` is one line, `@AGENTS.md`. `_Context.md`: a signpost of at most 25 lines with a `Vault project slug:` line and a dated "State as of".
 - Root `DESIGN.md` for a project with a UI: YAML tokens, then Overview … Do's and Don'ts.
 - The backlog (`TODO.md` and `TODO-done.md`, or the `Backlog:` paths) in the audit-to-backlog item format; audit-to-backlog, project-baseline or spec creates it, not this skill.
-- `.gitignore` ignores the state file: `git check-ignore -q docs/plans/.devos-state.md` exits 0; otherwise list it under Missing. The SessionStart hook shows it only when it is git-ignored.
-- Every doc under `docs/` starts with frontmatter `status` (`current`, `draft`, or `deprecated`), `owner`, and `last-verified` (`YYYY-MM-DD`, the day it was checked against the code).
+- `.gitignore` ignores the state file: `git check-ignore -q docs/plans/.devos-state.md` exits 0; otherwise list it under Missing. The SessionStart hook shows it only when it is git-ignored. Likewise `.worktrees/`: `git check-ignore -q .worktrees/x` exits 0, otherwise list it under Missing; implement-backlog and parallel-lanes run parallel work only then.
+- Every tracked doc under `docs/` (`git ls-files docs`; git-ignored files such as plans are exempt) starts with frontmatter `status` (`current`, `draft`, or `deprecated`), `owner`, and `last-verified` (`YYYY-MM-DD`, the day it was checked against the code).
 - `docs/index.md`: a `| Task | Read first |` table routing each common task to one doc.
 - `docs/CURRENT-STATE.md`: a `Verified at commit: <short sha>` line, then `## Works` (with entry points as `path:line`), `## In progress`, `## Known broken or missing`.
 - `docs/pitfalls.md`: deliberate settings that look like defects; per entry Where, Looks like, Why it is deliberate, Breaks if changed.

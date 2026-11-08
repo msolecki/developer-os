@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/glossary.md@30ae10d87380">
+<meta name="dos-source" content="docs/glossary.md@885663da76f6">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -56,7 +56,7 @@
           <tr><td>Conventions skill</td><td>A <code>*-conventions</code> skill with stack- or file-specific rules, loaded only when its description matches the work.</td></tr>
           <tr><td>Core rules</td><td><code>plugin/rules/core.md</code>, printed into every session by the <code>SessionStart</code> hook.</td></tr>
           <tr><td>Brain, vault</td><td>The user's Obsidian vault of Markdown notes, the agent's long-term memory.</td></tr>
-          <tr><td><code>Brain vault:</code> line</td><td><code>Brain vault: &lt;absolute path&gt;</code> in a <code>CLAUDE.md</code> or <code>AGENTS.md</code>; how skills find the vault.</td></tr>
+          <tr><td><code>Brain vault:</code> line</td><td><code>Brain vault: &lt;absolute path&gt;</code> in the user-level <code>CLAUDE.md</code>; how skills find the vault.</td></tr>
           <tr><td>Inbox note</td><td>A note an agent created in <code>_inbox/</code> with <code>status: inbox</code>; unreviewed, a draft rather than a fact.</td></tr>
           <tr><td>Promote</td><td>Move an approved inbox note to a topic folder and set <code>status: active</code> (brain-review).</td></tr>
           <tr><td>Archive</td><td>Move a note to <code>_archive/</code> with <code>status: archived</code>. The plugin's replacement for deletion.</td></tr>
@@ -71,7 +71,7 @@
           <tr><td>Fresh verifier</td><td>An agent that did not produce a P0/P1 finding or one of up to five P2 correctness findings and sees only the claim, asked to disprove it: the read-only <code>verifier</code> agent.</td></tr>
           <tr><td>Disputed</td><td>A finding the verifier refuted; listed with evidence, does not block the verdict or enter the backlog.</td></tr>
           <tr><td>Fast check</td><td>Lint, types and tests of the changed area, run before every commit.</td></tr>
-          <tr><td>Full suite</td><td>The project's complete validation, run once before a push or PR.</td></tr>
+          <tr><td>Full suite</td><td>The project's complete validation, run before a push or PR, or when a skill's gate requires it; never mid-task on your own.</td></tr>
           <tr><td>Status block</td><td>The closing <strong>Done / Not done / Needs you</strong> block the core rules require.</td></tr>
           <tr><td>Backlog</td><td>The todo and done files named by the <code>Backlog:</code> line (default <code>TODO.md</code>, <code>TODO-done.md</code>), with P0–P3 sections and implementation sessions.</td></tr>
           <tr><td><code>BASE-NN</code></td><td>A backlog item ID created by project-baseline.</td></tr>
@@ -88,6 +88,12 @@
           <tr><td>Nudge</td><td>The <code>Stop</code> hook's one-time request to run session-retro after 30 tool calls.</td></tr>
           <tr><td>Routine</td><td>A Claude Code cloud session on a schedule or API trigger; used optionally for phone capture and a weekly vault brief.</td></tr>
           <tr><td>Eval, Δ</td><td>A <code>claude plugin eval</code> case; Δ is the with-plugin score minus the baseline score.</td></tr>
+          <tr><td>Lane</td><td>One task run by parallel-lanes as a headless Claude Code session in its own git worktree and branch; only the orchestrator touches the base branch.</td></tr>
+          <tr><td>Hub note</td><td>A project's note in the vault, <code>PROJECTS/&lt;slug&gt;.md</code>, found by its <code>Vault project slug:</code>; it keeps what outlives the repository, and brain-project-refresh updates it.</td></tr>
+          <tr><td>Untrusted head</td><td>A pull-request head from a fork or an author who is not <code>OWNER</code>, <code>MEMBER</code> or <code>COLLABORATOR</code> (or when either read fails); never checked out before the user says yes, and reviewed read-only.</td></tr>
+          <tr><td><code>stale:</code> item</td><td>A backlog item implement-backlog's triage dropped (its <code>Where</code> is gone, its <code>Check</code> already passes, an open PR touches it, or a decision contradicts it), reported as <code>stale: &lt;ID&gt; · &lt;point&gt; · &lt;evidence&gt;</code>.</td></tr>
+          <tr><td><code>Manual:</code> Check</td><td>A <code>Check</code> with steps instead of a command, used only when no command can check the item; the item stays open until the user confirms.</td></tr>
+          <tr><td><code>Not covered:</code></td><td>The list, at the top of an audit-to-backlog backlog and report, of perspectives whose reviewer ended <code>BLOCKED</code>, failed or returned partial output.</td></tr>
         </tbody>
       </table>
     </div>

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@9a18fb93fd70">
+<meta name="dos-source" content="CHANGELOG.md@c60919d9b078">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -59,17 +59,56 @@ review, capture and code review.</li>
 and the daily loop animated, and folds the skill library and agents into one section that lists all
 ten agents and the verifier's three answers.</li>
 <li>The Counts stage fails when the release the landing page names differs from <code>plugin.json</code>.</li>
+<li>guard asks before an infrastructure, data or deploy destroy (<code>terraform destroy</code>,
+<code>prisma migrate reset</code>, <code>kubectl delete</code>, <code>vercel --prod</code>), before an
+Edit that skips or focuses a test or a removal of a test file, and before an install through pip, uv,
+poetry, cargo, go, composer, bundle, gem or <code>npx -y</code> (SEC-08, SEC-09, SEC-14).</li>
+<li>parallel-lanes starts each lane with a session id, a turn cap and denied edits to package manifests and
+hook config, resumes a dead lane with <code>resume.sh</code>, shows <code>Idle for</code>, and checks
+that every worktree starts at the recorded commit (FLOW-18, FLOW-24, FLOW-26, FLOW-27, SEC-13).</li>
+<li>spec cross-checks its criteria, steps and decisions in a coverage table and splits FEAT items into
+sessions of 5–7; implement-backlog runs a spec convergence check when the last spec item closes and
+stops on an intent gap (FLOW-19, FLOW-20, FLOW-22, FLOW-46).</li>
+<li>The check gains a Tool versions stage that ties <code>.agnix.toml</code> to CI's Claude Code version and
+runs agnix itself; Dependabot updates the pinned actions; CI gets <code>concurrency</code> and a timeout
+(CHK-09, CHK-10, CHK-13).</li>
+<li>security-auditor has a not-a-finding list that includes rate limiting; the verifier ends a refutation
+with <code>REFUTE_REASON</code>; code-reviewer names the trigger of every P0 and P1; infra-reviewer
+checks AI agents in CI for prompt injection (AGT-07, AGT-08, AGT-09).</li>
+<li>A handoff and the state card name what is not started, what is not verified, and what to do if a named
+risk happens (FLOW-56).</li>
     </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
 <li>The Site stage compares the words of every <code>site/docs/</code> page with its source, so a refreshed hash
 on an unedited page fails; code-review rates a site page the diff makes false as a docs finding (D28).</li>
+<li>The brain skills take the vault path only from the conversation or the user-level
+<code>CLAUDE.md</code>, set it in single quotes, and validate the project slug; D5 is amended and the
+eval cases name <code>./vault</code> in their prompt (SEC-10, SEC-11).</li>
+<li>guard no longer reads a quoted commit message as an install or a hook bypass, and <code>git log
+--grep</code> passes; read-only agents may run <code>git submodule status</code> and <code>git bisect
+log</code>, are asked before a git output-file write, and dependency-upgrader is one of them (FLOW-39,
+FLOW-40, SEC-15, AGT-10).</li>
+<li>capture-nudge reads the Stop input's <code>background_tasks</code>; state-card works without
+<code>cwd</code> (FLOW-37, FLOW-41).</li>
+<li>skill-usage runs in a forked context and can suggest hiding a skill; descriptions of skills with
+<code>disable-model-invocation</code> do not count toward the 12000-character budget (FLOW-38, FLOW-52).</li>
+<li>Reviewer agents preload their conventions skill, run tests with <code>CI=true</code>, and use the shared
+P0–P3 layout; the verifier omits <code>CLAUDE.md</code> (AGT-11, AGT-14, AGT-15, AGT-16).</li>
+<li>Skill fixes from audit 2: FLOW-23, FLOW-28, FLOW-29, FLOW-30, FLOW-33, FLOW-34, FLOW-35, FLOW-42,
+FLOW-43, FLOW-44, FLOW-45, FLOW-47, FLOW-48, FLOW-49, FLOW-50, SEC-12, AGT-12, AGT-13, BRAIN-11 and
+BRAIN-12; the project template ignores <code>.worktrees/</code> and asks for the fast check and the full
+suite (DOC-08).</li>
     </ul>
     <h3 id="unreleased-fixed">Fixed</h3>
     <ul>
 <li>Docs and site pages describe the hooks, skills and check as the code behaves: the marker cleanup age,
 implement-backlog's L-item approval, brain-setup's <code>.obsidian/types.json</code> merge, the approval and
 &quot;Read by&quot; tables, the skill-composition diagram, and a leftover Codex line on the architecture page.</li>
+<li>guard's quote scanner is linear, so a long command no longer runs into the hook timeout (FLOW-36).</li>
+<li>hooks.md, the glossary, configuration.md, the architecture overview, D7 and the vault README match the
+code; <code>__pycache__</code> is ignored (DOC-10, DOC-12, DOC-13, DOC-14, DOC-15, DOC-16, BRAIN-15,
+CHK-16).</li>
     </ul>
     <h2 id="028---2026-11-08">[0.2.8] - 2026-11-08</h2>
     <h3 id="028-added">Added</h3>
@@ -96,6 +135,7 @@ committed after its <code>last-verified</code> date prints a warning.</li>
     <h3 id="028-changed">Changed</h3>
     <ul>
 <li>The core-rules cap is 8900 bytes (was 8192). D10 amended.</li>
+<li>D27 records why skill <code>paths:</code>, hook <code>if:</code> and a <code>PreCompact</code> hook are not adopted yet. (#119)</li>
 <li>The core rules point user-level overrides at <code>CLAUDE.md</code> only; Claude Code reads no user-level <code>AGENTS.md</code>.</li>
 <li>session-retro proposes a vault lesson only when it cost a retry, a correction or a re-derivation and
 <code>brain-search</code> finds no note that already says it; otherwise it proposes an update to that note. A decision needs no such cost,

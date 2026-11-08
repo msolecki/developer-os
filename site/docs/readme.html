@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@02847cc1b255">
+<meta name="dos-source" content="README.md@32448967fa56">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -117,15 +117,15 @@ to change the threshold.</p>
     <p>A <code>PreToolUse</code> hook on Bash, Edit and Write (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/guard.py"><code>plugin/hooks/guard.py</code></a>) asks for confirmation
 (it never blocks) before a dependency install, update or removal with a package argument
 (<code>npm|pnpm|yarn|bun install|add|i|update|remove &lt;pkg&gt;</code>, an alias such as <code>npm in</code>, <code>npm un</code> or <code>bun a</code>,
-<code>update --latest</code>, or the binary by full path), a <code>git push</code> with <code>--force</code>, <code>-f</code>, a <code>+refspec</code> or
+<code>update --latest</code>, or the binary by full path; also <code>pip install</code>, <code>uv add</code>, <code>cargo add</code>, <code>go get</code> and the like, and <code>npx -y &lt;pkg&gt;</code>), a <code>git push</code> with <code>--force</code>, <code>-f</code>, a <code>+refspec</code> or
 <code>-c remote.&lt;name&gt;.push=+…</code> (even next to <code>--force-with-lease</code>; a lone <code>--force-with-lease</code> passes; git
 also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of it such as <code>--no-veri</code>,
 <code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form, and a command
 that destroys uncommitted or untracked work: <code>rm</code> with both a recursive and a force flag (<code>rm -rf</code>),
 <code>git reset --hard</code>, <code>git clean -f</code>, <code>git checkout</code>/<code>git restore</code> of <code>.</code>, <code>:/</code> or <code>*</code>, <code>git checkout -f</code>,
-<code>git switch --discard-changes</code>, <code>git worktree remove --force</code>, <code>git stash drop</code>/<code>clear</code> or <code>find … -delete</code> (<code>git restore --staged .</code> and <code>git clean -n</code> pass). An Edit or Write asks when its file is a <code>.env</code>, <code>.envrc</code> or <code>.env.*</code> (not
+<code>git switch -f</code>/<code>--discard-changes</code>, <code>git worktree remove --force</code>, <code>git rm -f</code>, <code>git stash drop</code>/<code>clear</code> or <code>find … -delete</code> (<code>git restore --staged .</code> and <code>git clean -n</code> pass), and an infrastructure, data or deploy destroy (<code>terraform destroy</code>, <code>prisma migrate reset</code>, <code>kubectl delete</code>, <code>vercel --prod</code> and the like). An Edit or Write asks when its file is a <code>.env</code>, <code>.envrc</code> or <code>.env.*</code> (not
 <code>.example</code>, <code>.sample</code>, <code>.template</code>, <code>.dist</code>), is under <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, or <code>~/.claude/</code> <code>hooks</code>,
-<code>rules</code>, <code>agents</code>, <code>skills</code> or <code>commands</code>, or is <code>~/.claude.json</code>, <code>~/.claude/CLAUDE.md</code>, <code>~/.claude/settings.json</code> or <code>settings.local.json</code> (also under <code>$CLAUDE_CONFIG_DIR</code>). Inside the five read-only review agents, a Bash
+<code>rules</code>, <code>agents</code>, <code>skills</code>, <code>commands</code>, <code>plugins</code> or <code>output-styles</code>, or is <code>~/.claude.json</code>, <code>~/.claude/CLAUDE.md</code>, <code>~/.claude/settings.json</code> or <code>settings.local.json</code> (also under <code>$CLAUDE_CONFIG_DIR</code>). An Edit that adds a skip or focus marker (<code>it.skip(</code>, <code>.only(</code>, <code>@pytest.mark.skip</code>) to a test file asks, and so does <code>rm</code>, <code>git rm</code> or <code>mv … .bak</code> of one. Inside the six read-only agents (the five reviewers and dependency-upgrader), a Bash
 call that writes outside the temp directories (<code>sed -i</code>, <code>tee</code>, <code>rm</code>, <code>mv</code>, <code>cp</code>, a redirect into a file, <code>prettier --write</code>, <code>eslint --fix</code>, <code>gh pr checkout</code>, a git command that changes the tree, history or remotes) asks too. A <code>git commit</code> that asks for nothing gets a one-line reminder, as context for
 the agent, to run the fast check first. <code>$IFS</code>
 (also with an empty <code>$9</code> glued on), <code>${X:-word}</code> and <code>$'\x66'</code> escapes are expanded before the scan. In <code>claude -p</code> an ask resolves to a denial.

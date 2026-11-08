@@ -13,7 +13,7 @@ Config directory: `C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"`. Edit `$C/CLAUDE.md`
 
 ## 1. Ask for the path and pick the mode
 
-Ask for the vault's absolute path (expand `~`). If `$C/CLAUDE.md` already has a `Brain vault:` line with another path, show it and ask which one to keep. If the user picks the new path, remember the old one for the report.
+Ask for the vault's absolute path (expand `~`). Reject a path that holds `'`, `"`, `$`, a backtick, `\` or a newline and ask again; set `V` and `TPL` in single quotes in every command. If `$C/CLAUDE.md` already has a `Brain vault:` line with another path, show it and ask which one to keep. If the user picks the new path, remember the old one for the report.
 
 - Path missing or an empty directory: **new vault**.
 - Path non-empty: ask whether to **connect an existing vault**. If not, stop; never copy into a non-empty directory.
@@ -21,7 +21,7 @@ Ask for the vault's absolute path (expand `~`). If `$C/CLAUDE.md` already has a 
 ## 2a. New vault
 
 ```bash
-TPL="/abs/path/to/plugin/vault-template"; V="/abs/path/to/vault"
+TPL='/abs/path/to/plugin/vault-template'; V='/abs/path/to/vault'
 mkdir -p "$V" && cp -R "$TPL/." "$V/"
 ```
 
@@ -30,7 +30,7 @@ mkdir -p "$V" && cp -R "$TPL/." "$V/"
 Add only what is missing; never overwrite, move or delete a file. Do not copy the example notes. The `.gitignore` lines are added only to a vault that is a git repository or already has a `.gitignore`.
 
 ```bash
-TPL="/abs/path/to/plugin/vault-template"; V="/abs/path/to/vault"
+TPL='/abs/path/to/plugin/vault-template'; V='/abs/path/to/vault'
 for d in DEV INFRA PROJECTS QA TOOLS _archive _inbox _reports _views templates; do mkdir -p "$V/$d"; done
 (cd "$TPL" && for f in _views/*.base templates/note.md; do [ -e "$V/$f" ] || cp "$f" "$V/$f"; done)
 if [ -e "$V/.git" ] || [ -e "$V/.gitignore" ]; then
@@ -52,14 +52,14 @@ Show the edits as a diff and apply them only after the user approves:
 Bash calls do not keep variables: set `C`, `S` and `V` at the top of each call. Preview:
 
 ```bash
-C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; S="$C/settings.json"; V="/abs/path/to/vault"; AM=true
+C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; S="$C/settings.json"; V='/abs/path/to/vault'; AM=true
 { cat "$S" 2>/dev/null || echo '{}'; } | jq --arg p "$V" --argjson am "$AM" '.permissions.additionalDirectories //= [] | if any(.permissions.additionalDirectories[]; . == $p) then . else .permissions.additionalDirectories += [$p] end | if $am then .autoMemoryEnabled = false else . end' > "$S.brain-setup" && diff -N "$S" "$S.brain-setup"
 ```
 
 After approval, in a new call:
 
 ```bash
-C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; S="$C/settings.json"; V="/abs/path/to/vault"
+C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; S="$C/settings.json"; V='/abs/path/to/vault'
 cat "$S.brain-setup" > "$S" && rm "$S.brain-setup"
 # replace an existing Brain vault: line (the user chose the new path in step 1), else append
 if grep -q '^Brain vault:' "$C/CLAUDE.md" 2>/dev/null; then t=$(mktemp); V="$V" awk '/^Brain vault:/ { print "Brain vault: " ENVIRON["V"]; next } 1' "$C/CLAUDE.md" > "$t" && cat "$t" > "$C/CLAUDE.md"; rm -f "$t"; else printf '\nBrain vault: %s\n' "$V" >> "$C/CLAUDE.md"; fi

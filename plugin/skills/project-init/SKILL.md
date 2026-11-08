@@ -33,7 +33,7 @@ An orchestrator: it runs other skills up to their reports, adds a conventions au
 
 ## 3. Run the process skills
 
-Run project-baseline, then docs-sync, then instruction-review (when it applies), each up to its report and no further: do not ask their questions one by one, collect their numbered items and their "needs your decision" items. Baseline items keep the `BASE` prefix. Baseline's package-manager `outdated` probe is allowed: it reads the registry (some managers, such as Bundler, evaluate the project's manifest). Its "Plan the upgrades with `developer-os:dependency-upgrader` first?" question becomes one numbered item.
+Run project-baseline, then docs-sync, then instruction-review (when it applies), each up to its report and no further: do not ask their questions one by one, collect their numbered items and their "needs your decision" items. Baseline items keep the `BASE` prefix. Baseline's package-manager `outdated` probe is allowed only where it reads the registry and runs no repository code: `bundle outdated` evaluates the `Gemfile`, and any `yarn` command runs the file a `.yarnrc*` names in `yarnPath`/`yarn-path`, so ask before either. Its "Plan the upgrades with `developer-os:dependency-upgrader` first?" question becomes one numbered item.
 
 ## 4. Audit the conventions
 
@@ -43,7 +43,7 @@ Load each applicable conventions skill and probe the repository for each of its 
 |---|---|
 | typescript | `"strict": true` in `tsconfig.json`; a configured import alias, and `rg -n "from ['\"](\.\./){3,}"` for deep relative imports |
 | nextjs | route handlers and Server Actions that read input without a schema parse; `'use client'` files with no state or event handler |
-| error-handling | empty `catch {}` without a directive comment; `throw new Error(` inside a `catch` without `cause`; `.stack` or raw errors in API responses; more than one error-response shape |
+| error-handling | empty `catch {}` with no comment inside it; `throw new Error(` inside a `catch` without `cause`; `.stack` or raw errors in API responses; more than one error-response shape |
 | testing | date fixtures without an offset or `Z`; `vi.mock`/`jest.mock` factories that do not spread the original module; raised `retries` or timeouts in test config |
 | monitoring | a `/health` handler that queries the database; paging alerts without a runbook link |
 | defensive-coding | webhook or event handlers with several side effects and no per-effect try/catch; hook scripts that grep a command without joining its lines |
@@ -76,6 +76,6 @@ Stop after the report and the question. After approval, apply exactly the approv
 
 - Write, create, or delete any file before the user approves the numbered items.
 - Change application code, tests, configuration or existing comments; findings only become backlog items.
-- Run the project's scripts, tests or builds (baseline's `outdated` probe is not one), install dependencies, or run deploy-checklist.
+- Run the project's scripts, tests or builds, or an `outdated` probe that runs repository code without a yes, install dependencies, or run deploy-checklist.
 - Pick a default for a "needs your decision" item, or propose something the project rejected on purpose.
 - Commit, push, or open a pull request.

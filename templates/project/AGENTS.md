@@ -23,6 +23,9 @@ UI work: read `DESIGN.md` first; take every value from its tokens.
 
 ## Commands
 
+Fast check (before each commit): <lint, types and tests of the changed area>
+Full suite (before push/PR): <the whole test suite and build>
+
 ```bash
 # Real dev, build, lint, type-check, test, and migration commands from the project manifest.
 ```

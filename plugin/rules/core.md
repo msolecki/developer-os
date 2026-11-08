@@ -3,7 +3,7 @@
 ## Security and change constraints
 
 - Change authentication or middleware only when the user asks for it explicitly; those paths gate access for every user.
-- Ask before running a dependency install (`npm install`, `pnpm add`, and the like): it rewrites dependencies and the lockfile.
+- Ask before running a dependency install (`npm install`, `pip install`, `cargo add`, `npx -y`, and the like): it rewrites dependencies and the lockfile.
 - Do not delete or skip tests to make a build pass; a green build without its tests proves nothing.
 
 ### Validation — two tiers
@@ -31,7 +31,7 @@
 - Before changing over 50 lines of code, write a plan: one per task, in the project's git-ignored planning location (default `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage. The active plan is the most recently updated plan there whose task is not done; specs go to `docs/specs/` or the project's spec location. After a context reset, resume with "continue from <plan path>". When the task is done, check that every step landed in committed code, then delete the plan; move unfinished items to the backlog (`Backlog:` paths, default `TODO.md`). A project may override this in its `AGENTS.md`.
 - Every plan step states What (deliverable), Where (files), How (approach), and **Test** (verification). The system stays deployable after every step. Use S/M/L complexity instead of time estimates.
 - A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
-- An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, and expected output format. Exclude debugging history, rejected approaches, and full conversation dumps.
+- An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, expected output format, and what is not started or not verified. Exclude debugging history, rejected approaches, and full conversation dumps.
 - Before a large task, look for earlier decisions: when a `Brain vault:` line is configured, search the vault with the `brain-search` skill and read the selected note (otherwise skip this silently), then read the project's active plan. Search raw session transcripts only when the user asks.
 - During compaction, preserve the modified-file list, the project's test commands, the current objective, and the user's language. Task state that must survive it lives in `docs/plans/.devos-state.md`, not only in chat.
 - Show only failures from tests and builds, never a full passing log.

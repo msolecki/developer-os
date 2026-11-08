@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@4f2fd807be64">
+<meta name="dos-source" content="docs/development.md@eb3caa834b10">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -65,7 +65,7 @@
           <tr><td>JSON</td><td>Any <code>*.json</code> does not parse (<code>jq empty</code>)</td></tr>
           <tr><td>Frontmatter</td><td>Frontmatter in <code>plugin/</code>, <code>templates/</code>, <code>evals/</code> or <code>docs/</code> Markdown does not parse; a <code>docs/*.md</code> lacks <code>status</code> (<code>current</code>, <code>draft</code>, <code>deprecated</code>), <code>owner</code> or a <code>last-verified</code> date; a skill, agent or output style lacks <code>name</code>/<code>description</code> or its <code>name</code> differs from the folder or file name; a line inside the frontmatter of an <code>evals/</code> file contains <code>---</code> (the eval loader ends frontmatter there)</td></tr>
           <tr><td>Skill fields</td><td>A skill lacks <code>license</code> or <code>compatibility</code>, or its name does not match <code>^[a-z0-9-]{1,64}$</code></td></tr>
-          <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or all together exceed 12000</td></tr>
+          <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or the descriptions of skills without <code>disable-model-invocation: true</code> together exceed 12000</td></tr>
           <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>)</td></tr>
           <tr><td>Last-verified (warning)</td><td>A <code>docs/*.md</code> committed after its <code>last-verified</code> date prints a warning; the exit status does not change</td></tr>
           <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code>, <code>brain-import-memory</code>, <code>brain-project-refresh</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>
@@ -76,6 +76,7 @@
           <tr><td>Evals</td><td>An <code>evals/&lt;case&gt;/</code> directory lacks a <code>case.yaml</code> whose <code>name</code> is the folder, a <code>prompt.md</code>, the <code>scaffold_script</code> it names, or <code>graders/*.md</code>; a grader's <code>type</code> is not <code>llm</code>, <code>regex</code>, <code>file_exists</code> or <code>tool_used</code>; every grader of a case is <code>llm</code>; a case has no row in the Cases table of <code>evals/README.md</code>, or a row names no case; a case has no positive deterministic grader (one that fails a run that does nothing: not <code>not_contains</code>, <code>exists: false</code>, <code>min: 0</code>, <code>tool: Skill</code> or a regex over a scaffolded file), except <code>injection-fix-pr</code> and <code>injection-pr-cycle</code></td></tr>
           <tr><td>Imports</td><td>A <code>plugin/hooks/*.py</code> import is outside the standard-library allowlist in <code>scripts/check.sh</code>, or a hook names <code>urllib</code>, <code>socket</code>, <code>http.client</code>, <code>requests</code>, <code>httpx</code>, <code>importlib</code> or <code>__import__</code> (D2)</td></tr>
           <tr><td>Hook targets</td><td>A <code>${CLAUDE_PLUGIN_ROOT}/…</code> path in <code>hooks.json</code> does not exist</td></tr>
+          <tr><td>Tool versions</td><td>The <code>claude-code</code> version <code>.github/workflows/check.yml</code> installs differs from <code>claude_code</code> under <code>[tool_versions]</code> in <code>.agnix.toml</code></td></tr>
           <tr><td>Agents</td><td>An agent lacks <code>## Final status</code> or one of <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code></td></tr>
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>
           <tr><td>Stale names</td><td>A skill, agent or output-style name removed from <code>plugin/SURFACE.txt</code> in the uncommitted diff (in a pull request, since the merge base with <code>origin/$GITHUB_BASE_REF</code>) still appears as a bare word (the prefixed form fails in References) in <code>plugin/</code>, <code>templates/</code> or <code>README.md</code>; the check runs before the rename is committed</td></tr>
@@ -86,6 +87,7 @@
           <tr><td>Site</td><td>A doc, root document, skill, agent or output style has no page under <code>site/</code> that names it in a <code>dos-source</code> meta; a page's hash differs from its source's; a relative <code>href</code> or <code>src</code> in <code>site/</code>, or a page in <code>NAV</code> in <code>site/assets/site.js</code>, does not resolve to a file inside <code>site/</code> (in exact case) or names no <code>id</code> in the target page; a page names a source that belongs to another page; a page under <code>site/docs/</code> whose words differ from its source's (D28); a page lacks its canonical URL or an <code>og:image</code> that exists under <code>site/</code>; <code>site/sitemap.xml</code> does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example <code>docs/superpowers/</code>) need no page</td></tr>
           <tr><td>Script tests</td><td>Any <code>tests/*.test.sh</code> exits non-zero; <code>tests/check.test.sh</code> runs only when <code>CI</code> is set</td></tr>
           <tr><td>Plugin validation</td><td><code>claude plugin validate . --strict</code> or <code>claude plugin validate plugin --strict</code> fails when <code>--strict</code> exits non-zero, that is on any error or warning (such as an unknown manifest key)</td></tr>
+          <tr><td>agnix</td><td><code>agnix --target claude-code --strict --config .agnix.toml .</code> reports an error or warning; the stage runs when <code>agnix</code> is on <code>PATH</code>, prints <code>SKIP agnix</code> otherwise, and fails when it is missing in CI</td></tr>
           <tr><td>Secrets</td><td><code>gitleaks dir</code> finds a secret in tracked or untracked-not-ignored files</td></tr>
         </tbody>
       </table>
@@ -94,14 +96,18 @@
     committed.</p>
     <h2 id="ci">CI</h2>
     <p><code>.github/workflows/check.yml</code> runs <code>scripts/check.sh</code> on pushes to <code>development</code> and <code>main</code> and on
-    every pull request. Before the check it runs agnix (<code>agent-sh/agnix</code> v0.57.0, the release binary pinned by its
+    every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
+    Before the check it puts agnix on <code>PATH</code> for the agnix stage (<code>agent-sh/agnix</code> v0.57.0, the release binary pinned by its
     SHA-256, <code>--strict</code>, target <code>claude-code</code>), a static lint of skills, hooks and manifests configured in
     <code>.agnix.toml</code>; every rule disabled there carries its reason. It pins <code>actions/checkout</code> to a commit SHA, does not persist credentials, has
     read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.300</code> (with <code>--ignore-scripts</code>, then only its own <code>install.cjs</code>, which links the native binary, then <code>claude --version</code>) and a gitleaks
     release verified by SHA-256, and, on a pull request, <code>gitleaks git</code> over the PR's commits, so a secret added and
     removed inside one PR still fails. The same step fails a PR that changes <code>.gitleaks.toml</code> or
     <code>.gitleaksignore</code> or adds a <code>gitleaks&#58;allow</code> marker; the workflow file itself comes from the PR, so
-    only a branch ruleset that requires review of <code>.github/</code> stops a PR that edits the step away.</p>
+    only a branch ruleset that requires review of <code>.github/</code> stops a PR that edits the step away.
+    <code>.github/dependabot.yml</code> proposes weekly updates of the SHA-pinned actions, each release at least 7 days old.
+    Dependabot does not read the agnix, gitleaks and claude-code versions in the run steps: bump them by hand, and
+    the claude-code one together with <code>claude_code</code> in <code>.agnix.toml</code> (the Tool versions stage).</p>
     <h2 id="the-site">The site</h2>
     <p><code>site/</code> is the public documentation site, hand-written HTML with no build:</p>
     <ul>

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/fix-pr/SKILL.md@9c0a5e047a2f">
+<meta name="dos-source" content="plugin/skills/fix-pr/SKILL.md@6cb9a121d282">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -73,7 +73,7 @@
       <li><strong>Decides per thread.</strong> It reads the referenced code and decides on a fix, or no change with a concrete justification. When a comment is ambiguous it asks before changing behavior. It shows the planned change for every thread and edits nothing until you say yes; asking it to fix the findings is not that approval.</li>
       <li><strong>Applies the approved fixes</strong>, running the narrowest relevant test after each.</li>
       <li><strong>Commits.</strong> It shows each thread with its action (fixed, or disputed with the reason) and the reply it intends to post, then asks before committing. It runs the project's fast check before each commit (under <a href="pr-cycle.html">pr-cycle</a>, pr-cycle's own step runs it, not this one). It stages only the files it edited for approved threads, never <code>git add -A</code>, and follows the repository's commit convention.</li>
-      <li><strong>Reviews and pushes.</strong> It reviews the fix commits with <a href="code-review.html">code-review</a>, which hands them to an independent reviewer; a new P0 or P1 goes back to the per-thread decision. It runs the full suite once, fixes any failure, then asks before pushing. On a fork, it pushes only when the PR allows maintainer edits.</li>
+      <li><strong>Reviews and pushes.</strong> It reviews the fix commits with <a href="code-review.html">code-review</a>, which hands them to an independent reviewer; a <code>COMMENT</code> that names a blocked reviewer is not a review, so it dispatches the review once more and, if that is blocked too, stops before the push and lists it under Needs you. A new P0 or P1 goes back to the per-thread decision; after the second review with a P0 or P1 still open it stops, keeps the fix commits local and unpushed, and reports them. It runs the full suite once, fixes any failure, then asks before pushing. On a fork, it pushes only when the PR allows maintainer edits.</li>
       <li><strong>Resolves threads.</strong> After asking, it replies in each thread with one sentence and resolves only the fixed threads you approved. Disputed threads stay open for the reviewer.</li>
       <li><strong>Reports</strong> every comment with its final action, skipping none.</li>
     </ol>

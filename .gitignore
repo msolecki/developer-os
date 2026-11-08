@@ -8,3 +8,4 @@ docs/plans/
 *.pem
 .claude/settings.local.json
 !/templates/project/TODO.md
+__pycache__/

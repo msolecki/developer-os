@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
 """PreToolUse guard for Bash, Edit and Write.
 
-Answers "ask" (never "deny") before a dependency install, update or removal with a package argument,
+Answers "ask" (never "deny") before a dependency install, update or removal with a package argument
+(npm, pnpm, yarn, bun; in command position also the PKG table, pip to gem, and `npx -y`),
 a force push (--force, -f, a +refspec or remote.<name>.push=+; a --force-with-lease alone passes),
 `git commit -n`, or any --no-verify, HUSKY=0, LEFTHOOK=0, SKIP= or core.hooksPath in any form, and before a
 command that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag,
 `git reset --hard`, `git clean -f` (not a dry run), `git checkout -f`, `git switch --discard-changes`,
 `git worktree remove --force`, `git rm -f`, `git stash drop`/`clear`, `find -delete`, and `git checkout` or `git restore` of `.`, `:/` or `*` (an unstage-only restore passes),
 each in command position (starts), so a mention such as `grep -rn "rm -rf"` passes. Branch
-deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
+deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. It also asks before an
+infrastructure, data or deploy destroy from the closed INFRA list (`terraform destroy`, `prisma migrate reset`,
+`kubectl delete`, `vercel --prod`, ...), in command position or after a runner such as `npx`. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
 An Edit or Write asks when its `file_path` is a secret or the agent's own user-level config: a `.env`,
 `.envrc`, `.env.*` or `.envrc.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
 `~/.gnupg`, `~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude/CLAUDE.md`,
 or anything under `~/.claude/hooks`, `rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`; the same files under
-`$CLAUDE_CONFIG_DIR` when it is set.
+`$CLAUDE_CONFIG_DIR` when it is set. An Edit of a test file (TEST_PATH) asks when `new_string` holds more
+skip or focus markers (SKIP_MARK) than `old_string`, and so does `rm`/`git rm` of one or `mv` of one to
+`.bak`, `.disabled` or `.skip`.
 
-Inside the read-only agents (code-reviewer, database-reviewer, infra-reviewer, performance-engineer,
-security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
+Inside the read-only agents (code-reviewer, database-reviewer, dependency-upgrader, infra-reviewer,
+performance-engineer, security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
 file-changing binary (unless every path it writes is in a temp directory; `patch` always) or `sed -i` in command
-position, a git command in command position that changes state, `gh pr checkout`, a formatter or test run that rewrites files
+position, a git command in command position that changes state or writes an output file, `gh pr checkout`, a formatter or test run that rewrites files
 (`--write`, `--fix`, `--update-snapshots`, `-u` next to a test runner), or a redirect to anything but
 `/dev/null`, the standard streams or a temp directory. A redirect inside quotes (`awk '$1>3'`,
 `grep "<a>" f`, `python3 -c "print(1>2)"`) is not one, unless the shell runs the quoted text
@@ -30,8 +35,8 @@ A `git commit` that passes every check gets no decision, only a one-line `additi
 agent to run the project's fast check first; the rule loaded at session start fades in a long session.
 
 Quotes are stripped before matching, so `sh -c "pnpm add zod"` asks, and so does a mention such as
-`git commit -m "pnpm add zod"`: install, push and hook-bypass words count anywhere. An extra prompt costs
-one click; a missed install rewrites the lockfile.
+`echo "pnpm add zod"`: install, push and hook-bypass words count anywhere, except in a quoted commit
+message (`-m "..."`, see messages()). An extra prompt costs one click; a missed install rewrites the lockfile.
 """
 import json
 import os
@@ -45,13 +50,16 @@ REASONS = {
     "protected": "This file holds secrets or your user-level agent config; edit it only on your request.",
     "readonly": "This agent is read-only, and this command writes files or changes git state.",
     "noverify": "This skips the repository's git hooks (--no-verify, commit -n, HUSKY=0, LEFTHOOK=0, SKIP=, core.hooksPath).",
+    "infra": "This destroys infrastructure or data, or deploys to production; git cannot bring it back.",
+    "tests": "This skips, focuses or removes a test; do not delete or skip tests to make a build pass.",
 }
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
 COMMIT = "Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."
-READ_ONLY = {"code-reviewer", "database-reviewer", "infra-reviewer", "performance-engineer", "security-auditor"}
-GIT_WRITE = {"add", "am", "apply", "bisect", "checkout", "cherry-pick", "clean", "clone", "commit", "gc", "init", "merge",
-             "mv", "prune", "pull", "push", "rebase", "reset", "restore", "revert", "rm", "sparse-checkout", "submodule",
+READ_ONLY = {"code-reviewer", "database-reviewer", "dependency-upgrader", "infra-reviewer", "performance-engineer",
+             "security-auditor"}
+GIT_WRITE = {"add", "am", "apply", "checkout", "cherry-pick", "clean", "clone", "commit", "gc", "init", "merge",
+             "mv", "prune", "pull", "push", "rebase", "reset", "restore", "revert", "rm", "sparse-checkout",
              "switch", "update-ref"}
 WRITE_BIN = {"tee", "rm", "mv", "cp", "install", "ln", "truncate", "touch", "mkdir", "dd", "unlink", "rmdir", "patch",
              "chmod", "chown", "chgrp"}
@@ -198,14 +206,92 @@ def destroys(words):
     return any(re.search(r"(^|/)find$", words[i]) for i in pos) and "-delete" in words
 
 
+# Other package managers: (manager, its subcommand words); a non-dash word after them is a package.
+PKG = [("pip", ("install",)), ("pip3", ("install",)), ("uv", ("add",)), ("uv", ("pip", "install")),
+       ("poetry", ("add",)), ("cargo", ("add",)), ("cargo", ("install",)), ("go", ("get",)),
+       ("go", ("install",)), ("composer", ("require",)), ("bundle", ("add",)), ("gem", ("install",))]
+# Option values that name a requirements or constraints file, not a package.
+PKG_VALUE = {"-r", "--requirement", "-c", "--constraint"}
+
+
+def installs(words):
+    """A PKG manager with its subcommand and a package, or `npx -y`/`--yes` with one, in command position."""
+    for i in starts(words):
+        name, rest = words[i].rsplit("/", 1)[-1], words[i + 1:]
+        ops = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in PKG_VALUE)]
+        if name == "npx" and ops and any(x in ("-y", "--yes") for x in rest):
+            return True
+        if any(name == m and tuple(ops[:len(s)]) == s and len(ops) > len(s) for m, s in PKG):
+            return True
+    return False
+
+
+# (command, subcommand words in a row among its non-dash words, flags of which one must be present or None).
+INFRA = [(t, s, f) for t in ("terraform", "tofu") for s, f in (
+    (("destroy",), None), (("apply",), {"-auto-approve", "--auto-approve"}), (("state", "rm"), None))] + [
+    ("prisma", ("migrate", "reset"), None), ("supabase", ("db", "reset"), None), ("drizzle-kit", ("push",), {"--force"}),
+    ("artisan", ("migrate:fresh",), None), ("artisan", ("migrate:reset",), None), ("artisan", ("db:wipe",), None),
+    ("rails", ("db:drop",), None), ("rails", ("db:reset",), None), ("dropdb", (), None),
+    ("docker", ("compose", "down"), {"-v", "--volumes"}), ("docker-compose", ("down",), {"-v", "--volumes"}),
+    ("kubectl", ("delete",), None), ("helm", ("uninstall",), None), ("vercel", (), {"--prod"})]
+# Words that run the next word as the command (`npx prisma`, `pnpm exec prisma`, `php artisan`, `bundle exec rails`).
+RUNNERS = {"npx", "bunx", "pnpx", "pnpm", "yarn", "bun", "php", "bundle", "exec", "dlx"}
+
+
+def infra(words):
+    """A command from INFRA in command position, also after RUNNERS."""
+    for i in starts(words):
+        while i < len(words) and words[i].rsplit("/", 1)[-1] in RUNNERS:
+            i += 1
+            while i < len(words) and words[i].startswith("-"):
+                i += 1
+        if i >= len(words):
+            continue
+        name, rest = words[i].rsplit("/", 1)[-1], words[i + 1:]
+        ops, flags = [x for x in rest if not x.startswith("-")], {x.split("=")[0] for x in rest if x.startswith("-")}
+        for cmd, sub, need in INFRA:
+            n = len(sub)
+            if name == cmd and any(tuple(ops[k:k + n]) == sub for k in range(len(ops) - n + 1)) and (need is None or need & flags):
+                return True
+    return False
+
+
+TEST_PATH = re.compile(r"(^|/)(tests?|__tests__)(/|$)|\.(test|spec)\.[^/]+$|(^|/)test_[^/]*\.py$|_test\.go$")
+# A marker that skips or focuses a test (`it.skip(`, `.only(`, `@pytest.mark.skip`); `model.fit(` is none.
+SKIP_MARK = re.compile(r"\b(?:it|test|describe)\.skip\(|(?<![\w.])(?:xit|xdescribe|fit|fdescribe)\(|\.only\(|"
+                       r"@pytest\.mark\.(?:skip|xfail)|pytest\.skip\(|@unittest\.skip|@Disabled|@Ignore|\bt\.Skip")
+
+
+def drops_tests(words):
+    """`rm` or `git rm` of a test file, or `mv` of one to `.bak`, `.disabled` or `.skip`, in command position;
+    a path in a temp directory is none."""
+    pos = starts(words)
+    for i in pos:
+        name = words[i].rsplit("/", 1)[-1]
+        args = [w for w in words[i + 1:] if not w.startswith("-") and not scratch(w)]
+        if name == "rm" and any(TEST_PATH.search(a) for a in args):
+            return True
+        if name == "mv" and len(args) > 1 and re.search(r"\.(bak|disabled|skip)$", args[-1]) and any(
+                TEST_PATH.search(a) for a in args[:-1]):
+            return True
+    return any(sub == "rm" and any(TEST_PATH.search(x) for x in rest if not x.startswith("-"))
+               for sub, rest in git_subs(words, pos))
+
+
 def scan(line):
     """Word scanner: install, push, noverify or destroy for the first hit, None otherwise."""
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
-        pm = sub = git = push = commit = force = skip = False
+        pm = sub = git = push = force = skip = False
         rm = rec = rmf = ended = False
         if destroys(words):
             return "destroy"
+        if installs(words):
+            return "install"
+        if drops_tests(words):
+            return "tests"
+        if infra(words):
+            return "infra"
         pos = starts(words)
         for i, x in enumerate(words):
             if rm and x == "--":
@@ -240,12 +326,10 @@ def scan(line):
                 force = True
             if git and x == "push" and (i == 0 or words[i - 1] != "stash"):
                 push = True
-            elif git and x == "commit":
-                commit = True
             elif push and (x in ("--force", "--mirror") or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x) or x.startswith("+")):
                 force = True
-            elif commit and re.fullmatch(r"-[a-zA-Z]*n[a-zA-Z]*", x):
-                return "noverify"
+        if any(sub == "commit" and any(re.fullmatch(r"-[a-zA-Z]*n[a-zA-Z]*", x) for x in rest) for sub, rest in git_subs(words)):
+            return "noverify"
         if force:
             return "push"
     return None
@@ -271,6 +355,23 @@ def git_writes(sub, rest):
         return any(d and not d.startswith("refs/remotes/") for d in dsts)
     if sub == "stash":
         return rest[:1] not in (["list"], ["show"])
+    if sub == "submodule":
+        return args[:1] not in ([], ["status"], ["summary"])
+    if sub == "bisect":
+        return args[:1] not in (["log"], ["visualize"], ["view"])
+    if sub in ("diff", "log", "show", "format-patch", "archive"):  # an output file or directory outside scratch
+        outs = []
+        for k, x in enumerate(rest):
+            name, eq, value = x.partition("=")
+            if name in ("--output", "--output-directory") or (x.startswith("-o") and not x.startswith("--")):
+                if not eq:
+                    value = x[2:] if x.startswith("-o") and len(x) > 2 else (rest[k + 1] if k + 1 < len(rest) else "")
+                outs.append(value or ".")
+        # format-patch without an output directory writes one file per commit into the current directory.
+        if sub == "format-patch" and not outs and "--stdout" not in rest:
+            return True
+        if not all(scratch(o) for o in outs):
+            return True
     if sub == "worktree":
         return rest[:1] in (["add"], ["remove"], ["move"], ["prune"], ["repair"])
     if sub == "remote":
@@ -303,7 +404,10 @@ def unquoted(cmd):
         return None
     if re.search(r"<<<|\|\s*(\S*/)?(ba|z|da|k)?sh(\s|$)", s):
         return None
-    out, i = [], 0
+    # `before` would be every character so far, rebuilt per quote (quadratic); keep a 64-character tail for
+    # the `eval`/`-c` test and a flag for a shell word, fed from the text added since the last quote.
+    # ponytail: a word longer than 64 characters (a long `-c` cluster or path) is cut; lengthen if it matters.
+    out, i, tail, frag, shell, last = [], 0, "", "", False, 0
     while i < len(s):
         c = s[i]
         if c == "\\":
@@ -327,15 +431,35 @@ def unquoted(cmd):
             if "$(" in body or "`" in body:
                 return None
             # The shell runs the text after its own `-c` (not `python3 -c`) or after `eval`.
-            before = "".join(out)
-            run = re.search(r"(^|\s)eval\s*$", before) or (re.search(r"(^|\s)-[a-zA-Z]*c\s*$", before) and any(
-                re.search(SHELL, w) for w in re.split(r"[\s;&|()`]+", before)))
+            new = "".join(out[last:])
+            tail = (tail + re.sub(r"\s+", " ", new))[-64:]
+            words = re.split(r"[\s;&|()`]+", frag + new)
+            shell = shell or any(re.search(SHELL, w) for w in words)
+            run = re.search(r"(^|\s)eval\s*$", tail) or (re.search(r"(^|\s)-[a-zA-Z]*c\s*$", tail) and shell)
             out.append(body if run else re.sub(r"[<>]", " ", body))
+            frag, last = words[-1][-64:], len(out) - 1
             i = j + 1
             continue
         out.append(c)
         i += 1
     return re.sub(r"[\"\\${}]", "", "".join(out))
+
+
+MESSAGE = re.compile(r"""(\s(?:-[a-zA-Z]*m|-F|--message|--file)(?:=|\s+))("(?:[^"\\]|\\.)*"|'[^']*')""")
+
+
+def messages(cmd):
+    """In a command with `commit`, each quoted value of `-m` (or a cluster ending in m), `-F`, `--message` or
+    `--file` becomes `x`, so the words of a commit message are not scanned as commands; a double-quoted one
+    holding `$(` or a backtick stays, since the shell runs that. The command stays JSON-escaped."""
+    try:
+        s = json.loads('"%s"' % cmd)
+    except ValueError:
+        return cmd
+    if "commit" not in s:
+        return cmd
+    keep = lambda m: m.group(0) if m.group(2)[0] == '"' and ("$(" in m.group(2) or "`" in m.group(2)) else m.group(1) + "x"
+    return json.dumps(MESSAGE.sub(keep, s), ensure_ascii=False)[1:-1]
 
 
 def scratch(path):
@@ -449,13 +573,18 @@ def ask(reason):
 def main():
     raw = sys.stdin.buffer.read().decode("utf-8", "replace")
     if re.search(r'"tool_name"\s*:\s*"(Edit|Write)"', raw):
-        path = json.loads(raw).get("tool_input", {}).get("file_path")
+        inp = json.loads(raw).get("tool_input", {})
+        path, old, new = inp.get("file_path"), inp.get("old_string"), inp.get("new_string")
         if isinstance(path, str) and protected(path):
             ask("protected")
+        elif isinstance(path, str) and TEST_PATH.search(path) and isinstance(old, str) and isinstance(new, str) and (
+                len(SKIP_MARK.findall(new)) > len(SKIP_MARK.findall(old))):
+            ask("tests")
         return
     cmd = command(raw)
     if not cmd:
         return
+    cmd = messages(cmd)
     # Each way runs with a newline as `;` and as a space, and the shell's own `\n` as a break: seven views,
     # and a hit in any asks.
     # Quotes are not tracked: an extra ask is the price.

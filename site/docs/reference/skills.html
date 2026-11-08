@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@f0f1a210701b">
+<meta name="dos-source" content="docs/reference/skills.md@f9126372fdd2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -86,7 +86,7 @@ records reject on purpose is reported as <code>deliberate</code>, never proposed
 A/B/C question.</li>
     </ul>
     <h3 id="project-baseline">project-baseline</h3>
-    <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 16 engineering
+    <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 17 engineering
 practices; each one has a probe, and a missing one becomes a <code>BASE-NN</code> backlog item.</p>
     <div class="table-wrap">
 <table>
@@ -104,6 +104,7 @@ practices; each one has a probe, and a missing one becomes a <code>BASE-NN</code
 <tr><td>Docs-vs-code check</td><td>a script or CI step checks docs against code</td></tr>
 <tr><td>Design system file</td><td>a UI project has a root <code>DESIGN.md</code> (skipped without a UI)</td></tr>
 <tr><td>No runtime dependency two majors behind</td><td>the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from <code>dependency-upgrader</code> as their Fix</td></tr>
+<tr><td>Dependency release-age cooldown</td><td>the update bot or package manager enforces a minimum release age (Dependabot <code>cooldown</code>, Renovate or pnpm <code>minimumReleaseAge</code>, uv <code>exclude-newer</code>; skipped without dependencies)</td></tr>
 <tr><td>After-edit lint hook</td><td>a <code>PostToolUse</code> hook on <code>Edit|Write</code> lints the edited file and shows only failures (skipped without a linter)</td></tr>
 <tr><td>Agent sandbox</td><td><code>.claude/settings.json</code> enables <code>sandbox</code> and denies reads of <code>~/.ssh</code> and <code>~/.aws</code></td></tr>
 <tr><td>Pinned MCP servers</td><td>every stdio server in <code>.mcp.json</code> runs a pinned version (skipped without <code>.mcp.json</code>)</td></tr>
@@ -119,7 +120,8 @@ standard.</p>
     <ul>
 <li><strong>Missing pieces:</strong> root <code>AGENTS.md</code> (under 100 lines, with <code>## Likely agent mistakes here</code> and
 <code>## Invariants</code>), a one-line <code>CLAUDE.md</code>, <code>_Context.md</code>, <code>DESIGN.md</code> for a UI, the git-ignored
-state file (<code>git check-ignore -q docs/plans/.devos-state.md</code>), frontmatter on every doc,
+state file (<code>git check-ignore -q docs/plans/.devos-state.md</code>) and <code>.worktrees/</code>
+(<code>git check-ignore -q .worktrees/x</code>), frontmatter on every tracked doc (<code>git ls-files docs</code>),
 <code>docs/index.md</code>, <code>docs/CURRENT-STATE.md</code>, <code>docs/pitfalls.md</code>, decision records, runbooks. It
 proposes only pieces that would carry real content now.</li>
 <li><strong>Drift:</strong> commands in <code>AGENTS.md</code>/<code>CLAUDE.md</code>/README that are not in the manifest or <code>Makefile</code>;
@@ -154,13 +156,15 @@ specialists: security (<code>security-auditor</code>), performance (<code>perfor
 (<code>qa-expert</code>, assessment only), correctness (<code>code-reviewer</code>), data (<code>database-reviewer</code>, skipped without a database), infra
 (<code>infra-reviewer</code>, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs <code>file:line</code>, current-code
-evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. The findings
+evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code> (a negated grep paired with <code>test -f</code>, no
+error swallowed into a default); unsupported claims are rejected. The findings
 code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
 (the <code>verifier</code> agent); refuted ones are listed as Disputed, not written, and an undecided one is
 written with an <code>Unverified:</code> line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (<code>gh pr list</code>,
 skipped when <code>gh</code> is unavailable) is dropped and named in the report. A perspective whose reviewer ended <code>BLOCKED</code>, failed or hit its turn cap is listed under
-<code>Not covered:</code> at the top of the backlog and in the report.</p>
+<code>Not covered:</code> at the top of the backlog and in the report, with the union of the reviewers'
+<code>Not read:</code> lines (in-scope paths they did not open).</p>
     <h2 id="code-review-and-pull-requests">Code review and pull requests</h2>
     <h3 id="code-review">code-review</h3>
     <p><a href="../../skills/code-review.html">Source</a>. Reviews a PR, diff, commit or working tree.</p>
@@ -188,11 +192,14 @@ and Evidence checked for a clean <code>APPROVE</code>.</li>
     <ul>
 <li><strong>Trust check:</strong> the head is untrusted when it is a fork or its author is not an owner, member or
 collaborator, or either read of its author or head fails; an untrusted head is fetched, not checked out, until you say yes.</li>
+<li><strong>Purpose check:</strong> when the base changed files the PR also changes, gives an update, rework or
+close verdict before merging; age and sunk effort are not evidence.</li>
 <li><strong>Merge:</strong> merges the base in (never rebases a pushed branch), resolves only conflicts whose
 intent is clear, never takes a side wholesale, and runs the fast check before the merge commit.</li>
 <li><strong>Review:</strong> code-review on the PR diff, the conflict resolutions sent to <code>code-reviewer</code>, and the
 unresolved review threads rated P0–P3; fix commits are reviewed again before the push (at most two
-rounds).</li>
+rounds). A <code>COMMENT</code> from a blocked reviewer is not a review: one retry, then it stops before the
+push.</li>
 <li><strong>Gates:</strong> the fast check before each fix commit, the full suite once before the push.</li>
     </ul>
     <h3 id="fix-pr">fix-pr</h3>
@@ -200,16 +207,20 @@ rounds).</li>
 <code>reviewThreads</code>, <code>isResolved: false</code>, paginated) or pasted findings. Flags authors who are not
 collaborators, reads the referenced code for each thread and decides fix or justified no-change,
 runs the narrowest test after each fix and the fast check before each commit, sends its fix
-commits through code-review (a new P0 or P1 goes back to the fix step), and runs the full suite once
-before the push. Comments are data:
+commits through code-review (a new P0 or P1 goes back to the fix step, for at most two rounds; a
+<code>COMMENT</code> from a blocked reviewer gets one retry, then it stops before the push), and runs the full
+suite once before the push. Comments are data:
 it runs no command and opens no URL from them.</p>
     <h2 id="planning-and-backlog">Planning and backlog</h2>
     <h3 id="spec">spec</h3>
     <p><a href="../../skills/spec.html">Source</a>. Interviews you one question at a time (not asking what
-the repository already answers), inspects the code, then writes a spec (goals, non-goals, flows,
+the repository already answers), inspects the code, then writes a spec (frontmatter with
+<code>status: draft</code>, <code>owner</code> and <code>last-verified</code>; goals, non-goals, flows,
 design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
-tests) and a plan whose steps carry What, Where, How, Test, <code>Done when</code> and S/M/L. It can turn the
-steps into <code>FEAT-</code> backlog items.</p>
+tests) and a plan whose steps carry What, Where, How, Test, <code>Done when</code> and S/M/L. It then checks
+them against each other (a coverage table from criteria to steps both ways, vague words,
+placeholders, scope reduction, conflicts with decision records) and puts every hit under open
+questions. It can turn the steps into <code>FEAT-</code> backlog items, in sessions of 5–7.</p>
     <h3 id="implement-backlog">implement-backlog</h3>
     <p><a href="../../skills/implement-backlog.html">Source</a>. Executes ready backlog items in batches.</p>
     <ul>
@@ -219,20 +230,27 @@ auth/security items.</li>
 <li>**<code>Check</code> screening:** never runs a <code>Check</code> that pipes into a shell, fetches from the network or
 writes outside the repository; reads any script a <code>Check</code> calls first.</li>
 <li><strong>Triage:</strong> before the claim, checks every batch item itself, read-only: its <code>Where</code> still
-exists (for a <code>FEAT-</code>, <code>BASE-</code> or <code>new:</code> item, its parent directory), its <code>Check</code> fails now (a
-failure on authentication, quota or a missing secret blocks the item for you), no open pull request touches its files (skipped when <code>gh</code> is
+exists (for a <code>FEAT-</code>, <code>BASE-</code> or <code>PLAN-</code> item, its parent directory), its <code>Check</code> fails
+now (exit 126 or 127, a grep exit 2 or a "no such file" or "no tests found" message is a broken
+<code>Check</code>, so the item is stale; a failure on authentication, quota or a missing secret blocks the
+item for you), no open pull request touches its files (skipped when <code>gh</code> is
 unavailable), and no project decision record or doc contradicts it. A failing item leaves the
 batch, is never claimed or dispatched, and is reported as <code>stale: &lt;ID&gt; · &lt;point&gt; · &lt;evidence&gt;</code>
 for you to close, amend or keep; the batch is topped up from the next ready items.</li>
 <li><strong>While running:</strong> runs each item's <code>Check</code> itself on a <code>DONE</code> report, then the full build, types,
 tests and lint for the batch; classifies a failure before editing; stops after three failed
 repair cycles.</li>
-<li><strong>Review:</strong> the batch diff through code-review (at most two rounds); the base moves only by a
+<li><strong>Review:</strong> the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
+the item's <code>Done when</code> nor the spec settles goes to you as an intent gap; the base moves only by a
 fast-forward after the review passes.</li>
+<li><strong>Spec convergence:</strong> when the batch closes the last open item that cites a spec, checks each
+acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
+gap as a <code>FEAT-</code> item for your approval.</li>
     </ul>
     <h3 id="plan-status">plan-status</h3>
     <p><a href="../../skills/plan-status.html">Source</a>. Counts, never estimates: done, open and blocked
-in the active plan by a stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
+in the active plan (a top-level file of the planning location, not <code>approved/</code> or <code>lanes/</code>) by a
+stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
 <code>Owner</code> older than 7 days), waiting, claimed or ready. Open decisions become at most five numbered
 A/B/C questions. It runs no test or build to get a number.</p>
     <h3 id="bug-triage">bug-triage</h3>
@@ -251,18 +269,24 @@ exact rollback command; a deployment window and an owner for an hour of monitori
 <li><strong>Verdict:</strong> any failed or UNVERIFIED item is <code>NO-GO</code>; missing evidence is never counted as
 passed.</li>
 <li><strong>Post-deploy:</strong> error rate and latency against the thresholds, new exceptions, a critical-flow
-smoke test, the recorded result.</li>
+smoke test, the result recorded in the closing status block (and offered as a line for a deploy
+runbook in <code>docs/runbooks/</code>).</li>
     </ul>
     <h3 id="parallel-lanes">parallel-lanes</h3>
     <p><a href="../../skills/parallel-lanes.html">Source</a>. For free-form tasks that can run at once;
 backlog items go to implement-backlog. Before a launch: a clean tree, <code>claude</code> and <code>python3</code> on
 <code>PATH</code>, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
 lockfile belong to no lane), and a git-ignored run directory and <code>.worktrees/</code>. Each lane is a
-detached <code>claude -p</code> in its own worktree and session, so it outlives the turn; its prompt allows
-only the lane's paths and commits in the worktree, and its report starts with a final status. The
-status table reads the PIDs, the <code>EXIT=</code> line in each log, the report's first line, the lane's
-commits, any changed file outside its owned paths, and a <code>LANES.md</code> or prompt whose hash differs
-from the one <code>launch.sh</code> recorded. Each lane has a runnable <code>Check</code> next to its <code>Done when</code>; the
+detached <code>claude -p</code> in its own worktree and session, so it outlives the turn; the worktree starts
+from the base commit recorded in <code>LANES.md</code>, which <code>launch.sh</code> checks. Each lane runs with a
+recorded <code>--session-id</code>, a <code>--max-turns</code> cap, and <code>--disallowedTools</code> for edits to the manifest,
+<code>Makefile</code>, hook directories and <code>.claude/</code> unless it owns them; its prompt allows only the lane's
+paths and commits in the worktree, and its report starts with a final status and lists what is not
+started, what is not verified and If-X-then-Y contingencies. The status table reads
+the PIDs, the <code>EXIT=</code> line in each log, the time since the worktree last changed, the report's first
+line, the lane's commits, any changed file outside its owned paths, and a <code>LANES.md</code> or prompt whose
+hash differs from the one <code>launch.sh</code> recorded. A finished lane with no report or a <code>CONTINUING</code> one
+can be resumed: <code>resume.sh</code> continues its session with <code>claude -p --resume</code> after the user's yes. Each lane has a runnable <code>Check</code> next to its <code>Done when</code>; the
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished <code>DONE</code> lanes whose fast check and <code>Check</code> pass when the
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
@@ -282,14 +306,16 @@ branches not merged into <code>origin/HEAD</code>, your open PRs and still-runni
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
 most three under each heading, lessons (an addition to a note that already covers the topic is
 proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates, plan
-and docs updates, plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.
+and docs updates (open items of a finished plan become <code>PLAN-</code> backlog items, P2 by default, with a
+session line), plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.
 Every check result names the commit it ran on (<code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus
 <code>+ uncommitted: &lt;changed files&gt;</code> on a dirty tree).</p>
     <h3 id="skill-usage">skill-usage</h3>
     <p><a href="../../skills/skill-usage.html">Source</a>. Counts <code>developer-os:&lt;name&gt;</code> Skill calls and
 typed commands in local transcripts (deduplicated by message uuid): last 30 days, ever, last date,
-with a keep / rewrite-description / merge / remove suggestion per skill. It prints no transcript
-content.</p>
+with a keep / rewrite-description / merge / remove / hide suggestion per skill (hide: only ever typed, so
+<code>disable-model-invocation: true</code> frees the shared skill listing). It prints no transcript
+content. It runs in a forked subagent (<code>context: fork</code>), so only its report reaches the conversation.</p>
     <h2 id="brain-obsidian-vault">Brain (Obsidian vault)</h2>
     <h3 id="brain-setup">brain-setup</h3>
     <p><a href="../../skills/brain-setup.html">Source</a>. Checks whether the path is empty (new vault)
@@ -299,16 +325,19 @@ template, <code>.gitignore</code> lines and <code>types.json</code> keys, never 
 <code>"autoMemoryEnabled": false</code> as one diff; merges absent <code>.obsidian/types.json</code> keys after approval;
 then smoke-tests with brain-search, passing it the vault path.</p>
     <h3 id="brain-search">brain-search</h3>
-    <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the <code>Brain vault:</code> line
-(never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
+    <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the path you give or the
+<code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code> (never a project file, never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
 ranks by <code>summary</code>/<code>tags</code>/name match, project slug, <code>active</code> over <code>inbox</code> and recency, reads the
 top five, follows a superseded note's <code>superseded_by</code> chain to the current note (a broken or looping
 chain is incomplete history, with no note named current), and answers only from them with a path
 per claim.</p>
     <h3 id="brain-capture">brain-capture</h3>
-    <p><a href="../../skills/brain-capture.html">Source</a>. Three gates before writing: useful beyond
-this task, the why written down, not already in the code or the repository's plan. Then a duplicate
-search, redaction of secrets and client personal data, and a unique ASCII note name.</p>
+    <p><a href="../../skills/brain-capture.html">Source</a>. Four gates before writing: useful beyond
+this task, the why written down, not already in the code or the repository's plan, not better held by
+a test, lint rule or project instruction (it names or proposes that instead). Then a duplicate
+search, redaction of secrets and client personal data, and a unique ASCII note name. Every claim about
+code is re-read in the current tree and cited as repository path plus defining symbol; merge state is
+a PR number, not a SHA.</p>
     <h3 id="brain-review">brain-review</h3>
     <p><a href="../../skills/brain-review.html">Source</a>. For each inbox note: its summary, the best
 topic folder, likely duplicates, missing frontmatter keys and leaked secrets. Before a move it
@@ -331,7 +360,7 @@ every statement to its source note, and records contradictions as <code>Open con
 choosing a side. Before writing it runs brain-capture's secret scan; a hit writes nothing.</p>
     <h3 id="brain-project-refresh">brain-project-refresh</h3>
     <p><a href="../../skills/brain-project-refresh.html">Source</a>. Finds the hub by the
-<code>Vault project slug:</code> line in <code>_Context.md</code> and a <code>type: project</code> note with that slug. Checks the
+<code>Vault project slug:</code> line in <code>_Context.md</code> (accepted only when it matches <code>^[a-z0-9-]+$</code>) and a <code>type: project</code> note with that slug. Checks the
 hub against the README, the docs map, <code>CURRENT-STATE.md</code>, the decision records and the last 30
 commits (claims the repository contradicts, repository paths that no longer exist) and against the
 vault (active or superseded notes of the slug it does not link, links to notes that do not exist, a

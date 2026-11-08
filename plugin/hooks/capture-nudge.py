@@ -85,7 +85,19 @@ def main():
     if n < minimum:
         return 0
 
-    # Defers, without spending the marker, while a background agent or command launched in this session has
+    # Newer Claude Code releases list in-flight tasks in background_tasks (present when its task registry is
+    # reachable): a non-empty list defers without spending the marker, and the transcript guess below is
+    # used only when the key is missing.
+    try:
+        tasks = json.loads(text).get("background_tasks")
+    except (ValueError, AttributeError):
+        tasks = None
+    if isinstance(tasks, list):
+        if tasks:
+            return 0
+        launches, monitors = [], []
+
+    # Older releases: defers, without spending the marker, while a background agent or command launched in this session has
     # no <task-notification> yet and its output file changed in the last 30 minutes: the turn ended to wait
     # for it. The mtime bound matters because a notification is not guaranteed; without it, a task that
     # vanished silently would suppress the nudge for the rest of the session.

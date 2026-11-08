@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@fd71e71644a8">
+<meta name="dos-source" content="docs/architecture/overview.md@b2886f3b24a2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -82,7 +82,7 @@ site/                             public documentation site, published by .githu
         <tbody>
           <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>About 8.1 KB</td><td>8900 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
           <tr><td>State card</td><td>After a compaction, resume or fork inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
-          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing</td><td>About 11,000 characters for 32 skills</td><td>80–1024 each, 12000 total</td></tr>
+          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing; a skill with <code>disable-model-invocation: true</code> lists no description</td><td>About 11,000 characters for 32 skills</td><td>80–1024 each, 12000 total of the listed ones (<code>scripts/check.sh</code>); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10)</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
           <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.8–14.2 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
           <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–4.7 KB per file</td><td>—</td></tr>
@@ -152,7 +152,7 @@ site/                             public documentation site, published by .githu
     <ul>
       <li>A <code>cat</code> hook prints <code>core.md</code> on every source, without Python. <code>state-card.py</code>, for <code>source</code> <code>compact</code>, <code>resume</code> or <code>fork</code> inside a git repository, prints the branch, the newest plan, <code>docs/plans/.devos-state.md</code> (skipped when older than 7 days) and the worktrees, cut to whole lines within 1024 bytes.</li>
       <li><code>notices.py</code>, for <code>source</code> <code>startup</code>, compares the plugin version with a marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/notices/</code> (Claude Code has no install or update hook) and, when the user-level <code>CLAUDE.md</code> names a vault, counts <code>_inbox/</code> notes older than 7 days and reads the last line of <code>_reports/garden-log.md</code>. It shows due notices to the user as a <code>systemMessage</code>, each throttled by its own marker.</li>
-      <li><code>guard.py</code> extracts <code>tool_input.command</code> with a regular expression, unescapes JSON, joins line continuations, drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on purpose, so a mention inside a commit message also asks. Any parse failure prints nothing. For Edit and Write it reads <code>tool_input.file_path</code> instead and asks when the path is a secret file or part of the user-level Claude config (also under <code>CLAUDE_CONFIG_DIR</code>), compared without case and through up to 8 symlink hops. A Bash call from one of the read-only review agents, named by <code>agent_type</code>, also asks when it writes. A <code>git commit</code> that hits no category gets an <code>additionalContext</code> reminder to run the fast check, with no decision.</li>
+      <li><code>guard.py</code> extracts <code>tool_input.command</code> with a regular expression, unescapes JSON, joins line continuations, drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on purpose, so a mention such as <code>echo "pnpm add zod"</code> also asks; a quoted commit message (<code>-m "..."</code>) is read as one word. Any parse failure prints nothing. For Edit and Write it reads <code>tool_input.file_path</code> (and an Edit's <code>old_string</code>/<code>new_string</code>) instead and asks when the path is a secret file or part of the user-level Claude config (also under <code>CLAUDE_CONFIG_DIR</code>), compared without case and through up to 8 symlink hops, or when an Edit adds a skip or focus marker to a test file. A Bash call from one of the read-only review agents, named by <code>agent_type</code>, also asks when it writes. A <code>git commit</code> that hits no category gets an <code>additionalContext</code> reminder to run the fast check, with no decision.</li>
       <li><code>capture-nudge.py</code> reads <code>session_id</code> and <code>transcript_path</code> from the input, counts the <code>tool_use</code> blocks of the transcript's assistant lines, defers while a background task launched in the session has no <code>&lt;task-notification&gt;</code> and a fresh output file under a <code>tasks/</code> directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/capture-nudge/</code> so it fires once. Markers 8 days old or older are removed.</li>
       <li><code>repeat-failure.py</code> hashes the agent, tool and input of each failed call (for Bash, the command), keeps the counts per session in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/repeat-failure/</code>, and at the third failure of the same hash, each within 10 minutes of the last, adds a "stop retrying" reminder. It stores no command text.</li>
     </ul>
@@ -201,9 +201,9 @@ site/                             public documentation site, published by .githu
 <rect class="lbl" x="229.2" y="854.0" width="47.6" height="17" rx="3"/>
 <text class="sm" x="253.0" y="867.0" text-anchor="middle">offers</text>
 <rect class="lbl" x="769.2" y="108.0" width="47.6" height="17" rx="3"/>
-<text class="sm" x="793.0" y="121.0" text-anchor="middle">checks</text>
+<text class="sm" x="793.0" y="121.0" text-anchor="middle">preloads</text>
 <rect class="lbl" x="772.5" y="388.0" width="41.0" height="17" rx="3"/>
-<text class="sm" x="793.0" y="401.0" text-anchor="middle">loads</text>
+<text class="sm" x="793.0" y="401.0" text-anchor="middle">preloads</text>
 <rect class="box" x="10" y="60" width="200" height="34" rx="6"/>
 <text x="110" y="82" text-anchor="middle">pr-cycle</text>
 <rect class="box" x="10" y="320" width="200" height="34" rx="6"/>
@@ -258,8 +258,10 @@ site/                             public documentation site, published by .githu
 </svg></div>
     <p>Every dispatched agent answers with a final status (<code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code>) that
     the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog), an offer
-    the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Other edges: pr-cycle sends its conflict resolutions to code-reviewer; session-retro calls brain-search and offers docs-sync; brain-garden runs brain-compile for a shared rule the user names; bug-triage offers spec; brain-compile borrows brain-capture's step 5 secret scan and brain-import-memory its steps 5 and 6. Two skills sit outside the diagram: parallel-lanes reviews its integrated branch through
-code-review, and brain-project-refresh leaves a missing hub as an inbox draft for brain-review. audit-to-backlog also
+    the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Other edges: pr-cycle sends its conflict resolutions to code-reviewer; session-retro calls brain-search and offers docs-sync; brain-garden runs brain-compile for a shared rule the user names; bug-triage offers spec; brain-compile borrows brain-capture's step 5 secret scan and brain-import-memory its steps 5 and 6. Three skills sit outside the diagram: parallel-lanes reviews its integrated branch through
+code-review, brain-project-refresh leaves a missing hub as an inbox draft for brain-review, and project-init runs
+project-baseline, docs-sync and instruction-review up to their reports, loads each applicable conventions skill and
+sends blocking findings to the verifier as audit-to-backlog does. audit-to-backlog also
 dispatches database-reviewer (data) and infra-reviewer (infra); code-review adds them for migration,
 schema, query, IaC or CI diffs; docs-sync may hand approved items to docs-writer; project-baseline asks
 dependency-upgrader for the three dependencies furthest behind. The backlog contract shared by audit-to-backlog, project-baseline and
@@ -298,8 +300,8 @@ dependency-upgrader for the three dependencies furthest behind. The backlog cont
           <tr><td>External repositories</td><td><code>.claude/settings.json</code>, hooks, <code>.mcp.json</code> of a client or OSS repo</td><td>Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread</td></tr>
           <tr><td>Subagent output</td><td>A delegate's edits</td><td>Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare <code>git status</code> and <code>git diff</code></td></tr>
           <tr><td>Plugin updates</td><td>A new commit's hooks and rules</td><td><code>SECURITY.md</code>: review the diff from the installed commit before updating; auto-update is off by default</td></tr>
-          <tr><td>Project instructions</td><td>A cloned repository's <code>CLAUDE.md</code> naming a vault</td><td>The notices hook reads the <code>Brain vault:</code> line from the user-level <code>CLAUDE.md</code> only and prints counts, never note names</td></tr>
-          <tr><td>Session transcripts</td><td>Past conversations</td><td>Only skill-usage reads them, and only counts; session-retro and docs-sync never open them</td></tr>
+          <tr><td>Project instructions</td><td>A cloned repository's <code>CLAUDE.md</code> naming a vault</td><td>The brain skills and the notices hook read the <code>Brain vault:</code> line from the user-level <code>CLAUDE.md</code> only (D5, D22); the hook prints counts, never note names</td></tr>
+          <tr><td>Session transcripts</td><td>Past conversations</td><td>skill-usage reads them and reports only counts; the capture-nudge hook reads the current session's transcript for its tool-call count and background-task and Monitor state, never printing its content; session-retro and docs-sync never open them</td></tr>
         </tbody>
       </table>
     </div>

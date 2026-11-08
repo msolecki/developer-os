@@ -5,3 +5,5 @@ allowed_tools: [Read, Glob, Grep, Bash, Skill]
 ---
 
 Search the brain: how do we enforce API rate limits?
+
+My brain vault is ./vault.

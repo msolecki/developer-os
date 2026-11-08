@@ -66,6 +66,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `~/.codex/AGENTS.md`, ask once if it is missing, and never search the disk.
 - **Why:** works identically in Claude Code and Codex with no plugin configuration mechanism.
 - **Amended 2026-10-24:** the lookup no longer reads `~/.codex/AGENTS.md` (D21).
+- **Amended 2026-11-08:** skills take the vault path from the user or the calling skill, otherwise
+  from the user-level `CLAUDE.md` only, as D22 does for the notices hook: a cloned repository must not
+  point brain-search or brain-capture at a directory of its choosing. No project-file lookup, no
+  mismatch warning. A path holding a quote, `$`, a backtick, `\` or a newline is rejected, and the
+  shell templates set it in single quotes.
 - **Open:** replacing the line with the plugin's `userConfig` is under consideration (a local,
   git-ignored proposal, not in the repository).
 
@@ -125,6 +130,33 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-11-08:** the destroy category also asks before `git checkout -f`, `git switch -f` or
   `--discard-changes` and `find … -delete` (#108). The protected files match through symlink hops and
   without case, so a link to a `.env` asks and so does a differently cased name (#123).
+- **Amended 2026-11-08:** a quoted commit message (`-m`, `-F`, `--message`, `--file`) is no longer
+  scanned, and `commit -n` counts only with `commit` as git's subcommand, reversing "still ask on a
+  mention" for commit messages: in `claude -p` an ask is a denial, and `git commit -m "fix npm install
+  bug"` blocked headless lanes (FLOW-39).
+- **Amended 2026-11-08:** dependency-upgrader joins the read-only agents: it has Bash and its prompt
+  forbids edits and HEAD moves, yet `git checkout main` from it passed (AGT-10). In the read-only
+  agents, `submodule status`/`summary` and `bisect log`/`visualize`/`view` pass as reads (FLOW-40), and
+  `--output`, `--output-directory` or `-o` outside scratch on `diff`, `log`, `show`, `format-patch` or
+  `archive` asks, as does `format-patch` without one or `--stdout`; git plumbing that writes refs or the
+  index (`symbolic-ref`, `read-tree`, `update-index`) stays a documented known miss, an unlikely
+  reviewer mistake (SEC-15).
+- **Amended 2026-11-08:** the install category adds a closed table matched in command position,
+  `pip`/`pip3 install`, `uv add`, `uv pip install`, `poetry add`, `cargo add`/`install`, `go
+  get`/`install`, `composer require`, `bundle add`, `gem install`, each with a package argument, and
+  `npx -y`/`--yes`, which runs freshly fetched code; core.md's install rule was text only in Python,
+  Rust, Go and PHP repositories (SEC-14).
+- **Amended 2026-11-08:** a test category: an Edit of a test file (`*.test.*`, `*.spec.*`, `tests/`,
+  `test_*.py`, `*_test.go`) whose `new_string` holds more skip or focus markers than its `old_string`
+  (`it.skip(`, `.only(`, `xit(`, `@pytest.mark.skip`, `t.Skip(` and the like), and `rm`/`git rm` of a
+  test file or `mv` of one to `.bak`, `.disabled` or `.skip`; core.md's "do not delete or skip tests"
+  was text only (SEC-09).
+- **Amended 2026-11-08:** an infra category, a closed list in command position (also after `npx`, `pnpm
+  exec`, `php`, `bundle exec` and similar runners): `terraform`/`tofu destroy`, `apply -auto-approve`,
+  `state rm`, `prisma migrate reset`, `supabase db reset`, `drizzle-kit push --force`, `artisan
+  migrate:fresh`/`migrate:reset`/`db:wipe`, `rails db:drop`/`db:reset`, `dropdb`, `docker compose down
+  -v`, `kubectl delete`, `helm uninstall`, `vercel --prod`. Users without their own deny list had no
+  check on these in auto mode; users of destructive_command_guard already have one (SEC-08).
 
 ## D7. One wrap-up nudge per long session
 
@@ -133,6 +165,12 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   skipping headless/SDK runs and subagents, and deferring while a background task it launched is
   still running (PR #69). It counts entries and reads background-task ids and output paths, never
   message content.
+- **Amended 2026-10-15:** it also defers while a Monitor started in the last 30 minutes has no terminal
+  notice (#72).
+- **Amended 2026-11-08:** it counts only the `tool_use` blocks of assistant lines, so tool calls quoted
+  in tool results no longer bring the nudge forward (#123).
+- **Amended 2026-11-08:** it reads background work from the Stop input's `background_tasks` list and
+  guesses from the transcript only when that field is absent (FLOW-37).
 - **Why:** lessons are lost at the end of long sessions, but a nudge on every stop is noise.
 - **Superseded draft:** the first design nudged brain-capture directly; session-retro replaced it
   because it routes each finding to its destination, the vault being only one of them.
@@ -149,6 +187,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 
 - **Amended 2026-10-24:** the verifier is always a fresh `verifier` agent; the Codex option is removed (D21).
 - **Amended 2026-11-07:** code-review also verifies up to five P2 correctness findings: two unverified P2s had driven fix-pr work (#111).
+- **Amended 2026-11-08:** the `verifier` agent sets `omitClaudeMd: true`, so the user's, project's and local `CLAUDE.md` stay out of its context and it sees only the claim and the code.
 
 ## D9. Action skills declare where they stop and what they never do
 
@@ -168,6 +207,15 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-11-06:** the core-rules cap is 8900 bytes, to take the lessons on parallel lanes,
   reviewer findings and red-first gates; 8900 plus the 1024-byte state card and 64 bytes of margin stays
   under the 10,000-character hook limit.
+- **Amended 2026-11-08:** the 12000 total counts only model-visible descriptions: a skill with
+  `disable-model-invocation: true` is left out of the skill listing. The listing has its own character budget,
+  1% of the model's context window, shared by every installed plugin and the user's own skills; when it
+  overflows, Claude Code drops descriptions starting with the least-invoked skills, so a skill can lose its
+  description while this plugin is under 12000 (seen for bug-triage, deploy-checklist, spec,
+  brain-import-memory and brain-project-refresh). Such a skill is still invoked as `/developer-os:<name>`;
+  disabling unused plugins, raising `skillListingBudgetFraction`, or hiding a skill that is only ever typed
+  (the `hide` verdict of skill-usage) frees the budget. Source: Claude Code's skills documentation,
+  "Skill descriptions are cut short".
 
 ## D11. Plans are local
 
@@ -265,6 +313,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Why:** a local agnix would need an install on every contributor's machine. The hash lives in the
   workflow because the action's own checksum file comes from the same release and proves nothing
   if the release is replaced.
+- **Amended 2026-11-08:** `scripts/check.sh` runs agnix when it is on `PATH` and fails in CI without it, so a
+  contributor who has it sees CI's result before pushing; CI only sets up the pinned binary. A local install stays
+  optional: without it the stage prints `SKIP agnix`.
 
 ## D19. A Codex installer that copies, not symlinks (superseded by D21)
 
@@ -325,7 +376,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   require) so it outlives the turn, with `--permission-mode acceptEdits` and an explicit
   `--allowedTools` list. It launches only after the user approves the shown `launch.sh`; lanes commit
   in their worktree and never push, merge or install; the launching session integrates finished lanes
-  into a local branch and reviews them through code-review.
+  into a local branch and reviews them through code-review. Each lane gets a recorded `--session-id`
+  and a `--max-turns` cap; a lane cut off without a final report is continued with
+  `claude -p --resume <id>` (the Resume mode), again only after the user's yes.
 - **Why:** subagents run inside the session that dispatched them and end with it, while long lanes
   need to keep running and be watched from a later turn. A permission bypass would let an unattended
   process run any command, against the approval model; a fixed tool list makes a lane that needs more

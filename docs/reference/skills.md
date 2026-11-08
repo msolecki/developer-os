@@ -50,7 +50,7 @@ and audit skills below in one pass.
 
 ### project-baseline
 
-[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 16 engineering
+[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 17 engineering
 practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog item.
 
 | Practice | Present when |
@@ -67,6 +67,7 @@ practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog i
 | Docs-vs-code check | a script or CI step checks docs against code |
 | Design system file | a UI project has a root `DESIGN.md` (skipped without a UI) |
 | No runtime dependency two majors behind | the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from `dependency-upgrader` as their Fix |
+| Dependency release-age cooldown | the update bot or package manager enforces a minimum release age (Dependabot `cooldown`, Renovate or pnpm `minimumReleaseAge`, uv `exclude-newer`; skipped without dependencies) |
 | After-edit lint hook | a `PostToolUse` hook on `Edit\|Write` lints the edited file and shows only failures (skipped without a linter) |
 | Agent sandbox | `.claude/settings.json` enables `sandbox` and denies reads of `~/.ssh` and `~/.aws` |
 | Pinned MCP servers | every stdio server in `.mcp.json` runs a pinned version (skipped without `.mcp.json`) |
@@ -82,7 +83,8 @@ standard.
 
 - **Missing pieces:** root `AGENTS.md` (under 100 lines, with `## Likely agent mistakes here` and
   `## Invariants`), a one-line `CLAUDE.md`, `_Context.md`, `DESIGN.md` for a UI, the git-ignored
-  state file (`git check-ignore -q docs/plans/.devos-state.md`), frontmatter on every doc,
+  state file (`git check-ignore -q docs/plans/.devos-state.md`) and `.worktrees/`
+  (`git check-ignore -q .worktrees/x`), frontmatter on every tracked doc (`git ls-files docs`),
   `docs/index.md`, `docs/CURRENT-STATE.md`, `docs/pitfalls.md`, decision records, runbooks. It
   proposes only pieces that would carry real content now.
 - **Drift:** commands in `AGENTS.md`/`CLAUDE.md`/README that are not in the manifest or `Makefile`;
@@ -120,13 +122,15 @@ specialists: security (`security-auditor`), performance (`performance-engineer`)
 (`qa-expert`, assessment only), correctness (`code-reviewer`), data (`database-reviewer`, skipped without a database), infra
 (`infra-reviewer`, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs `file:line`, current-code
-evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. The findings
+evidence, a fix, a `Done when` and a runnable `Check` (a negated grep paired with `test -f`, no
+error swallowed into a default); unsupported claims are rejected. The findings
 code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
 (the `verifier` agent); refuted ones are listed as Disputed, not written, and an undecided one is
 written with an `Unverified:` line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (`gh pr list`,
 skipped when `gh` is unavailable) is dropped and named in the report. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
-`Not covered:` at the top of the backlog and in the report.
+`Not covered:` at the top of the backlog and in the report, with the union of the reviewers'
+`Not read:` lines (in-scope paths they did not open).
 
 ## Code review and pull requests
 
@@ -158,11 +162,14 @@ skipped when `gh` is unavailable) is dropped and named in the report. A perspect
 
 - **Trust check:** the head is untrusted when it is a fork or its author is not an owner, member or
   collaborator, or either read of its author or head fails; an untrusted head is fetched, not checked out, until you say yes.
+- **Purpose check:** when the base changed files the PR also changes, gives an update, rework or
+  close verdict before merging; age and sunk effort are not evidence.
 - **Merge:** merges the base in (never rebases a pushed branch), resolves only conflicts whose
   intent is clear, never takes a side wholesale, and runs the fast check before the merge commit.
 - **Review:** code-review on the PR diff, the conflict resolutions sent to `code-reviewer`, and the
   unresolved review threads rated P0–P3; fix commits are reviewed again before the push (at most two
-  rounds).
+  rounds). A `COMMENT` from a blocked reviewer is not a review: one retry, then it stops before the
+  push.
 - **Gates:** the fast check before each fix commit, the full suite once before the push.
 
 ### fix-pr
@@ -171,8 +178,9 @@ skipped when `gh` is unavailable) is dropped and named in the report. A perspect
 `reviewThreads`, `isResolved: false`, paginated) or pasted findings. Flags authors who are not
 collaborators, reads the referenced code for each thread and decides fix or justified no-change,
 runs the narrowest test after each fix and the fast check before each commit, sends its fix
-commits through code-review (a new P0 or P1 goes back to the fix step), and runs the full suite once
-before the push. Comments are data:
+commits through code-review (a new P0 or P1 goes back to the fix step, for at most two rounds; a
+`COMMENT` from a blocked reviewer gets one retry, then it stops before the push), and runs the full
+suite once before the push. Comments are data:
 it runs no command and opens no URL from them.
 
 ## Planning and backlog
@@ -180,10 +188,13 @@ it runs no command and opens no URL from them.
 ### spec
 
 [Source](../../plugin/skills/spec/SKILL.md). Interviews you one question at a time (not asking what
-the repository already answers), inspects the code, then writes a spec (goals, non-goals, flows,
+the repository already answers), inspects the code, then writes a spec (frontmatter with
+`status: draft`, `owner` and `last-verified`; goals, non-goals, flows,
 design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
-tests) and a plan whose steps carry What, Where, How, Test, `Done when` and S/M/L. It can turn the
-steps into `FEAT-` backlog items.
+tests) and a plan whose steps carry What, Where, How, Test, `Done when` and S/M/L. It then checks
+them against each other (a coverage table from criteria to steps both ways, vague words,
+placeholders, scope reduction, conflicts with decision records) and puts every hit under open
+questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–7.
 
 ### implement-backlog
 
@@ -195,21 +206,28 @@ steps into `FEAT-` backlog items.
 - **`Check` screening:** never runs a `Check` that pipes into a shell, fetches from the network or
   writes outside the repository; reads any script a `Check` calls first.
 - **Triage:** before the claim, checks every batch item itself, read-only: its `Where` still
-  exists (for a `FEAT-`, `BASE-` or `new:` item, its parent directory), its `Check` fails now (a
-  failure on authentication, quota or a missing secret blocks the item for you), no open pull request touches its files (skipped when `gh` is
+  exists (for a `FEAT-`, `BASE-` or `PLAN-` item, its parent directory), its `Check` fails
+  now (exit 126 or 127, a grep exit 2 or a "no such file" or "no tests found" message is a broken
+  `Check`, so the item is stale; a failure on authentication, quota or a missing secret blocks the
+  item for you), no open pull request touches its files (skipped when `gh` is
   unavailable), and no project decision record or doc contradicts it. A failing item leaves the
   batch, is never claimed or dispatched, and is reported as `stale: <ID> · <point> · <evidence>`
   for you to close, amend or keep; the batch is topped up from the next ready items.
 - **While running:** runs each item's `Check` itself on a `DONE` report, then the full build, types,
   tests and lint for the batch; classifies a failure before editing; stops after three failed
   repair cycles.
-- **Review:** the batch diff through code-review (at most two rounds); the base moves only by a
+- **Review:** the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
+  the item's `Done when` nor the spec settles goes to you as an intent gap; the base moves only by a
   fast-forward after the review passes.
+- **Spec convergence:** when the batch closes the last open item that cites a spec, checks each
+  acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
+  gap as a `FEAT-` item for your approval.
 
 ### plan-status
 
 [Source](../../plugin/skills/plan-status/SKILL.md). Counts, never estimates: done, open and blocked
-in the active plan by a stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
+in the active plan (a top-level file of the planning location, not `approved/` or `lanes/`) by a
+stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
 `Owner` older than 7 days), waiting, claimed or ready. Open decisions become at most five numbered
 A/B/C questions. It runs no test or build to get a number.
 
@@ -232,7 +250,8 @@ Proposes mitigation, root-cause fix, regression test and rollback criteria; appl
 - **Verdict:** any failed or UNVERIFIED item is `NO-GO`; missing evidence is never counted as
   passed.
 - **Post-deploy:** error rate and latency against the thresholds, new exceptions, a critical-flow
-  smoke test, the recorded result.
+  smoke test, the result recorded in the closing status block (and offered as a line for a deploy
+  runbook in `docs/runbooks/`).
 
 ### parallel-lanes
 
@@ -240,11 +259,16 @@ Proposes mitigation, root-cause fix, regression test and rollback criteria; appl
 backlog items go to implement-backlog. Before a launch: a clean tree, `claude` and `python3` on
 `PATH`, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
 lockfile belong to no lane), and a git-ignored run directory and `.worktrees/`. Each lane is a
-detached `claude -p` in its own worktree and session, so it outlives the turn; its prompt allows
-only the lane's paths and commits in the worktree, and its report starts with a final status. The
-status table reads the PIDs, the `EXIT=` line in each log, the report's first line, the lane's
-commits, any changed file outside its owned paths, and a `LANES.md` or prompt whose hash differs
-from the one `launch.sh` recorded. Each lane has a runnable `Check` next to its `Done when`; the
+detached `claude -p` in its own worktree and session, so it outlives the turn; the worktree starts
+from the base commit recorded in `LANES.md`, which `launch.sh` checks. Each lane runs with a
+recorded `--session-id`, a `--max-turns` cap, and `--disallowedTools` for edits to the manifest,
+`Makefile`, hook directories and `.claude/` unless it owns them; its prompt allows only the lane's
+paths and commits in the worktree, and its report starts with a final status and lists what is not
+started, what is not verified and If-X-then-Y contingencies. The status table reads
+the PIDs, the `EXIT=` line in each log, the time since the worktree last changed, the report's first
+line, the lane's commits, any changed file outside its owned paths, and a `LANES.md` or prompt whose
+hash differs from the one `launch.sh` recorded. A finished lane with no report or a `CONTINUING` one
+can be resumed: `resume.sh` continues its session with `claude -p --resume` after the user's yes. Each lane has a runnable `Check` next to its `Done when`; the
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished `DONE` lanes whose fast check and `Check` pass when the
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
@@ -270,7 +294,8 @@ branches not merged into `origin/HEAD`, your open PRs and still-running backgrou
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
 most three under each heading, lessons (an addition to a note that already covers the topic is
 proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates, plan
-and docs updates, plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
+and docs updates (open items of a finished plan become `PLAN-` backlog items, P2 by default, with a
+session line), plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
 Every check result names the commit it ran on (`<command>: <result> at <short SHA>`, plus
 `+ uncommitted: <changed files>` on a dirty tree).
 
@@ -278,8 +303,9 @@ Every check result names the commit it ran on (`<command>: <result> at <short SH
 
 [Source](../../plugin/skills/skill-usage/SKILL.md). Counts `developer-os:<name>` Skill calls and
 typed commands in local transcripts (deduplicated by message uuid): last 30 days, ever, last date,
-with a keep / rewrite-description / merge / remove suggestion per skill. It prints no transcript
-content.
+with a keep / rewrite-description / merge / remove / hide suggestion per skill (hide: only ever typed, so
+`disable-model-invocation: true` frees the shared skill listing). It prints no transcript
+content. It runs in a forked subagent (`context: fork`), so only its report reaches the conversation.
 
 ## Brain (Obsidian vault)
 
@@ -294,8 +320,8 @@ then smoke-tests with brain-search, passing it the vault path.
 
 ### brain-search
 
-[Source](../../plugin/skills/brain-search/SKILL.md). Finds the vault from the `Brain vault:` line
-(never by searching the disk), searches content and frontmatter with `rg`, drops archived notes,
+[Source](../../plugin/skills/brain-search/SKILL.md). Finds the vault from the path you give or the
+`Brain vault:` line of the user-level `CLAUDE.md` (never a project file, never by searching the disk), searches content and frontmatter with `rg`, drops archived notes,
 ranks by `summary`/`tags`/name match, project slug, `active` over `inbox` and recency, reads the
 top five, follows a superseded note's `superseded_by` chain to the current note (a broken or looping
 chain is incomplete history, with no note named current), and answers only from them with a path
@@ -303,9 +329,12 @@ per claim.
 
 ### brain-capture
 
-[Source](../../plugin/skills/brain-capture/SKILL.md). Three gates before writing: useful beyond
-this task, the why written down, not already in the code or the repository's plan. Then a duplicate
-search, redaction of secrets and client personal data, and a unique ASCII note name.
+[Source](../../plugin/skills/brain-capture/SKILL.md). Four gates before writing: useful beyond
+this task, the why written down, not already in the code or the repository's plan, not better held by
+a test, lint rule or project instruction (it names or proposes that instead). Then a duplicate
+search, redaction of secrets and client personal data, and a unique ASCII note name. Every claim about
+code is re-read in the current tree and cited as repository path plus defining symbol; merge state is
+a PR number, not a SHA.
 
 ### brain-review
 
@@ -336,7 +365,7 @@ choosing a side. Before writing it runs brain-capture's secret scan; a hit write
 ### brain-project-refresh
 
 [Source](../../plugin/skills/brain-project-refresh/SKILL.md). Finds the hub by the
-`Vault project slug:` line in `_Context.md` and a `type: project` note with that slug. Checks the
+`Vault project slug:` line in `_Context.md` (accepted only when it matches `^[a-z0-9-]+$`) and a `type: project` note with that slug. Checks the
 hub against the README, the docs map, `CURRENT-STATE.md`, the decision records and the last 30
 commits (claims the repository contradicts, repository paths that no longer exist) and against the
 vault (active or superseded notes of the slug it does not link, links to notes that do not exist, a
