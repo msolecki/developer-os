@@ -12,9 +12,9 @@ The `brain-setup` skill does steps 1, 3 and 4 for you. By hand:
    `.gitignore` lacks; do not overwrite it. They keep Obsidian's UI state (open tabs, graph view,
    trash) out of commits.
 2. In Obsidian, Settings, Core plugins: enable **Bases** and **Templates**. Set the Templates folder to `templates`.
-3. Add one line to `~/.claude/CLAUDE.md`:
+3. Add one line to `~/.claude/CLAUDE.md` (or `$CLAUDE_CONFIG_DIR/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is set):
    `Brain vault: <absolute path to this vault>`
-4. Let Claude Code reach the vault: add its path to `permissions.additionalDirectories` in `~/.claude/settings.json`.
+4. Let Claude Code reach the vault: add its path to `permissions.additionalDirectories` in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`).
 5. Open `_views/Inbox.base` to review what agents captured. The full workflow is in
    [docs/workflow.md](https://github.com/msolecki/developer-os/blob/main/docs/workflow.md).
 6. When you no longer need the example notes, delete them, or archive each one: set `status: archived`

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="SECURITY.md@03bc8358e7c4">
+<meta name="dos-source" content="SECURITY.md@d073cd9982c2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -81,6 +81,8 @@ update (<code>git diff v&lt;installed&gt;..main</code> in a clone); auto-update 
 you turn it on.</li>
 <li>The skills treat vault notes, pull request comments, diffs and fetched web pages as data, never as
 instructions.</li>
+<li>The brain skills read the vault path from your user-level <code>CLAUDE.md</code> only, never from a project's
+<code>CLAUDE.md</code> or <code>AGENTS.md</code>, so a cloned repository cannot point them at a directory of its choosing.</li>
 <li>What the agent reads from the vault goes to your model provider as session context, like any other
 file. An agent with web access could also send it elsewhere; the plugin cannot prevent that.</li>
 </ul>

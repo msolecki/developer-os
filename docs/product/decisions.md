@@ -66,6 +66,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `~/.codex/AGENTS.md`, ask once if it is missing, and never search the disk.
 - **Why:** works identically in Claude Code and Codex with no plugin configuration mechanism.
 - **Amended 2026-10-24:** the lookup no longer reads `~/.codex/AGENTS.md` (D21).
+- **Amended 2026-11-08:** skills take the vault path from the user or the calling skill, otherwise
+  from the user-level `CLAUDE.md` only, as D22 does for the notices hook: a cloned repository must not
+  point brain-search or brain-capture at a directory of its choosing. No project-file lookup, no
+  mismatch warning. A path holding a quote, `$`, a backtick, `\` or a newline is rejected, and the
+  shell templates set it in single quotes.
 - **Open:** replacing the line with the plugin's `userConfig` is under consideration (a local,
   git-ignored proposal, not in the repository).
 

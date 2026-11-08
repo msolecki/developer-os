@@ -5,3 +5,5 @@ allowed_tools: [Read, Glob, Grep, Bash, Skill]
 ---
 
 Search the brain: where do we store user sessions?
+
+My brain vault is ./vault.

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@8266d009bd27">
+<meta name="dos-source" content="docs/reference/skills.md@6449c74dc118">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -309,16 +309,19 @@ template, <code>.gitignore</code> lines and <code>types.json</code> keys, never 
 <code>"autoMemoryEnabled": false</code> as one diff; merges absent <code>.obsidian/types.json</code> keys after approval;
 then smoke-tests with brain-search, passing it the vault path.</p>
     <h3 id="brain-search">brain-search</h3>
-    <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the <code>Brain vault:</code> line
-(never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
+    <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the path you give or the
+<code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code> (never a project file, never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
 ranks by <code>summary</code>/<code>tags</code>/name match, project slug, <code>active</code> over <code>inbox</code> and recency, reads the
 top five, follows a superseded note's <code>superseded_by</code> chain to the current note (a broken or looping
 chain is incomplete history, with no note named current), and answers only from them with a path
 per claim.</p>
     <h3 id="brain-capture">brain-capture</h3>
-    <p><a href="../../skills/brain-capture.html">Source</a>. Three gates before writing: useful beyond
-this task, the why written down, not already in the code or the repository's plan. Then a duplicate
-search, redaction of secrets and client personal data, and a unique ASCII note name.</p>
+    <p><a href="../../skills/brain-capture.html">Source</a>. Four gates before writing: useful beyond
+this task, the why written down, not already in the code or the repository's plan, not better held by
+a test, lint rule or project instruction (it names or proposes that instead). Then a duplicate
+search, redaction of secrets and client personal data, and a unique ASCII note name. Every claim about
+code is re-read in the current tree and cited as repository path plus defining symbol; merge state is
+a PR number, not a SHA.</p>
     <h3 id="brain-review">brain-review</h3>
     <p><a href="../../skills/brain-review.html">Source</a>. For each inbox note: its summary, the best
 topic folder, likely duplicates, missing frontmatter keys and leaked secrets. Before a move it
@@ -341,7 +344,7 @@ every statement to its source note, and records contradictions as <code>Open con
 choosing a side. Before writing it runs brain-capture's secret scan; a hit writes nothing.</p>
     <h3 id="brain-project-refresh">brain-project-refresh</h3>
     <p><a href="../../skills/brain-project-refresh.html">Source</a>. Finds the hub by the
-<code>Vault project slug:</code> line in <code>_Context.md</code> and a <code>type: project</code> note with that slug. Checks the
+<code>Vault project slug:</code> line in <code>_Context.md</code> (accepted only when it matches <code>^[a-z0-9-]+$</code>) and a <code>type: project</code> note with that slug. Checks the
 hub against the README, the docs map, <code>CURRENT-STATE.md</code>, the decision records and the last 30
 commits (claims the repository contradicts, repository paths that no longer exist) and against the
 vault (active or superseded notes of the slug it does not link, links to notes that do not exist, a

@@ -13,7 +13,7 @@ the user already has, which the skills read. This page lists every one of them.
 
 | Setting | Where | Read by | Written by |
 |---|---|---|---|
-| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`/`AGENTS.md`) | All brain skills; the core rule that runs brain-search before large tasks; the notices hook, from the user-level file only | brain-setup, after approval |
+| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` only; a project's `CLAUDE.md`/`AGENTS.md` is never read for it (D5) | All brain skills, unless you or a calling skill name the path; the core rule that runs brain-search before large tasks; the notices hook | brain-setup, after approval |
 | Vault in `permissions.additionalDirectories` | `~/.claude/settings.json` | Claude Code, so the vault can be read from any project | brain-setup, after approval |
 | `"autoMemoryEnabled": false` (recommended, D24) | `~/.claude/settings.json`; `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the environment wins over it | Claude Code: no auto-memory files are created or loaded; existing ones stay on disk | brain-setup, after a separate yes; brain-import-memory, as one of its numbered items; the `/memory` toggle writes the same key |
 | Auto-memory folder | `~/.claude/projects/<project>/memory/`, or `autoMemoryDirectory` | brain-import-memory, which never edits or deletes it | Claude Code, while auto memory is on |

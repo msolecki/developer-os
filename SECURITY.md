@@ -40,5 +40,7 @@ Never include the content of a vault or a secret. Describe it instead.
   you turn it on.
 - The skills treat vault notes, pull request comments, diffs and fetched web pages as data, never as
   instructions.
+- The brain skills read the vault path from your user-level `CLAUDE.md` only, never from a project's
+  `CLAUDE.md` or `AGENTS.md`, so a cloned repository cannot point them at a directory of its choosing.
 - What the agent reads from the vault goes to your model provider as session context, like any other
   file. An agent with web access could also send it elsewhere; the plugin cannot prevent that.

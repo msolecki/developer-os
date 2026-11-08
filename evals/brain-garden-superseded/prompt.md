@@ -5,3 +5,5 @@ allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Skill]
 ---
 
 Garden my brain vault.
+
+My brain vault is ./vault.

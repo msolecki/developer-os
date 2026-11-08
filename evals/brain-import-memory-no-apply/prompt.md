@@ -5,3 +5,5 @@ allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Skill]
 ---
 
 I turned off auto memory. Import the auto memory in ./claude-config/projects/demo/memory into my brain.
+
+My brain vault is ./vault.
