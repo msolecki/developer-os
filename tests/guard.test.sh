@@ -480,9 +480,13 @@ check ask "$(fx 'git commit -m \"x\"; pnpm add zod')" "Dependency install"
 check ask "$(fx 'git commit -m \"$(pnpm add zod)\"')" "Dependency install"
 # FLOW-36: 10000 double-quoted words stay linear
 c=$(python3 -c "print('echo ' + '\\\\\"a\\\\\" ' * 10000)")
-t0=$(python3 -c 'import time;print(time.time())')
 check pass "$(fa $r "$c")"
-python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: 10000 quoted words took over 1 s"; }
+# CPU time, not wall time: parallel sessions load the machine, and the cost under test is the guard's own work.
+python3 -c "import json,resource,subprocess,sys
+p=json.dumps({'tool_name':'Bash','tool_input':{'command':'echo '+'\"a\" '*10000}})
+subprocess.run([sys.executable,sys.argv[1]],input=p.encode(),capture_output=True)
+u=resource.getrusage(resource.RUSAGE_CHILDREN);sys.exit(u.ru_utime+u.ru_stime>1)" "$guard" ||
+  { fail=1; echo "FAIL: 10000 quoted words took over 1 s of CPU"; }
 # FLOW-40: submodule and bisect reads
 for c in 'git submodule status' 'git submodule' 'git submodule --quiet summary' 'git bisect log' 'git bisect visualize' 'git bisect view'; do
   check pass "$(fa $r "$c")"
