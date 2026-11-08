@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/functional-spec.md@1065a838674e">
+<meta name="dos-source" content="docs/product/functional-spec.md@03fac0b352a5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -132,7 +132,7 @@
 <h3 id="26-conventions-skills">2.6 Conventions skills</h3>
 <p>Loaded by the model when their description matches the file or task; never write anything themselves. <a href="../../skills/comments-conventions.html">comments</a>, <a href="../../skills/defensive-coding-conventions.html">defensive-coding</a>, <a href="../../skills/error-handling-conventions.html">error-handling</a>, <a href="../../skills/monitoring-conventions.html">monitoring</a>, <a href="../../skills/nextjs-conventions.html">nextjs</a>, <a href="../../skills/testing-conventions.html">testing</a>, <a href="../../skills/typescript-conventions.html">typescript</a>.</p>
 <h2 id="3-agents">3. Agents</h2>
-<p>Dispatched by skills or by the main agent. All treat code, diffs, PR text and fetched pages as data.</p>
+<p>Dispatched by skills or by the main agent. All treat code, diffs, PR text and fetched pages as data. code-reviewer, qa-expert and infra-reviewer preload their conventions skill through <code>skills:</code> in their frontmatter.</p>
 <div class="table-wrap">
 <table>
 <thead><tr><th scope="col">Agent</th><th scope="col">Model</th><th scope="col">Tools</th><th scope="col">Edits files</th><th scope="col">Used by</th></tr></thead>
@@ -150,7 +150,7 @@
 </tbody>
 </table>
 </div>
-<p>Every agent starts its report with a final status: <code>DONE</code> (with evidence), <code>REVIEW</code>, <code>BLOCKED</code> (with <code>Unblock owner: user | orchestrator | &lt;item ID&gt;</code>) or <code>CONTINUING</code>; it retries transient failures at most twice and blocks at once on what only a person can fix. Reviewer agents use the same P0–P3 scale and verdicts as code-review; code-reviewer reads both sides of every changed contract and lists Evidence checked under an <code>APPROVE</code> without P0–P2. qa-expert ends with <code>VERIFIED</code> or <code>UNVERIFIED: &lt;what&gt;</code>; performance-engineer labels each finding MEASURED or INFERRED; security-auditor drops any finding without an attack path; database-reviewer ends with the deploy order
+<p>Every agent starts its report with a final status: <code>DONE</code> (with evidence), <code>REVIEW</code>, <code>BLOCKED</code> (with <code>Unblock owner: user | orchestrator | &lt;item ID&gt;</code>) or <code>CONTINUING</code>; it retries transient failures at most twice and blocks at once on what only a person can fix. Reviewer agents use the same P0–P3 scale and verdicts as code-review; code-reviewer reads both sides of every changed contract, names the trigger of every P0 and P1, and lists Evidence checked under an <code>APPROVE</code> without P0–P2. qa-expert ends with <code>VERIFIED</code> or <code>UNVERIFIED: &lt;what&gt;</code>; performance-engineer labels each finding MEASURED or INFERRED; security-auditor drops any finding without an attack path or on its not-a-finding list; verifier ends a refutation with a <code>REFUTE_REASON</code>; database-reviewer ends with the deploy order
 the change needs; infra-reviewer ends with what to check in the plan before applying; dependency-upgrader cites a source for every breaking change; docs-writer cites the
 code behind every claim it writes.</p>
 <h2 id="4-output-styles">4. Output styles</h2>
@@ -162,7 +162,7 @@ code behind every claim it writes.</p>
 <tr><td><a href="../../output-styles.html#architect">architect</a></td><td>ADR, Mermaid diagram, trade-off table and top-3 risk register before code, scaled to the request; waits for approval</td></tr>
 <tr><td><a href="../../output-styles.html#debug">debug</a></td><td>Hypothesis before edits, failing regression test before the fix, one change at a time</td></tr>
 <tr><td><a href="../../output-styles.html#direct-objective">direct-objective</a></td><td>Pushes back with file references; leads with code for implementation requests</td></tr>
-<tr><td><a href="../../output-styles.html#tdd-enforcer">tdd-enforcer</a></td><td>One failing test, show the red, wait for approval, minimum code, the tests of the changed area green (the full suite stays at the push/PR gate)</td></tr>
+<tr><td><a href="../../output-styles.html#tdd-enforcer">tdd-enforcer</a></td><td>One failing test, show the red, wait for approval, minimum code, the tests of the changed area with the pass count in one line (the full suite stays at the push/PR gate)</td></tr>
 </tbody>
 </table>
 </div>

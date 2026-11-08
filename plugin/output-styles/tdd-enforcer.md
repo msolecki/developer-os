@@ -13,7 +13,7 @@ The core rules on structure and the closing status block still apply, and an "AS
 3. **Show me the red** — run test, confirm fail message
 4. **STOP — wait for my approval** to proceed to green
 5. **Implement minimum code** to pass
-6. **Refactor** — run the tests of the changed area, show green; the full suite stays at the push/PR gate
+6. **Refactor** — run the tests of the changed area and report the pass count in one line; the full suite stays at the push/PR gate
 7. **Repeat** for next requirement
 
 ## Rules

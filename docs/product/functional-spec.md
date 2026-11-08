@@ -118,7 +118,7 @@ themselves. [comments](../../plugin/skills/comments-conventions/SKILL.md),
 
 ## 3. Agents
 
-Dispatched by skills or by the main agent. All treat code, diffs, PR text and fetched pages as data.
+Dispatched by skills or by the main agent. All treat code, diffs, PR text and fetched pages as data. code-reviewer, qa-expert and infra-reviewer preload their conventions skill through `skills:` in their frontmatter.
 
 | Agent | Model | Tools | Edits files | Used by |
 |---|---|---|---|---|
@@ -136,10 +136,10 @@ Dispatched by skills or by the main agent. All treat code, diffs, PR text and fe
 Every agent starts its report with a final status: `DONE` (with evidence), `REVIEW`, `BLOCKED` (with
 `Unblock owner: user | orchestrator | <item ID>`) or `CONTINUING`; it retries transient failures at
 most twice and blocks at once on what only a person can fix. Reviewer agents use the same P0–P3
-scale and verdicts as code-review; code-reviewer reads both sides of every changed contract and
+scale and verdicts as code-review; code-reviewer reads both sides of every changed contract, names the trigger of every P0 and P1, and
 lists Evidence checked under an `APPROVE` without P0–P2. qa-expert ends with
 `VERIFIED` or `UNVERIFIED: <what>`; performance-engineer labels each finding MEASURED or INFERRED;
-security-auditor drops any finding without an attack path; database-reviewer ends with the deploy order
+security-auditor drops any finding without an attack path or on its not-a-finding list; verifier ends a refutation with a `REFUTE_REASON`; database-reviewer ends with the deploy order
 the change needs; infra-reviewer ends with what to check in the plan before applying; dependency-upgrader cites a source for every breaking change; docs-writer cites the
 code behind every claim it writes.
 
@@ -153,7 +153,7 @@ required. All four set `keep-coding-instructions: true`, so Claude Code's coding
 | [architect](../../plugin/output-styles/architect.md) | ADR, Mermaid diagram, trade-off table and top-3 risk register before code, scaled to the request; waits for approval |
 | [debug](../../plugin/output-styles/debug.md) | Hypothesis before edits, failing regression test before the fix, one change at a time |
 | [direct-objective](../../plugin/output-styles/direct-objective.md) | Pushes back with file references; leads with code for implementation requests |
-| [tdd-enforcer](../../plugin/output-styles/tdd-enforcer.md) | One failing test, show the red, wait for approval, minimum code, the tests of the changed area green (the full suite stays at the push/PR gate) |
+| [tdd-enforcer](../../plugin/output-styles/tdd-enforcer.md) | One failing test, show the red, wait for approval, minimum code, the tests of the changed area with the pass count in one line (the full suite stays at the push/PR gate) |
 
 The architect and tdd-enforcer stops yield to an autonomous loop the user started through a skill
 such as implement-backlog.
