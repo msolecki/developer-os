@@ -18,15 +18,15 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os agents and output styles">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/agents/code-reviewer.md@4156c0221f5c">
-<meta name="dos-source" content="plugin/agents/performance-engineer.md@6496caa85405">
-<meta name="dos-source" content="plugin/agents/qa-expert.md@085c8d570dd1">
-<meta name="dos-source" content="plugin/agents/research-analyst.md@cfc47831a9a8">
+<meta name="dos-source" content="plugin/agents/code-reviewer.md@7263f3de6031">
+<meta name="dos-source" content="plugin/agents/performance-engineer.md@dd129f54420d">
+<meta name="dos-source" content="plugin/agents/qa-expert.md@c67d9add005b">
+<meta name="dos-source" content="plugin/agents/research-analyst.md@89c690b4a0ed">
 <meta name="dos-source" content="plugin/agents/verifier.md@445848f367ef">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@c7d651c79b2a">
-<meta name="dos-source" content="plugin/agents/database-reviewer.md@f5fbf0dc263d">
+<meta name="dos-source" content="plugin/agents/database-reviewer.md@a31093b64b9f">
 <meta name="dos-source" content="plugin/agents/dependency-upgrader.md@e9b15925f839">
-<meta name="dos-source" content="plugin/agents/infra-reviewer.md@8d2fb44a80da">
+<meta name="dos-source" content="plugin/agents/infra-reviewer.md@c081e0ee49a5">
 <meta name="dos-source" content="plugin/agents/docs-writer.md@69397204da06">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,7 +81,7 @@
     <ul>
       <li>The named files plus the direct callers and callees of any signature or contract they change, read before judging, with the project's own instruction files ahead of its own preferences.</li>
       <li>Both sides of every contract the change touches (an API handler and its client, a schema and its type, a route and its links): a mismatch is P1, cited on each side.</li>
-      <li>The defect classes in <a href="skills/defensive-coding-conventions.html">defensive-coding-conventions</a>, and a test changed to match the code when the test described the correct contract.</li>
+      <li>The defect classes in <a href="skills/defensive-coding-conventions.html">developer-os:defensive-coding-conventions</a>, and a test changed to match the code when the test described the correct contract.</li>
       <li>A backlog item's <code>Done when</code> deleted or weakened without an appended <code>Amended YYYY-MM-DD: …</code> line is P1. A doc the change makes false is a P2 docs finding. A style preference is never above P3.</li>
       <li>A domain formula, a field type or a value format is rated against the project's canonical definition (a shared helper, the schema, a business doc); code that matches it is not a defect. Without one, say so in the finding.</li>
       <li>It rates the code, not the framing: a prompt that says who wrote the change, or that it looks good, changes no severity.</li>
@@ -216,7 +216,7 @@
       <li>Database N+1 and missing indexes, serial awaits that could be <code>Promise.all</code>, blocking I/O on a request path, unbounded result sets, per-item work that could be hoisted, bundle regressions from barrel imports or eager third-party scripts, and UI re-render cascades.</li>
     </ul>
     <h3 id="performance-engineer-report">performance-engineer report</h3>
-    <p>Findings ordered by impact on the hot path, each with <code>file:line</code>, severity, the mechanism, the expected magnitude, the fix and how to measure it. Every finding is labelled MEASURED (it ran something and has numbers) or INFERRED (it read the code), never inferred presented as measured. The report ends with the single highest-impact change and its expected effect.</p>
+    <p>Findings ordered by impact on the hot path, each with <code>file:line</code>, severity, the mechanism, the expected magnitude, the fix and how to measure it. Every finding is labelled MEASURED (a number or output produced by running, or recorded from a run) or INFERRED (it read the code), never inferred presented as measured. The report ends with the single highest-impact change and its expected effect.</p>
     <div class="callout never">
       <h3 id="what-performance-engineer-never-does">What performance-engineer never does</h3>
       <ul>
@@ -239,7 +239,7 @@
     <ul>
       <li>Only the named files. It runs the project's real test command for the tests that cover them (the full suite only when asked) and shows failures, never a passing log.</li>
       <li>It loads <a href="skills/testing-conventions.html">testing-conventions</a> and applies it to every test it writes or assesses: pin the contract, fixed UTC instants, partial mocks.</li>
-      <li>When it writes tests: one test per contract, and for a regression test the failing run before the passing one. A characterization test that passes at once is named as such. A test that passes only after it changed the test is called out, with why the new assertion is correct.</li>
+      <li>When it writes tests: one test per contract, and for a regression test the failing run before the passing one; when the fix is already in the tree, it says the test was only seen green, names the fixing commit and leaves the red run to the caller. A characterization test that passes at once is named as such. A test that passes only after it changed the test is called out, with why the new assertion is correct.</li>
     </ul>
     <h3 id="qa-expert-report">qa-expert report</h3>
     <p>Coverage gaps ranked by severity (the defect the gap would let through), each with <code>file:line</code>, the untested branch or contract, the risk and the test that would pin it. It ends with <code>VERIFIED</code> or <code>UNVERIFIED: &lt;what is untested&gt;</code>.</p>
@@ -268,7 +268,7 @@
       <li>Where sources disagree, both, with dates.</li>
     </ul>
     <h3 id="research-analyst-report">research-analyst report</h3>
-    <p>The answer in one or two sentences, then the evidence. Every factual claim cites a URL or <code>file:line</code>; an uncited claim is labelled <code>ASSUMPTION:</code>. It ends with what it could not establish; "not found" is a valid result.</p>
+    <p>The answer in one or two sentences, then the evidence. Every factual claim cites a URL or <code>file:line</code>; an uncited claim is labelled <code>ASSUMPTION:</code>. It ends with what it could not establish; "not found" is a valid result. It retries a network error, timeout or rate limit at most twice; a paywall, a login or an unclear question is <code>BLOCKED</code> at once.</p>
     <div class="callout never">
       <h3 id="what-research-analyst-never-does">What research-analyst never does</h3>
       <ul>

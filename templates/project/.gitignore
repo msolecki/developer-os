@@ -2,3 +2,4 @@
 docs/plans/
 # Keep the backlog tracked even when a global gitignore lists TODO.md.
 !TODO.md
+!TODO-done.md
