@@ -91,9 +91,9 @@ sequenceDiagram
   `systemMessage`, each throttled by its own marker.
 - `guard.py` extracts `tool_input.command` with a regular expression, unescapes JSON, joins line continuations,
   drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
-  purpose, so a mention inside a commit message also asks. Any parse failure prints nothing. For Edit and Write it reads
-  `tool_input.file_path` instead and asks when the path is a secret file or part of the user-level Claude config
-  (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops. A Bash call from one of the
+  purpose, so a mention such as `echo "pnpm add zod"` also asks; a quoted commit message (`-m "..."`) is read as one word. Any parse failure prints nothing. For Edit and Write it reads
+  `tool_input.file_path` (and an Edit's `old_string`/`new_string`) instead and asks when the path is a secret file or part of the user-level Claude config
+  (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops, or when an Edit adds a skip or focus marker to a test file. A Bash call from one of the
   read-only review agents, named by `agent_type`, also asks when it writes. A `git commit` that hits no category gets an
   `additionalContext` reminder to run the fast check, with no decision.
 - `capture-nudge.py` reads `session_id` and `transcript_path` from the input, counts the

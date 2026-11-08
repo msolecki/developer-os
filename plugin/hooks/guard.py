@@ -9,7 +9,9 @@ command that destroys uncommitted or untracked work: `rm` with both a recursive 
 `git reset --hard`, `git clean -f` (not a dry run), `git checkout -f`, `git switch --discard-changes`,
 `git worktree remove --force`, `git rm -f`, `git stash drop`/`clear`, `find -delete`, and `git checkout` or `git restore` of `.`, `:/` or `*` (an unstage-only restore passes),
 each in command position (starts), so a mention such as `grep -rn "rm -rf"` passes. Branch
-deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
+deletion (`git push --delete`, `git push origin :branch`) and `git stash push -f` pass. It also asks before an
+infrastructure, data or deploy destroy from the closed INFRA list (`terraform destroy`, `prisma migrate reset`,
+`kubectl delete`, `vercel --prod`, ...), in command position or after a runner such as `npx`. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
 An Edit or Write asks when its `file_path` is a secret or the agent's own user-level config: a `.env`,
@@ -48,6 +50,7 @@ REASONS = {
     "protected": "This file holds secrets or your user-level agent config; edit it only on your request.",
     "readonly": "This agent is read-only, and this command writes files or changes git state.",
     "noverify": "This skips the repository's git hooks (--no-verify, commit -n, HUSKY=0, LEFTHOOK=0, SKIP=, core.hooksPath).",
+    "infra": "This destroys infrastructure or data, or deploys to production; git cannot bring it back.",
     "tests": "This skips, focuses or removes a test; do not delete or skip tests to make a build pass.",
 }
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
@@ -223,6 +226,36 @@ def installs(words):
     return False
 
 
+# (command, subcommand words in a row among its non-dash words, flags of which one must be present or None).
+INFRA = [(t, s, f) for t in ("terraform", "tofu") for s, f in (
+    (("destroy",), None), (("apply",), {"-auto-approve", "--auto-approve"}), (("state", "rm"), None))] + [
+    ("prisma", ("migrate", "reset"), None), ("supabase", ("db", "reset"), None), ("drizzle-kit", ("push",), {"--force"}),
+    ("artisan", ("migrate:fresh",), None), ("artisan", ("migrate:reset",), None), ("artisan", ("db:wipe",), None),
+    ("rails", ("db:drop",), None), ("rails", ("db:reset",), None), ("dropdb", (), None),
+    ("docker", ("compose", "down"), {"-v", "--volumes"}), ("docker-compose", ("down",), {"-v", "--volumes"}),
+    ("kubectl", ("delete",), None), ("helm", ("uninstall",), None), ("vercel", (), {"--prod"})]
+# Words that run the next word as the command (`npx prisma`, `pnpm exec prisma`, `php artisan`, `bundle exec rails`).
+RUNNERS = {"npx", "bunx", "pnpx", "pnpm", "yarn", "bun", "php", "bundle", "exec", "dlx"}
+
+
+def infra(words):
+    """A command from INFRA in command position, also after RUNNERS."""
+    for i in starts(words):
+        while i < len(words) and words[i].rsplit("/", 1)[-1] in RUNNERS:
+            i += 1
+            while i < len(words) and words[i].startswith("-"):
+                i += 1
+        if i >= len(words):
+            continue
+        name, rest = words[i].rsplit("/", 1)[-1], words[i + 1:]
+        ops, flags = [x for x in rest if not x.startswith("-")], {x.split("=")[0] for x in rest if x.startswith("-")}
+        for cmd, sub, need in INFRA:
+            n = len(sub)
+            if name == cmd and any(tuple(ops[k:k + n]) == sub for k in range(len(ops) - n + 1)) and (need is None or need & flags):
+                return True
+    return False
+
+
 TEST_PATH = re.compile(r"(^|/)(tests?|__tests__)(/|$)|\.(test|spec)\.[^/]+$|(^|/)test_[^/]*\.py$|_test\.go$")
 # A marker that skips or focuses a test (`it.skip(`, `.only(`, `@pytest.mark.skip`); `model.fit(` is none.
 SKIP_MARK = re.compile(r"\b(?:it|test|describe)\.skip\(|(?<![\w.])(?:xit|xdescribe|fit|fdescribe)\(|\.only\(|"
@@ -257,6 +290,8 @@ def scan(line):
             return "install"
         if drops_tests(words):
             return "tests"
+        if infra(words):
+            return "infra"
         pos = starts(words)
         for i, x in enumerate(words):
             if rm and x == "--":

@@ -146,6 +146,12 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   (`it.skip(`, `.only(`, `xit(`, `@pytest.mark.skip`, `t.Skip(` and the like), and `rm`/`git rm` of a
   test file or `mv` of one to `.bak`, `.disabled` or `.skip`; core.md's "do not delete or skip tests"
   was text only (SEC-09).
+- **Amended 2026-11-08:** an infra category, a closed list in command position (also after `npx`, `pnpm
+  exec`, `php`, `bundle exec` and similar runners): `terraform`/`tofu destroy`, `apply -auto-approve`,
+  `state rm`, `prisma migrate reset`, `supabase db reset`, `drizzle-kit push --force`, `artisan
+  migrate:fresh`/`migrate:reset`/`db:wipe`, `rails db:drop`/`db:reset`, `dropdb`, `docker compose down
+  -v`, `kubectl delete`, `helm uninstall`, `vercel --prod`. Users without their own deny list had no
+  check on these in auto mode; users of destructive_command_guard already have one (SEC-08).
 
 ## D7. One wrap-up nudge per long session
 

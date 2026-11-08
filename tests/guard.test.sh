@@ -532,6 +532,20 @@ check ask "$(fx 'mv a_test.go a_test.go.disabled')" "test"
 check pass "$(fx 'mv src/a.test.ts src/b.test.ts')"
 check pass "$(fx 'rm src/a.ts')"
 check pass "$(fx 'grep -rn \"rm a.test.ts\" docs')"
+# SEC-08: infrastructure, data and deploy destroys
+for c in 'terraform destroy' 'tofu destroy -auto-approve' 'terraform apply -auto-approve' 'terraform -chdir=x apply --auto-approve' \
+  'terraform state rm aws_s3_bucket.x' 'npx prisma migrate reset' 'prisma migrate reset --force' 'supabase db reset' \
+  'npx supabase db reset' 'npx drizzle-kit push --force' 'php artisan migrate:fresh' 'php artisan migrate:reset' \
+  'php artisan db:wipe' 'bin/rails db:drop' 'bundle exec rails db:reset' 'dropdb app' 'docker compose down -v' \
+  'docker-compose down --volumes' 'kubectl delete pod x' 'kubectl -n prod delete deploy x' 'helm uninstall x' 'vercel --prod' \
+  'vercel deploy --prod' 'pnpm exec prisma migrate reset'; do
+  check ask "$(fx "$c")" "infrastructure"
+done
+for c in 'terraform plan' 'terraform apply' 'prisma migrate dev' 'npx drizzle-kit push' 'php artisan migrate' 'docker compose down' \
+  'kubectl get pods' 'vercel' 'vercel deploy' 'echo terraform destroy' 'grep -rn \"kubectl delete\" docs'; do
+  check pass "$(fx "$c")"
+done
+
 
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

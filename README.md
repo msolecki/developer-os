@@ -101,7 +101,7 @@ also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `
 `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form, and a command
 that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag (`rm -rf`),
 `git reset --hard`, `git clean -f`, `git checkout`/`git restore` of `.`, `:/` or `*`, `git checkout -f`,
-`git switch --discard-changes`, `git worktree remove --force`, `git stash drop`/`clear` or `find … -delete` (`git restore --staged .` and `git clean -n` pass). An Edit or Write asks when its file is a `.env`, `.envrc` or `.env.*` (not
+`git switch --discard-changes`, `git worktree remove --force`, `git stash drop`/`clear` or `find … -delete` (`git restore --staged .` and `git clean -n` pass), and an infrastructure, data or deploy destroy (`terraform destroy`, `prisma migrate reset`, `kubectl delete`, `vercel --prod` and the like). An Edit or Write asks when its file is a `.env`, `.envrc` or `.env.*` (not
 `.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, or `~/.claude/` `hooks`,
 `rules`, `agents`, `skills` or `commands`, or is `~/.claude.json`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` or `settings.local.json` (also under `$CLAUDE_CONFIG_DIR`). An Edit that adds a skip or focus marker (`it.skip(`, `.only(`, `@pytest.mark.skip`) to a test file asks, and so does `rm`, `git rm` or `mv … .bak` of one. Inside the six read-only agents (the five reviewers and dependency-upgrader), a Bash
 call that writes outside the temp directories (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, `prettier --write`, `eslint --fix`, `gh pr checkout`, a git command that changes the
