@@ -89,7 +89,7 @@
       <figure class="sysmap" aria-labelledby="sysmap-title">
         <figcaption class="sysmap-head"><b id="sysmap-title">How a session runs with developer-os</b><span>each step links to its reference</span></figcaption>
         <ol class="lanes">
-          <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>under 8 KB; a state card after compaction, resume or fork; version and upkeep notices on a new session</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
+          <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>capped at 8900 bytes; a state card after compaction, resume or fork; version and upkeep notices on a new session</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
           <li class="lane"><span class="when">before a task</span><span class="what">Search the vault, read the plan<small>answers cite a note path for every claim</small></span><a class="badge info" href="skills/brain-search.html">skill</a></li>
           <li class="lane"><span class="when">during work</span><span class="what">Specs, reviews, audits, PR cycles<small>evidence on every finding; a fresh agent reviews</small></span><a class="badge info" href="skills/index.html">skills</a></li>
           <li class="lane is-ask"><span class="when">risky command</span><span class="what">Installs, force pushes, hook bypasses, <code>rm -rf</code><small>the guard asks; it never blocks on its own</small></span><span class="badge ask">asks you</span></li>
@@ -120,7 +120,7 @@
           <h3>Habits of a careful engineer</h3>
           <p>Core rules in every session, workflow skills that stop at defined points, conventions that load only for matching files, and specialist agents for independent passes.</p>
           <ul>
-            <li><span>Core rules</span><span>&lt; 8 KB per session</span></li>
+            <li><span>Core rules</span><span>&le; 8900 bytes per session</span></li>
             <li><span>Skills, all groups</span><span>32</span></li>
             <li><span>Agents, output styles</span><span>10, 4</span></li>
           </ul>
@@ -164,7 +164,7 @@ Worktrees:
 /work/shop-sec-03   9b1e07d [fix/sec-03]</code></pre></div>
         <div>
           <h3>Context that survives a reset</h3>
-          <p>Every session prints <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">the core rules</a>, kept under 8 KB. After a compaction, resume or fork inside a git repository it adds this card, capped at 1 KB, so the branch, the plan and the task state survive.</p>
+          <p>Every session prints <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">the core rules</a>, capped at 8900 bytes. After a compaction, resume or fork inside a git repository it adds this card, capped at 1 KB, so the branch, the plan and the task state survive.</p>
           <p class="by"><span class="badge info">SessionStart hook</span><a href="docs/reference/hooks.html">Hooks reference</a></p>
         </div>
       </div>
@@ -266,7 +266,7 @@ Which items should I apply?</code></pre></div>
     <div class="wrap two">
       <div>
         <h2>Engineering rules in every session.</h2>
-        <p class="section-copy">An agent commits without the right checks, claims "fixed" without evidence and reviews its own code. The core rules load at session start and stay under 8 KB, so they do not crowd out your own context.</p>
+        <p class="section-copy">An agent commits without the right checks, claims "fixed" without evidence and reviews its own code. The core rules load at session start and are capped at 8900 bytes, so they do not crowd out your own context.</p>
         <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">Read core.md</a>. Disagree with a rule? Override it in your own <code>~/.claude/CLAUDE.md</code>, which loads alongside it.</p>
       </div>
       <ul class="checklist">
@@ -358,11 +358,15 @@ Which items should I apply?</code></pre></div>
       <p class="section-copy">Skills dispatch these agents, and you can call them yourself. Every report starts with one final status, DONE, REVIEW, BLOCKED or CONTINUING, so the orchestrating skill knows what to do next.</p>
       <ul class="doc-grid">
         <li><a href="agents.html#code-reviewer"><b>code-reviewer</b><span>Correctness, security, data safety and maintainability, rated P0–P3 with a merge verdict.</span></a></li>
+        <li><a href="agents.html#database-reviewer"><b>database-reviewer</b><span>Migrations, queries and data access: locks, missing indexes, transaction gaps, data loss.</span></a></li>
+        <li><a href="agents.html#dependency-upgrader"><b>dependency-upgrader</b><span>An upgrade plan for one dependency: breaking changes, affected usages, ordered steps.</span></a></li>
+        <li><a href="agents.html#docs-writer"><b>docs-writer</b><span>The docs a change made false or missing, every claim checked against the code.</span></a></li>
+        <li><a href="agents.html#infra-reviewer"><b>infra-reviewer</b><span>Infrastructure and CI: over-broad access, public exposure, secrets, unpinned supply chain.</span></a></li>
         <li><a href="agents.html#security-auditor"><b>security-auditor</b><span>Exploitable defects: auth, injection, secrets, SSRF, insecure defaults.</span></a></li>
         <li><a href="agents.html#performance-engineer"><b>performance-engineer</b><span>Measured defects: N+1 queries, blocking I/O, serial awaits, bundle bloat.</span></a></li>
         <li><a href="agents.html#qa-expert"><b>qa-expert</b><span>Test quality and coverage gaps, and the missing tests when asked.</span></a></li>
         <li><a href="agents.html#research-analyst"><b>research-analyst</b><span>Sourced answers on libraries, API contracts, vendor limits and migrations.</span></a></li>
-        <li><a href="agents.html#verifier"><b>verifier</b><span>Read-only check of one P0, P1 or P2 correctness finding: CONFIRMED or REFUTED with evidence.</span></a></li>
+        <li><a href="agents.html#verifier"><b>verifier</b><span>Read-only check of one P0, P1 or P2 correctness finding: CONFIRMED, REFUTED or UNDECIDED with evidence.</span></a></li>
         <li><a href="output-styles.html"><b>Output styles</b><span>architect, debug, direct-objective and tdd-enforcer, selected with <code>/output-style</code>.</span></a></li>
       </ul>
     </div>
@@ -492,7 +496,7 @@ Which items should I apply?</code></pre></div>
         </details>
         <details>
           <summary>Is it stable?</summary>
-          <p>It is at release 0.2.6: installs follow <code>main</code>, which moves only on a tagged release. The <a href="docs/changelog.html">changelog</a> lists every change.</p>
+          <p>It is at release 0.2.8: installs follow <code>main</code>, which moves only on a tagged release. The <a href="docs/changelog.html">changelog</a> lists every change.</p>
         </details>
         <details>
           <summary>Which language does it use?</summary>
