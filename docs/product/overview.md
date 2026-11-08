@@ -25,7 +25,7 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    reads and writes it with its own file tools. The user approves everything that becomes knowledge.
 2. **An engineering operating model.** Core rules loaded into every session, workflow skills
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
-   conventions skills, ten agents (nine specialists and a verifier), four output styles and small hooks, among them a guard on Bash, Edit and Write.
+   conventions skills, ten agents (nine specialists and a verifier), four output styles and small hooks, among them a guard on Bash, Edit, Write and MultiEdit.
 
 The plugin is Markdown and JSON plus five Python 3 hook scripts (standard library only). There is no server, database,
 index, binary, background job or network call in the plugin itself.
@@ -70,7 +70,7 @@ In scope for the first release:
 | Conventions skills | 7 (`*-conventions`) | `plugin/skills/` |
 | Agents | 10 | `plugin/agents/` |
 | Output styles | 4 | `plugin/output-styles/` |
-| Hooks | 6 (three on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash, Edit and Write, one on `PostToolUseFailure`) | `plugin/hooks/hooks.json` |
+| Hooks | 6 (three on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash, Edit, Write and MultiEdit, one on `PostToolUseFailure`) | `plugin/hooks/hooks.json` |
 | Core rules | 1 file | `plugin/rules/core.md` |
 | Vault template | 1 | `plugin/vault-template/` |
 | Project template | 1 | `templates/project/` (in the repository, not in the installed plugin) |

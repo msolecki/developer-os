@@ -154,6 +154,13 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   get`/`install`, `composer require`, `bundle add`, `gem install`, each with a package argument, and
   `npx -y`/`--yes`, which runs freshly fetched code; core.md's install rule was text only in Python,
   Rust, Go and PHP repositories (SEC-14).
+- **Amended 2026-11-08:** from the PR #133 review: a quoted-delimiter heredoc (`<<'EOF'`, `<<"EOF"`)
+  that is the whole body of a commit message's `$(…)` is not scanned (SEC-16); `python -m pip install`
+  asks (SEC-17); an option value (`-f`, `-p`, `--project-directory`) no longer hides `docker compose
+  down -v` (SEC-18); in the read-only agents an unambiguous prefix of `--output`/`--output-directory`
+  (`--out=`) asks (SEC-19); vendored `node_modules/`, `vendor/` and `.venv/` paths are not test paths
+  (FLOW-57); the matcher adds MultiEdit, and a Write that adds a skip marker the file on disk lacks
+  asks (SEC-20).
 - **Amended 2026-11-08:** a test category: an Edit of a test file (`*.test.*`, `*.spec.*`, `tests/`,
   `test_*.py`, `*_test.go`) whose `new_string` holds more skip or focus markers than its `old_string`
   (`it.skip(`, `.only(`, `xit(`, `@pytest.mark.skip`, `t.Skip(` and the like), and `rm`/`git rm` of a

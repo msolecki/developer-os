@@ -20,7 +20,7 @@ plugin/                           the installed payload
   hooks/hooks.json                6 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
-  hooks/guard.py                  PreToolUse guard for Bash, Edit and Write
+  hooks/guard.py                  PreToolUse guard for Bash, Edit, Write and MultiEdit
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/<name>/SKILL.md          32 skills
@@ -73,7 +73,7 @@ sequenceDiagram
   SS-->>CC: stdout = state card
   CC->>NO: new session (startup)
   NO-->>CC: nothing or systemMessage (user) + additionalContext (agent)
-  CC->>G: every Bash, Edit and Write call, JSON on stdin
+  CC->>G: every Bash, Edit, Write and MultiEdit call, JSON on stdin
   G-->>CC: nothing (allow normal flow), {"permissionDecision":"ask", reason} or additionalContext (fast-check reminder) on git commit
   CC->>F: a tool call failed, JSON on stdin
   F-->>CC: nothing, or additionalContext "stop retrying" at the third identical failure
@@ -91,9 +91,9 @@ sequenceDiagram
   `systemMessage`, each throttled by its own marker.
 - `guard.py` extracts `tool_input.command` with a regular expression, unescapes JSON, joins line continuations,
   drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
-  purpose, so a mention such as `echo "pnpm add zod"` also asks; a quoted commit message (`-m "..."`) is read as one word. Any parse failure prints nothing. For Edit and Write it reads
-  `tool_input.file_path` (and an Edit's `old_string`/`new_string`) instead and asks when the path is a secret file or part of the user-level Claude config
-  (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops, or when an Edit adds a skip or focus marker to a test file. A Bash call from one of the
+  purpose, so a mention such as `echo "pnpm add zod"` also asks; a quoted commit message (`-m "..."`, or a quoted-delimiter heredoc inside `$(…)`) is read as one word. Any parse failure prints nothing. For Edit, Write and MultiEdit it reads
+  `tool_input.file_path` (and an Edit's `old_string`/`new_string`, a MultiEdit's `edits`, a Write's `content`) instead and asks when the path is a secret file or part of the user-level Claude config
+  (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops, or when an Edit, MultiEdit or Write adds a skip or focus marker to a test file (a Write against the file on disk; vendored `node_modules/`, `vendor/` and `.venv/` paths are not test files). A Bash call from one of the
   read-only review agents, named by `agent_type`, also asks when it writes. A `git commit` that hits no category gets an
   `additionalContext` reminder to run the fast check, with no decision.
 - `capture-nudge.py` reads `session_id` and `transcript_path` from the input, counts the
