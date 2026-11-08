@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@deac85df1d60">
+<meta name="dos-source" content="docs/reference/skills.md@9a7eb0121526">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -120,7 +120,8 @@ standard.</p>
     <ul>
 <li><strong>Missing pieces:</strong> root <code>AGENTS.md</code> (under 100 lines, with <code>## Likely agent mistakes here</code> and
 <code>## Invariants</code>), a one-line <code>CLAUDE.md</code>, <code>_Context.md</code>, <code>DESIGN.md</code> for a UI, the git-ignored
-state file (<code>git check-ignore -q docs/plans/.devos-state.md</code>), frontmatter on every doc,
+state file (<code>git check-ignore -q docs/plans/.devos-state.md</code>) and <code>.worktrees/</code>
+(<code>git check-ignore -q .worktrees/x</code>), frontmatter on every tracked doc (<code>git ls-files docs</code>),
 <code>docs/index.md</code>, <code>docs/CURRENT-STATE.md</code>, <code>docs/pitfalls.md</code>, decision records, runbooks. It
 proposes only pieces that would carry real content now.</li>
 <li><strong>Drift:</strong> commands in <code>AGENTS.md</code>/<code>CLAUDE.md</code>/README that are not in the manifest or <code>Makefile</code>;
@@ -155,13 +156,15 @@ specialists: security (<code>security-auditor</code>), performance (<code>perfor
 (<code>qa-expert</code>, assessment only), correctness (<code>code-reviewer</code>), data (<code>database-reviewer</code>, skipped without a database), infra
 (<code>infra-reviewer</code>, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs <code>file:line</code>, current-code
-evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. The findings
+evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code> (a negated grep paired with <code>test -f</code>, no
+error swallowed into a default); unsupported claims are rejected. The findings
 code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
 (the <code>verifier</code> agent); refuted ones are listed as Disputed, not written, and an undecided one is
 written with an <code>Unverified:</code> line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (<code>gh pr list</code>,
 skipped when <code>gh</code> is unavailable) is dropped and named in the report. A perspective whose reviewer ended <code>BLOCKED</code>, failed or hit its turn cap is listed under
-<code>Not covered:</code> at the top of the backlog and in the report.</p>
+<code>Not covered:</code> at the top of the backlog and in the report, with the union of the reviewers'
+<code>Not read:</code> lines (in-scope paths they did not open).</p>
     <h2 id="code-review-and-pull-requests">Code review and pull requests</h2>
     <h3 id="code-review">code-review</h3>
     <p><a href="../../skills/code-review.html">Source</a>. Reviews a PR, diff, commit or working tree.</p>
@@ -211,10 +214,13 @@ it runs no command and opens no URL from them.</p>
     <h2 id="planning-and-backlog">Planning and backlog</h2>
     <h3 id="spec">spec</h3>
     <p><a href="../../skills/spec.html">Source</a>. Interviews you one question at a time (not asking what
-the repository already answers), inspects the code, then writes a spec (goals, non-goals, flows,
+the repository already answers), inspects the code, then writes a spec (frontmatter with
+<code>status: draft</code>, <code>owner</code> and <code>last-verified</code>; goals, non-goals, flows,
 design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
-tests) and a plan whose steps carry What, Where, How, Test, <code>Done when</code> and S/M/L. It can turn the
-steps into <code>FEAT-</code> backlog items.</p>
+tests) and a plan whose steps carry What, Where, How, Test, <code>Done when</code> and S/M/L. It then checks
+them against each other (a coverage table from criteria to steps both ways, vague words,
+placeholders, scope reduction, conflicts with decision records) and puts every hit under open
+questions. It can turn the steps into <code>FEAT-</code> backlog items, in sessions of 5–7.</p>
     <h3 id="implement-backlog">implement-backlog</h3>
     <p><a href="../../skills/implement-backlog.html">Source</a>. Executes ready backlog items in batches.</p>
     <ul>
@@ -224,20 +230,27 @@ auth/security items.</li>
 <li>**<code>Check</code> screening:** never runs a <code>Check</code> that pipes into a shell, fetches from the network or
 writes outside the repository; reads any script a <code>Check</code> calls first.</li>
 <li><strong>Triage:</strong> before the claim, checks every batch item itself, read-only: its <code>Where</code> still
-exists (for a <code>FEAT-</code> or <code>BASE-</code> item, its parent directory), its <code>Check</code> fails now (a
-failure on authentication, quota or a missing secret blocks the item for you), no open pull request touches its files (skipped when <code>gh</code> is
+exists (for a <code>FEAT-</code>, <code>BASE-</code> or <code>PLAN-</code> item, its parent directory), its <code>Check</code> fails
+now (exit 126 or 127, a grep exit 2 or a "no such file" or "no tests found" message is a broken
+<code>Check</code>, so the item is stale; a failure on authentication, quota or a missing secret blocks the
+item for you), no open pull request touches its files (skipped when <code>gh</code> is
 unavailable), and no project decision record or doc contradicts it. A failing item leaves the
 batch, is never claimed or dispatched, and is reported as <code>stale: &lt;ID&gt; · &lt;point&gt; · &lt;evidence&gt;</code>
 for you to close, amend or keep; the batch is topped up from the next ready items.</li>
 <li><strong>While running:</strong> runs each item's <code>Check</code> itself on a <code>DONE</code> report, then the full build, types,
 tests and lint for the batch; classifies a failure before editing; stops after three failed
 repair cycles.</li>
-<li><strong>Review:</strong> the batch diff through code-review (at most two rounds); the base moves only by a
+<li><strong>Review:</strong> the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
+the item's <code>Done when</code> nor the spec settles goes to you as an intent gap; the base moves only by a
 fast-forward after the review passes.</li>
+<li><strong>Spec convergence:</strong> when the batch closes the last open item that cites a spec, checks each
+acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
+gap as a <code>FEAT-</code> item for your approval.</li>
     </ul>
     <h3 id="plan-status">plan-status</h3>
     <p><a href="../../skills/plan-status.html">Source</a>. Counts, never estimates: done, open and blocked
-in the active plan by a stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
+in the active plan (a top-level file of the planning location, not <code>approved/</code> or <code>lanes/</code>) by a
+stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
 <code>Owner</code> older than 7 days), waiting, claimed or ready. Open decisions become at most five numbered
 A/B/C questions. It runs no test or build to get a number.</p>
     <h3 id="bug-triage">bug-triage</h3>
@@ -292,7 +305,8 @@ branches not merged into <code>origin/HEAD</code>, your open PRs and still-runni
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
 most three under each heading, lessons (an addition to a note that already covers the topic is
 proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates, plan
-and docs updates, plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.
+and docs updates (open items of a finished plan become <code>PLAN-</code> backlog items, P2 by default, with a
+session line), plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.
 Every check result names the commit it ran on (<code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus
 <code>+ uncommitted: &lt;changed files&gt;</code> on a dirty tree).</p>
     <h3 id="skill-usage">skill-usage</h3>

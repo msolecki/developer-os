@@ -83,7 +83,8 @@ standard.
 
 - **Missing pieces:** root `AGENTS.md` (under 100 lines, with `## Likely agent mistakes here` and
   `## Invariants`), a one-line `CLAUDE.md`, `_Context.md`, `DESIGN.md` for a UI, the git-ignored
-  state file (`git check-ignore -q docs/plans/.devos-state.md`), frontmatter on every doc,
+  state file (`git check-ignore -q docs/plans/.devos-state.md`) and `.worktrees/`
+  (`git check-ignore -q .worktrees/x`), frontmatter on every tracked doc (`git ls-files docs`),
   `docs/index.md`, `docs/CURRENT-STATE.md`, `docs/pitfalls.md`, decision records, runbooks. It
   proposes only pieces that would carry real content now.
 - **Drift:** commands in `AGENTS.md`/`CLAUDE.md`/README that are not in the manifest or `Makefile`;
@@ -121,13 +122,15 @@ specialists: security (`security-auditor`), performance (`performance-engineer`)
 (`qa-expert`, assessment only), correctness (`code-reviewer`), data (`database-reviewer`, skipped without a database), infra
 (`infra-reviewer`, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs `file:line`, current-code
-evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. The findings
+evidence, a fix, a `Done when` and a runnable `Check` (a negated grep paired with `test -f`, no
+error swallowed into a default); unsupported claims are rejected. The findings
 code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
 (the `verifier` agent); refuted ones are listed as Disputed, not written, and an undecided one is
 written with an `Unverified:` line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (`gh pr list`,
 skipped when `gh` is unavailable) is dropped and named in the report. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
-`Not covered:` at the top of the backlog and in the report.
+`Not covered:` at the top of the backlog and in the report, with the union of the reviewers'
+`Not read:` lines (in-scope paths they did not open).
 
 ## Code review and pull requests
 
@@ -185,10 +188,13 @@ it runs no command and opens no URL from them.
 ### spec
 
 [Source](../../plugin/skills/spec/SKILL.md). Interviews you one question at a time (not asking what
-the repository already answers), inspects the code, then writes a spec (goals, non-goals, flows,
+the repository already answers), inspects the code, then writes a spec (frontmatter with
+`status: draft`, `owner` and `last-verified`; goals, non-goals, flows,
 design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
-tests) and a plan whose steps carry What, Where, How, Test, `Done when` and S/M/L. It can turn the
-steps into `FEAT-` backlog items.
+tests) and a plan whose steps carry What, Where, How, Test, `Done when` and S/M/L. It then checks
+them against each other (a coverage table from criteria to steps both ways, vague words,
+placeholders, scope reduction, conflicts with decision records) and puts every hit under open
+questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–7.
 
 ### implement-backlog
 
@@ -200,21 +206,28 @@ steps into `FEAT-` backlog items.
 - **`Check` screening:** never runs a `Check` that pipes into a shell, fetches from the network or
   writes outside the repository; reads any script a `Check` calls first.
 - **Triage:** before the claim, checks every batch item itself, read-only: its `Where` still
-  exists (for a `FEAT-` or `BASE-` item, its parent directory), its `Check` fails now (a
-  failure on authentication, quota or a missing secret blocks the item for you), no open pull request touches its files (skipped when `gh` is
+  exists (for a `FEAT-`, `BASE-` or `PLAN-` item, its parent directory), its `Check` fails
+  now (exit 126 or 127, a grep exit 2 or a "no such file" or "no tests found" message is a broken
+  `Check`, so the item is stale; a failure on authentication, quota or a missing secret blocks the
+  item for you), no open pull request touches its files (skipped when `gh` is
   unavailable), and no project decision record or doc contradicts it. A failing item leaves the
   batch, is never claimed or dispatched, and is reported as `stale: <ID> · <point> · <evidence>`
   for you to close, amend or keep; the batch is topped up from the next ready items.
 - **While running:** runs each item's `Check` itself on a `DONE` report, then the full build, types,
   tests and lint for the batch; classifies a failure before editing; stops after three failed
   repair cycles.
-- **Review:** the batch diff through code-review (at most two rounds); the base moves only by a
+- **Review:** the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
+  the item's `Done when` nor the spec settles goes to you as an intent gap; the base moves only by a
   fast-forward after the review passes.
+- **Spec convergence:** when the batch closes the last open item that cites a spec, checks each
+  acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
+  gap as a `FEAT-` item for your approval.
 
 ### plan-status
 
 [Source](../../plugin/skills/plan-status/SKILL.md). Counts, never estimates: done, open and blocked
-in the active plan by a stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
+in the active plan (a top-level file of the planning location, not `approved/` or `lanes/`) by a
+stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
 `Owner` older than 7 days), waiting, claimed or ready. Open decisions become at most five numbered
 A/B/C questions. It runs no test or build to get a number.
 
@@ -280,7 +293,8 @@ branches not merged into `origin/HEAD`, your open PRs and still-running backgrou
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
 most three under each heading, lessons (an addition to a note that already covers the topic is
 proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates, plan
-and docs updates, plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
+and docs updates (open items of a finished plan become `PLAN-` backlog items, P2 by default, with a
+session line), plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
 Every check result names the commit it ran on (`<command>: <result> at <short SHA>`, plus
 `+ uncommitted: <changed files>` on a dirty tree).
 
