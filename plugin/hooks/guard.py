@@ -17,10 +17,10 @@ An Edit or Write asks when its `file_path` is a secret or the agent's own user-l
 or anything under `~/.claude/hooks`, `rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`; the same files under
 `$CLAUDE_CONFIG_DIR` when it is set.
 
-Inside the read-only agents (code-reviewer, database-reviewer, infra-reviewer, performance-engineer,
-security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
+Inside the read-only agents (code-reviewer, database-reviewer, dependency-upgrader, infra-reviewer,
+performance-engineer, security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
 file-changing binary (unless every path it writes is in a temp directory; `patch` always) or `sed -i` in command
-position, a git command in command position that changes state, `gh pr checkout`, a formatter or test run that rewrites files
+position, a git command in command position that changes state or writes an output file, `gh pr checkout`, a formatter or test run that rewrites files
 (`--write`, `--fix`, `--update-snapshots`, `-u` next to a test runner), or a redirect to anything but
 `/dev/null`, the standard streams or a temp directory. A redirect inside quotes (`awk '$1>3'`,
 `grep "<a>" f`, `python3 -c "print(1>2)"`) is not one, unless the shell runs the quoted text
@@ -49,9 +49,10 @@ REASONS = {
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
 COMMIT = "Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."
-READ_ONLY = {"code-reviewer", "database-reviewer", "infra-reviewer", "performance-engineer", "security-auditor"}
-GIT_WRITE = {"add", "am", "apply", "bisect", "checkout", "cherry-pick", "clean", "clone", "commit", "gc", "init", "merge",
-             "mv", "prune", "pull", "push", "rebase", "reset", "restore", "revert", "rm", "sparse-checkout", "submodule",
+READ_ONLY = {"code-reviewer", "database-reviewer", "dependency-upgrader", "infra-reviewer", "performance-engineer",
+             "security-auditor"}
+GIT_WRITE = {"add", "am", "apply", "checkout", "cherry-pick", "clean", "clone", "commit", "gc", "init", "merge",
+             "mv", "prune", "pull", "push", "rebase", "reset", "restore", "revert", "rm", "sparse-checkout",
              "switch", "update-ref"}
 WRITE_BIN = {"tee", "rm", "mv", "cp", "install", "ln", "truncate", "touch", "mkdir", "dd", "unlink", "rmdir", "patch",
              "chmod", "chown", "chgrp"}
@@ -269,6 +270,23 @@ def git_writes(sub, rest):
         return any(d and not d.startswith("refs/remotes/") for d in dsts)
     if sub == "stash":
         return rest[:1] not in (["list"], ["show"])
+    if sub == "submodule":
+        return args[:1] not in ([], ["status"], ["summary"])
+    if sub == "bisect":
+        return args[:1] not in (["log"], ["visualize"], ["view"])
+    if sub in ("diff", "log", "show", "format-patch", "archive"):  # an output file or directory outside scratch
+        outs = []
+        for k, x in enumerate(rest):
+            name, eq, value = x.partition("=")
+            if name in ("--output", "--output-directory") or (x.startswith("-o") and not x.startswith("--")):
+                if not eq:
+                    value = x[2:] if x.startswith("-o") and len(x) > 2 else (rest[k + 1] if k + 1 < len(rest) else "")
+                outs.append(value or ".")
+        # format-patch without an output directory writes one file per commit into the current directory.
+        if sub == "format-patch" and not outs and "--stdout" not in rest:
+            return True
+        if not all(scratch(o) for o in outs):
+            return True
     if sub == "worktree":
         return rest[:1] in (["add"], ["remove"], ["move"], ["prune"], ["repair"])
     if sub == "remote":

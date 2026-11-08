@@ -129,6 +129,13 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   scanned, and `commit -n` counts only with `commit` as git's subcommand, reversing "still ask on a
   mention" for commit messages: in `claude -p` an ask is a denial, and `git commit -m "fix npm install
   bug"` blocked headless lanes (FLOW-39).
+- **Amended 2026-11-08:** dependency-upgrader joins the read-only agents: it has Bash and its prompt
+  forbids edits and HEAD moves, yet `git checkout main` from it passed (AGT-10). In the read-only
+  agents, `submodule status`/`summary` and `bisect log`/`visualize`/`view` pass as reads (FLOW-40), and
+  `--output`, `--output-directory` or `-o` outside scratch on `diff`, `log`, `show`, `format-patch` or
+  `archive` asks, as does `format-patch` without one or `--stdout`; git plumbing that writes refs or the
+  index (`symbolic-ref`, `read-tree`, `update-index`) stays a documented known miss, an unlikely
+  reviewer mistake (SEC-15).
 
 ## D7. One wrap-up nudge per long session
 

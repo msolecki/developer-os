@@ -483,6 +483,24 @@ c=$(python3 -c "print('echo ' + '\\\\\"a\\\\\" ' * 10000)")
 t0=$(python3 -c 'import time;print(time.time())')
 check pass "$(fa $r "$c")"
 python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: 10000 quoted words took over 1 s"; }
+# FLOW-40: submodule and bisect reads
+for c in 'git submodule status' 'git submodule' 'git submodule --quiet summary' 'git bisect log' 'git bisect visualize' 'git bisect view'; do
+  check pass "$(fa $r "$c")"
+done
+check ask "$(fa $r 'git submodule foreach git pull')" "read-only"
+# SEC-15: git output files
+for c in 'git diff --output=src/x.patch' 'git diff --output src/x.patch' 'git log -p --output=x' 'git format-patch -1 -o src' \
+  'git format-patch -1 --output-directory=src' 'git format-patch -1' 'git archive -o src/x.tar HEAD' 'git archive -osrc/x.tar HEAD' \
+  'git show --output=x HEAD'; do
+  check ask "$(fa $r "$c")" "read-only"
+done
+for c in 'git diff --output=/tmp/x.patch' 'git format-patch -1 -o /tmp/p' 'git format-patch -1 --stdout' 'git archive HEAD'; do
+  check pass "$(fa $r "$c")"
+done
+# AGT-10: dependency-upgrader is read-only
+check ask "$(fa developer-os:dependency-upgrader 'git checkout main')" "read-only"
+check ask "$(fa developer-os:dependency-upgrader 'sed -i s/a/b/ package.json')" "read-only"
+check pass "$(fa developer-os:dependency-upgrader 'npm ls zod')"
 
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail
