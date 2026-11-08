@@ -8,8 +8,9 @@
 - Inbox notes in the vault are older than 7 days: suggest brain-review, at most once every 7 days.
 - No brain-garden run in 30 days: suggest brain-garden, at most once every 30 days.
 
-The vault path comes only from the user-level CLAUDE.md, where brain-setup writes it, never from the
-project: a cloned repository must not point the hook at a directory of its choosing. It prints counts and
+The vault path comes from the plugin's brain_vault option (CLAUDE_PLUGIN_OPTION_BRAIN_VAULT; Claude Code
+reads it from user or managed settings only) or else from the user-level CLAUDE.md, where brain-setup writes
+it, never from the project: a cloned repository must not point the hook at a directory of its choosing. It prints counts and
 dates, never a vault file name, and reads a bounded prefix of each file.
 
 Fails open: every unexpected state exits 0 with no output. Skips headless and SDK runs, like capture-nudge.
@@ -63,12 +64,15 @@ def marker(path):
 
 
 def vault_path():
-    config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
-    try:
-        m = re.search(r"^Brain vault:[ \t]*(\S.*?)[ \t]*$", head(os.path.join(config, "CLAUDE.md"), 65536), re.M)
-    except OSError:
-        return None
-    v = os.path.expanduser(m.group(1)) if m else ""
+    v = os.environ.get("CLAUDE_PLUGIN_OPTION_BRAIN_VAULT", "").strip()
+    if not v:
+        config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+        try:
+            m = re.search(r"^Brain vault:[ \t]*(\S.*?)[ \t]*$", head(os.path.join(config, "CLAUDE.md"), 65536), re.M)
+        except OSError:
+            return None
+        v = m.group(1) if m else ""
+    v = os.path.expanduser(v)
     return v if os.path.isabs(v) and os.path.isdir(v) else None
 
 

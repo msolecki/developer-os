@@ -71,8 +71,16 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   point brain-search or brain-capture at a directory of its choosing. No project-file lookup, no
   mismatch warning. A path holding a quote, `$`, a backtick, `\` or a newline is rejected, and the
   shell templates set it in single quotes.
-- **Open:** replacing the line with the plugin's `userConfig` is under consideration (a local,
-  git-ignored proposal, not in the repository).
+- **Amended 2026-11-08:** the Open point on `userConfig` is resolved: the plugin declares an optional
+  `brain_vault` option (`type: directory`), and the line stays as the fallback, so setup without the
+  plugin dialog still works. Skills read `${user_config.brain_vault}` and the notices hook reads
+  `CLAUDE_PLUGIN_OPTION_BRAIN_VAULT`, preferring a non-empty option over the line
+  (https://code.claude.com/docs/en/plugins-reference#user-configuration). Claude Code reads
+  `pluginConfigs` from user or managed settings only and ignores project and local entries
+  (https://code.claude.com/docs/en/settings-reference#pluginconfigs), so the option keeps the rule
+  above: a cloned repository cannot supply the path. The docs do not say what an unset
+  `${user_config.KEY}` renders as in skill content, so the skills treat an empty value or an
+  unexpanded `${...}` placeholder as unset.
 
 ## D6. Hooks ask, never deny, and fail open
 

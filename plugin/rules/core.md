@@ -32,7 +32,7 @@
 - Every plan step states What (deliverable), Where (files), How (approach), and **Test** (verification). The system stays deployable after every step. Use S/M/L complexity instead of time estimates.
 - A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
 - An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, expected output format, and what is not started or not verified. Exclude debugging history, rejected approaches, and full conversation dumps.
-- Before a large task, look for earlier decisions: when a `Brain vault:` line is configured, search the vault with the `brain-search` skill and read the selected note (otherwise skip this silently), then read the project's active plan. Search raw session transcripts only when the user asks.
+- Before a large task, look for earlier decisions: when a vault is configured (the `brain_vault` option or a `Brain vault:` line), search the vault with the `brain-search` skill and read the selected note (otherwise skip this silently), then read the project's active plan. Search raw session transcripts only when the user asks.
 - During compaction, preserve the modified-file list, the project's test commands, the current objective, and the user's language. Task state that must survive it lives in `docs/plans/.devos-state.md`, not only in chat.
 - Show only failures from tests and builds, never a full passing log.
 - Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence. A new or changed gate or test counts only after you saw it fail: mutate, watch it go red, revert.

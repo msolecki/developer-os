@@ -17,5 +17,12 @@
     "engineering-rules",
     "hooks",
     "agents"
-  ]
+  ],
+  "userConfig": {
+    "brain_vault": {
+      "type": "directory",
+      "title": "Brain vault",
+      "description": "Absolute path of your Obsidian knowledge vault. Optional: without it the brain skills and notices read the Brain vault: line in ~/.claude/CLAUDE.md."
+    }
+  }
 }
