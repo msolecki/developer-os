@@ -144,13 +144,13 @@ command does not run, even when `--allowedTools Bash` allows it.
 
 **Parsing:** first `$IFS` and any `${IFS…}` (such as `${IFS%?}`) become a space, `${X:-word}` (also `-`, `+`, `=`, `?`) becomes
 `word`, the positional parameters `$1`–`$9`, `$@` and `$*` (empty in a tool call) are dropped, and a `\xHH` or octal escape inside `$'...'` becomes its character, so `npm${IFS}i${IFS}zod`, `npm$IFS$9i$IFS$9zod`,
-`np${X:-m} i zod` and `$'-\x66'` read as `npm i zod` and `-f`. Then JSON-unescape (`\r`, `\t` and a backslash-newline continuation become spaces; escapes are read in pairs, so the shell's `\rm` or `\npm` stays `rm` or `npm`), then
+`np${X:-m} i zod` and `$'-\x66'` read as `npm i zod` and `-f`. Then JSON-unescape (`\r`, `\t` and a backslash-newline continuation become spaces; escapes are read in pairs, so the shell's `\rm` or `\npm` stays `rm` or `npm`; two more views also read the shell's own `\n`, `\t` and `\r` as a break or a space, as `$'...'`, `eval` or `printf ... | sh` would run them), then
 delete every quote, backslash and `$` (so `np""m`, `\git`, `-\-force` and `$'-f'` read as the word
 the shell runs), split segments on `; & | ( )` and backtick, and scan words per segment. Quotes are
 not tracked: the command is scanned twice, once with `\n` as a command separator and once with `\n`
 as a space, each with quotes deleted and with quotes turned into spaces (so `alias.p='push -f'` keeps
 `push` and `-f` apart). Braces are deleted and commas split words, so `{-f,}` reads `-f`; a fifth
-view deletes commas instead, so `-{,f}` reads `-f`. A hit in any of the five views asks. A word built at run time, such as `$(command -v npm)`, is not
+view deletes commas instead, so `-{,f}` reads `-f`. A hit in any of the seven views asks. A word built at run time, such as `$(command -v npm)`, is not
 resolved. Because quotes
 are dropped, a mention such as `git commit -m "pnpm add zod"` also asks; this is deliberate. The
 destructive and read-only-agent categories match only a command in command position (see below), so a

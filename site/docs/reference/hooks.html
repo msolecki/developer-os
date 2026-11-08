@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@405c18b7be01">
+<meta name="dos-source" content="docs/reference/hooks.md@5949e3b86115">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -161,13 +161,13 @@ Worktrees:
     </div>
     <p><strong>Parsing:</strong> first <code>$IFS</code> and any <code>${IFS…}</code> (such as <code>${IFS%?}</code>) become a space, <code>${X:-word}</code> (also <code>-</code>, <code>+</code>, <code>=</code>, <code>?</code>) becomes
 <code>word</code>, the positional parameters <code>$1</code>–<code>$9</code>, <code>$@</code> and <code>$*</code> (empty in a tool call) are dropped, and a <code>\xHH</code> or octal escape inside <code>$'...'</code> becomes its character, so <code>npm${IFS}i${IFS}zod</code>, <code>npm$IFS$9i$IFS$9zod</code>,
-<code>np${X:-m} i zod</code> and <code>$'-\x66'</code> read as <code>npm i zod</code> and <code>-f</code>. Then JSON-unescape (<code>\r</code>, <code>\t</code> and a backslash-newline continuation become spaces; escapes are read in pairs, so the shell's <code>\rm</code> or <code>\npm</code> stays <code>rm</code> or <code>npm</code>), then
+<code>np${X:-m} i zod</code> and <code>$'-\x66'</code> read as <code>npm i zod</code> and <code>-f</code>. Then JSON-unescape (<code>\r</code>, <code>\t</code> and a backslash-newline continuation become spaces; escapes are read in pairs, so the shell's <code>\rm</code> or <code>\npm</code> stays <code>rm</code> or <code>npm</code>; two more views also read the shell's own <code>\n</code>, <code>\t</code> and <code>\r</code> as a break or a space, as <code>$'...'</code>, <code>eval</code> or <code>printf ... | sh</code> would run them), then
     delete every quote, backslash and <code>$</code> (so <code>np""m</code>, <code>\git</code>, <code>-\-force</code> and <code>$'-f'</code> read as the word
     the shell runs), split segments on <code>; &amp; | ( )</code> and backtick, and scan words per segment. Quotes are
     not tracked: the command is scanned twice, once with <code>\n</code> as a command separator and once with <code>\n</code>
     as a space, each with quotes deleted and with quotes turned into spaces (so <code>alias.p='push -f'</code> keeps
     <code>push</code> and <code>-f</code> apart). Braces are deleted and commas split words, so <code>{-f,}</code> reads <code>-f</code>; a fifth
-    view deletes commas instead, so <code>-{,f}</code> reads <code>-f</code>. A hit in any of the five views asks. A word built at run time, such as <code>$(command -v npm)</code>, is not
+    view deletes commas instead, so <code>-{,f}</code> reads <code>-f</code>. A hit in any of the seven views asks. A word built at run time, such as <code>$(command -v npm)</code>, is not
     resolved. Because quotes
     are dropped, a mention such as <code>git commit -m "pnpm add zod"</code> also asks; this is deliberate. The
     destructive and read-only-agent categories match only a command in command position (see below), so a

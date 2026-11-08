@@ -79,7 +79,7 @@ WHOLE_TREE = (".", "./", ":/", "*")
 PM_VALUE = {"--filter", "-F", "--prefix", "--dir", "-C"}
 # `git fetch` options whose value is the next word, so it is neither the remote nor a refspec.
 FETCH_VALUE = {"--depth", "--deepen", "--shallow-since", "--shallow-exclude", "-j", "--jobs", "--negotiation-tip",
-               "--server-option", "-o", "--upload-pack", "--refmap", "--recurse-submodules-default"}
+               "--server-option", "-o", "--upload-pack", "--refmap", "--recurse-submodules-default", "--filter"}
 
 
 def command(raw):
@@ -91,7 +91,7 @@ def command(raw):
     return m.group(1) if m else ""
 
 
-def view(cmd, newline, quotes_to_space=False, join_commas=False):
+def view(cmd, newline, quotes_to_space=False, join_commas=False, shell_ws=False):
     """JSON-unescape, then delete every backslash and `$`, and either delete quotes (so `np""m`, `\\git`,
     `-\\-force` and `$'-f'` read as the word the shell runs) or turn them into spaces (so a quoted value
     such as `alias.p='push -f'` keeps its words apart). Braces go and commas split words, so a brace
@@ -105,8 +105,11 @@ def view(cmd, newline, quotes_to_space=False, join_commas=False):
     s = re.sub(r"\$'[^']*'", lambda m: re.sub(r"\\\\(?:x([0-9a-fA-F]{1,2})|([0-7]{1,3}))",
                lambda e: chr(int(e.group(1), 16) if e.group(1) else int(e.group(2), 8)), m.group(0)), s)
     # One pass over the JSON escape pairs, so the shell's `\rm` (JSON `\\rm`) is not read as `\r` + `m`.
+    # With shell_ws, the shell's own `\n`, `\r`, `\t` (JSON `\\n`) also break or space, as `$'ls\nrm'`,
+    # `printf 'ls\nrm' | sh` or `eval` would run them; the caller checks both readings.
     esc = {None: " ", "n": newline, "r": " ", "t": " "}  # None: a backslash-newline continuation
-    s = re.sub(r"\\\\\\n|\\(.)", lambda m: esc.get(m.group(1), m.group(0)), s)
+    s = re.sub(r"(\\\\\\n)|\\\\([nrt])|\\(.)", lambda m: " " if m.group(1) else (
+        (esc[m.group(2)] if shell_ws else m.group(0)) if m.group(2) else esc.get(m.group(3), m.group(0))), s)
     s = re.sub("[\"']", " " if quotes_to_space else "", s)
     s = re.sub(r"[\\${}]", "", s)
     return s.replace(",", "" if join_commas else " ")
@@ -453,9 +456,11 @@ def main():
     cmd = command(raw)
     if not cmd:
         return
-    # Each way runs with a newline as `;` and as a space: five views, and a hit in any asks.
+    # Each way runs with a newline as `;` and as a space, and the shell's own `\n` as a break: seven views,
+    # and a hit in any asks.
     # Quotes are not tracked: an extra ask is the price.
-    views = [view(cmd, ";"), view(cmd, " "), view(cmd, ";", True), view(cmd, " ", True), view(cmd, " ", join_commas=True)]
+    views = [view(cmd, ";"), view(cmd, " "), view(cmd, ";", True), view(cmd, " ", True), view(cmd, " ", join_commas=True),
+             view(cmd, ";", shell_ws=True), view(cmd, ";", True, shell_ws=True)]
     for v in views:
         hit = scan(v)
         if hit:
