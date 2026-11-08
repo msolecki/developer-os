@@ -312,3 +312,99 @@ ol.steps > li:not(:last-child)::after { content: ""; position: absolute; left: 0
 .doc-grid span { font-size: 0.88rem; color: var(--muted); line-height: 1.5; display: block; }
 
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+
+/* Workflow diagrams (wf.js): session = --ask, vault = --ok, repository = --pine */
+.wf-stage { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; margin: 0 0 1.25rem; min-width: 0; }
+.wf-scroll { overflow-x: auto; }
+.wf-svg { width: 100%; height: auto; display: block; min-width: 520px; }
+.wf-svg text { font-family: "IBM Plex Sans", system-ui, sans-serif; fill: var(--ink); }
+.wf-svg .lbl { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; fill: var(--muted); }
+.wf-svg .node-t { font-size: 20px; font-weight: 600; }
+.wf-svg .node-s { font-size: 13px; fill: var(--muted); }
+.wf-path { fill: none; stroke: var(--rule-strong); stroke-width: 2; stroke-dasharray: 6 6; }
+.wf-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; font-size: 0.85rem; color: var(--muted); margin: 0 0 1rem; }
+.wf-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+.wf-btn { font: 500 0.88rem/1 "IBM Plex Sans", sans-serif; border: 1px solid var(--rule-strong); background: var(--sheet); color: var(--ink); border-radius: 8px; padding: 0.5rem 0.8rem; cursor: pointer; }
+.wf-btn:hover { border-color: var(--pine); }
+.wf-btn[aria-pressed="true"] { border-color: var(--ok); background: var(--ok-soft); }
+
+.wf-loop { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+@media (max-width: 640px) { .wf-loop { grid-template-columns: 1fr; } }
+.wf-ring { width: 100%; max-width: 240px; height: auto; display: block; margin: 0 auto; }
+.wf-ring text { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; fill: var(--muted); }
+.wf-ring .seg { fill: none; stroke: var(--rule); stroke-width: 14; transition: stroke 0.4s; }
+.wf-ring .seg.on { stroke: var(--c); }
+.wf-ring .center-t { font-family: "IBM Plex Sans", sans-serif; font-size: 17px; font-weight: 600; fill: var(--ink); }
+.wf-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; min-width: 0; }
+.prose .wf-steps li { margin: 0; }
+.wf-steps button { width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 0.55rem 0.7rem; display: grid; grid-template-columns: 1.4rem 1fr; gap: 0.5rem; color: var(--ink); font: inherit; cursor: pointer; transition: background 0.3s, border-color 0.3s; }
+.wf-steps .n { font-family: "IBM Plex Mono", monospace; font-size: 0.8rem; color: var(--muted); padding-top: 0.15rem; }
+.wf-steps strong { font-weight: 600; }
+.wf-steps .who { font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; color: var(--c); display: block; }
+.wf-steps .d { display: block; color: var(--ink-2); font-size: 0.9rem; max-height: 0; overflow: hidden; transition: max-height 0.4s; }
+.wf-steps li.on button { background: var(--soft); border-color: var(--c); }
+.wf-steps li.on .d { max-height: 14em; margin-top: 0.25rem; }
+.wf-controls { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
+
+.wf-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.9rem; }
+.wf-life { position: relative; height: 320px; }
+.wf-cols { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.wf-col { border: 1px dashed var(--rule-strong); border-radius: 8px; padding: 0.6rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.wf-col b { font-family: "IBM Plex Mono", monospace; font-size: 0.85rem; font-weight: 500; }
+.wf-col small { color: var(--muted); font-size: 0.76rem; line-height: 1.35; }
+.wf-col.inbox b { color: var(--ask); }
+.wf-col.topic b { color: var(--ok); }
+.wf-col.arch b { color: var(--muted); }
+.wf-note { position: absolute; width: calc((100% - 24px) / 3 - 16px); top: 96px; left: 8px; background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid var(--nc, var(--ask)); border-radius: 6px; padding: 0.55rem; font-size: 0.78rem; line-height: 1.4; box-shadow: 0 6px 18px -10px rgba(15, 23, 42, 0.35); transition: left 0.9s cubic-bezier(.6,.05,.3,1), top 0.9s cubic-bezier(.6,.05,.3,1), opacity 0.6s; }
+.wf-note .fn { font-family: "IBM Plex Mono", monospace; font-weight: 500; overflow-wrap: anywhere; color: var(--ink); }
+.wf-note .fm { font-family: "IBM Plex Mono", monospace; color: var(--muted); font-size: 0.7rem; margin-top: 0.25rem; overflow-wrap: anywhere; }
+.wf-note .st { color: var(--nc, var(--ask)); }
+.wf-cap { color: var(--ink-2); min-height: 3em; margin: 0.9rem 0 0; }
+@media (max-width: 600px) { .wf-life { height: 400px; } .wf-note .fm { display: none; } }
+
+.wf-track { position: relative; height: 6px; background: var(--rule); border-radius: 3px; margin: 3rem 0.5rem 0; }
+.wf-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ask); border-radius: 3px; }
+.wf-ev { position: absolute; top: -9px; width: 24px; height: 24px; margin-left: -12px; border-radius: 50%; background: var(--sheet); border: 3px solid var(--rule-strong); transition: border-color 0.3s, transform 0.3s; }
+.wf-ev.lit { border-color: var(--c); transform: scale(1.15); }
+.wf-ev span { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-family: "IBM Plex Mono", monospace; font-size: 0.7rem; color: var(--muted); }
+@media (max-width: 600px) { .wf-ev span { display: none; } }
+.wf-hooks { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.75rem; margin-top: 1.5rem; }
+.wf-hook { border: 1px solid var(--rule); border-radius: 8px; padding: 0.75rem; display: grid; gap: 0.3rem; align-content: start; transition: border-color 0.3s, background 0.3s; min-width: 0; }
+.wf-hook.lit { border-color: var(--c); background: var(--soft); }
+.wf-hook .ev { font-family: "IBM Plex Mono", monospace; font-size: 0.75rem; color: var(--c); }
+.wf-hook b { font-family: "IBM Plex Mono", monospace; font-size: 0.85rem; font-weight: 500; color: var(--ink); }
+.wf-hook span.p { font-size: 0.86rem; color: var(--ink-2); line-height: 1.5; }
+
+.wf-chain { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.wf-chip { font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; border: 1px solid var(--pine); color: var(--pine); border-radius: 999px; padding: 0.3rem 0.7rem; background: var(--sheet); animation: wf-pulse 6s infinite; animation-delay: calc(var(--i) * 0.75s); }
+.wf-chip:hover { text-decoration: none; }
+.wf-arrow { color: var(--muted); font-family: "IBM Plex Mono", monospace; }
+@keyframes wf-pulse { 0%, 12%, 100% { background: var(--sheet); } 5% { background: var(--pine-soft); } }
+@media (prefers-reduced-motion: reduce) { .wf-dot { display: none; } }
+
+/* The terminal session on the landing page (wf.js plays it) */
+.wf-term-wrap { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+@media (max-width: 760px) { .wf-term-wrap { grid-template-columns: 1fr; } }
+.wf-term-steps { display: grid; gap: 0.3rem; }
+.wf-term-steps button { text-align: left; font: 500 0.9rem/1.3 "IBM Plex Sans", sans-serif; background: transparent; color: var(--ink-2); border: 1px solid transparent; border-left: 3px solid var(--rule); border-radius: 0 6px 6px 0; padding: 0.45rem 0.7rem; cursor: pointer; }
+.wf-term-steps button[aria-current="step"] { border-left-color: var(--pine); background: var(--pine-soft); color: var(--ink); }
+.wf-term { height: 22rem; overflow-y: auto; padding: 1rem 1.1rem; font: 0.82rem/1.6 "IBM Plex Mono", ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.wf-term .tl-cmd { color: var(--term-ink); margin-top: 0.6rem; }
+.wf-term .tl-you { color: var(--term-accent); margin-top: 0.6rem; }
+.wf-term .tl-out { color: var(--term-ink); }
+.wf-term .tl-dim { color: var(--term-dim); }
+.wf-term .tl-hook { color: var(--term-dim); border-left: 2px solid var(--term-accent); padding-left: 0.6rem; margin: 0.3rem 0; }
+.wf-term .tl-ask { color: var(--term-ask); border-left: 2px solid var(--term-ask); padding-left: 0.6rem; margin: 0.3rem 0; }
+.wf-term .tl-ok { color: var(--term-ok); margin-top: 0.4rem; }
+.wf-term .tl-acc { color: var(--term-accent); }
+.wf-term > :first-child { margin-top: 0; }
+
+/* "What ships" on the landing page: skill and agent names as chips */
+.wf-ships { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem 2rem; margin: 2rem 0 1.5rem; }
+.wf-ships h3 { margin: 0 0 0.6rem; font-size: 1.05rem; }
+.wf-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.6rem; }
+.wf-chips a { font: 500 0.82rem "IBM Plex Mono", monospace; color: var(--ink); background: var(--sheet); border: 1px solid var(--rule); border-radius: 999px; padding: 0.25rem 0.65rem; }
+.wf-chips a:hover { border-color: var(--pine); color: var(--pine); text-decoration: none; }
+.land .wf-loop { margin-top: 2rem; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); }
+@media (max-width: 760px) { .land .wf-loop { grid-template-columns: 1fr; } }
+.land .wf-ring { max-width: 300px; }

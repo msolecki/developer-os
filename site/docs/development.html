@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@748b4affcd18">
+<meta name="dos-source" content="docs/development.md@4f2fd807be64">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -79,7 +79,7 @@
           <tr><td>Agents</td><td>An agent lacks <code>## Final status</code> or one of <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code></td></tr>
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>
           <tr><td>Stale names</td><td>A skill, agent or output-style name removed from <code>plugin/SURFACE.txt</code> in the uncommitted diff (in a pull request, since the merge base with <code>origin/$GITHUB_BASE_REF</code>) still appears as a bare word (the prefixed form fails in References) in <code>plugin/</code>, <code>templates/</code> or <code>README.md</code>; the check runs before the rename is committed</td></tr>
-          <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code> or <code>site/docs/changelog.html</code> (both are read only up to the first released section), <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code> or a page under <code>site/</code> ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk</td></tr>
+          <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code> or <code>site/docs/changelog.html</code> (both are read only up to the first released section), <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code> or a page under <code>site/</code> ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk; the landing page names no release, or one other than <code>plugin.json</code>'s <code>version</code></td></tr>
           <tr><td>Core-rules size</td><td><code>plugin/rules/core.md</code> exceeds 8900 bytes, or <code>CAP</code> in <code>state-card.py</code> no longer fits under the 10,000-character hook output limit</td></tr>
           <tr><td>References</td><td>A <code>developer-os:&lt;name&gt;</code> string in <code>plugin/</code> (Markdown and hook scripts), <code>docs/</code>, <code>templates/</code>, <code>evals/</code>, <code>README.md</code>, <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code> or <code>SECURITY.md</code> names no skill, agent or output style</td></tr>
           <tr><td>Links</td><td>A relative Markdown link outside fenced or inline code does not resolve from its own file, or its <code>#fragment</code> matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, <code>-1</code>, <code>-2</code> for repeated headings)</td></tr>
@@ -110,7 +110,8 @@
       <li><code>skills/</code>, an index and one page per skill; <code>agents.html</code> and <code>output-styles.html</code>;</li>
 <li><code>workflow.html</code>, an animated overview of the daily loop, the life of a note and the hooks, restating
 <code>docs/workflow.md</code> and <code>docs/reference/hooks.md</code> without a hash (update it by hand when they change);</li>
-      <li><code>assets/site.css</code> and <code>assets/site.js</code> (the sidebar order in <code>NAV</code>, on-page contents, copy buttons);</li>
+      <li><code>assets/site.css</code> and <code>assets/site.js</code> (the sidebar order in <code>NAV</code>, on-page contents, copy buttons), and
+<code>assets/wf.js</code>, the animated diagrams and the terminal session on the landing page and <code>workflow.html</code>;</li>
       <li><code>assets/og/</code>, the 1200×630 link-preview cards (<code>home</code>, <code>docs</code>, <code>skills</code>, <code>agents</code>), and the favicons;</li>
       <li><code>sitemap.xml</code>, one <code>&lt;loc&gt;</code> per page.</li>
     </ul>
@@ -160,7 +161,7 @@
     </ul>
     <p>Release, by hand:</p>
     <ol>
-      <li>On a branch from <code>development</code>: bump <code>version</code> in both manifests, rename <code>[Unreleased]</code> in <code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request. In <code>site/docs/changelog.html</code>, add the version&#8217;s <code>&lt;h2&gt;</code> under <code>[Unreleased]</code> and rename that section&#8217;s <code>unreleased-*</code> heading ids to <code>&lt;version&gt;-*</code> (e.g. <code>025-added</code>); the Site stage checks only the hash.</li>
+      <li>On a branch from <code>development</code>: bump <code>version</code> in both manifests, rename <code>[Unreleased]</code> in <code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request. In <code>site/docs/changelog.html</code>, add the version&#8217;s <code>&lt;h2&gt;</code> under <code>[Unreleased]</code> and rename that section&#8217;s <code>unreleased-*</code> heading ids to <code>&lt;version&gt;-*</code> (e.g. <code>025-added</code>); the Site stage compares the words, not the ids. Set the release in the landing page's &quot;Is it stable?&quot; answer; the Counts stage compares it with <code>plugin.json</code>.</li>
       <li>When <code>check</code> is green on <code>development</code>: <code>git push origin origin/development:main</code>. Only a fast-forward is accepted; the <code>main</code> ruleset lets the repository admin push without a pull request (bypass mode "Always"), so <code>main</code> keeps the same SHAs as <code>development</code>.</li>
       <li><code>git tag -a v&lt;version&gt; -m v&lt;version&gt; origin/main &amp;&amp; git push origin v&lt;version&gt;</code> at once (a fetch prunes an unpushed tag; a lightweight <code>git tag</code> stops with "no tag message?" where <code>tag.gpgSign</code> is set), then <code>gh release create v&lt;version&gt; --notes-file &lt;the changelog section&gt;</code>. The <code>release-tags</code> ruleset forbids moving or deleting a <code>v*</code> tag.</li>
       <li>Pushing <code>main</code> publishes <code>site/</code> to GitHub Pages.</li>
