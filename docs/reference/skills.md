@@ -320,8 +320,8 @@ then smoke-tests with brain-search, passing it the vault path.
 
 ### brain-search
 
-[Source](../../plugin/skills/brain-search/SKILL.md). Finds the vault from the path you give or the
-`Brain vault:` line of the user-level `CLAUDE.md` (never a project file, never by searching the disk), searches content and frontmatter with `rg`, drops archived notes,
+[Source](../../plugin/skills/brain-search/SKILL.md). Finds the vault from the path you give, the
+plugin's `brain_vault` option or the `Brain vault:` line of the user-level `CLAUDE.md` (never a project file, never by searching the disk), searches content and frontmatter with `rg`, drops archived notes,
 ranks by `summary`/`tags`/name match, project slug, `active` over `inbox` and recency, reads the
 top five, follows a superseded note's `superseded_by` chain to the current note (a broken or looping
 chain is incomplete history, with no note named current), and answers only from them with a path

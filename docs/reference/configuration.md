@@ -6,13 +6,14 @@ last-verified: 2026-11-08
 
 # Configuration reference
 
-The plugin has no configuration file of its own. It is configured through lines and keys in files
-the user already has, which the skills read. This page lists every one of them.
+The plugin has no configuration file of its own. It is configured through one optional plugin option
+and through lines and keys in files the user already has, which the skills read. This page lists every one of them.
 
 ## User level
 
 | Setting | Where | Read by | Written by |
 |---|---|---|---|
+| Plugin option `brain_vault` (optional, a directory) | `pluginConfigs` in user or managed settings; Claude Code ignores project and local entries (D5) | All brain skills and the notices hook, before the `Brain vault:` line | The user, in the plugin's configuration dialog or `/config` |
 | `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` only; a project's `CLAUDE.md`/`AGENTS.md` is never read for it (D5) | All brain skills, unless you or a calling skill name the path; the core rule that runs brain-search before large tasks; the notices hook | brain-setup, after approval |
 | Vault in `permissions.additionalDirectories` | `~/.claude/settings.json` | Claude Code, so the vault can be read from any project | brain-setup, after approval |
 | `"autoMemoryEnabled": false` (recommended, D24) | `~/.claude/settings.json`; `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the environment wins over it | Claude Code: no auto-memory files are created or loaded; existing ones stay on disk | brain-setup, after a separate yes; brain-import-memory, as one of its numbered items; the `/memory` toggle writes the same key |
