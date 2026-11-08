@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-16
+last-verified: 2026-11-08
 ---
 
 # Pitfalls
@@ -11,7 +11,7 @@ promise it makes.
 
 ## Hooks fail open
 
-- **Where:** `plugin/hooks/guard.py`, `plugin/hooks/capture-nudge.py`, `plugin/hooks/state-card.py`, `plugin/hooks/notices.py`
+- **Where:** `plugin/hooks/guard.py`, `plugin/hooks/capture-nudge.py`, `plugin/hooks/state-card.py`, `plugin/hooks/notices.py`, `plugin/hooks/repeat-failure.py`
 - **Looks like:** a guard that silently lets through anything it cannot parse.
 - **Why it is deliberate:** the hooks run in every session of every user; a parse bug must never
   block work. The guard is a reminder, not a security boundary ([decisions D6](product/decisions.md#d6-hooks-ask-never-deny-and-fail-open)).
@@ -25,9 +25,9 @@ promise it makes.
   click; a missed install rewrites the lockfile.
 - **Breaks if changed:** installs wrapped in `sh -c` or `bash -lc` slip through.
 
-## `core.md` is at its size cap
+## `core.md` has a size cap
 
-- **Where:** `plugin/rules/core.md` (just under its 8900-byte cap, enforced by `scripts/check.sh`)
+- **Where:** `plugin/rules/core.md` (under its 8900-byte cap, enforced by `scripts/check.sh`)
 - **Looks like:** an arbitrary limit blocking a useful rule.
 - **Why it is deliberate:** the file loads into every session; the cap keeps the fixed cost bounded
   and, with the state card, under the 10,000-character hook output limit.

@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-24
+last-verified: 2026-11-08
 ---
 
 # Product overview
@@ -19,13 +19,13 @@ after compaction.
 
 A Claude Code plugin, installed from this repository as a plugin marketplace, that adds two things:
 
-1. **Long-term memory in an Obsidian vault.** Seven `brain-*` skills let the agent search the vault
+1. **Long-term memory in an Obsidian vault.** Eight `brain-*` skills let the agent search the vault
    before a task, capture decisions and lessons into the vault's `_inbox/` while it works, and help
    the user review, garden and consolidate what was captured. The vault is plain Markdown; the agent
    reads and writes it with its own file tools. The user approves everything that becomes knowledge.
 2. **An engineering operating model.** Core rules loaded into every session, workflow skills
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
-   conventions skills, ten agents (nine specialists and a verifier), four output styles and a small Bash guard.
+   conventions skills, ten agents (nine specialists and a verifier), four output styles and small hooks, among them a guard on Bash, Edit and Write.
 
 The plugin is Markdown and JSON plus five Python 3 hook scripts (standard library only). There is no server, database,
 index, binary, background job or network call in the plugin itself.
@@ -70,7 +70,7 @@ In scope for the first release:
 | Conventions skills | 7 (`*-conventions`) | `plugin/skills/` |
 | Agents | 10 | `plugin/agents/` |
 | Output styles | 4 | `plugin/output-styles/` |
-| Hooks | 5 (three on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash) | `plugin/hooks/hooks.json` |
+| Hooks | 6 (three on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash, Edit and Write, one on `PostToolUseFailure`) | `plugin/hooks/hooks.json` |
 | Core rules | 1 file | `plugin/rules/core.md` |
 | Vault template | 1 | `plugin/vault-template/` |
 | Project template | 1 | `templates/project/` (in the repository, not in the installed plugin) |
@@ -98,7 +98,7 @@ Out of scope, on purpose:
 
 ## Status
 
-Release 0.2.6; installs follow `main`, which moves only on a release. See [CHANGELOG.md](../../CHANGELOG.md) for what each
+Release 0.2.7; installs follow `main`, which moves only on a release. See [CHANGELOG.md](../../CHANGELOG.md) for what each
 release changed.
 
 ## Primary risks

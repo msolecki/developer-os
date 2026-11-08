@@ -68,8 +68,8 @@ The plugin has 6 hooks. On every `SessionStart` (startup, resume, `/clear`, comp
 every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
 session context. After a compaction, a resume or a fork inside a git repository, a second `SessionStart` hook,
 [`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
-`Newest plan:` line, `docs/plans/.devos-state.md` (the task state that implement-backlog, pr-cycle
-and audit-to-backlog keep there; hidden once it is older than 7 days), then up to 10 worktrees. A
+`Newest plan:` line, `docs/plans/.devos-state.md` (the task state that implement-backlog, pr-cycle,
+audit-to-backlog and parallel-lanes keep there; hidden once it is older than 7 days), then up to 10 worktrees. A
 longer card is cut at a whole line and ends with a cut marker. Installing the plugin therefore changes how the agent behaves everywhere, not only
 when you call a skill; read [`core.md`](plugin/rules/core.md) for the rules themselves.
 
@@ -143,11 +143,12 @@ without it the core rules still load and the other hooks do not run.
   performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
-- **Five hooks on three events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
-  once per long session, `PreToolUse` asks before installs, force pushes, hook bypasses and destructive commands (see above).
-- **Evals:** behavior checks for the brain skills, code-review, session-retro and the skill
-  triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
-  plugin payload.
+- **Six hooks on four events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
+  once per long session, `PreToolUse` asks before installs, force pushes, hook bypasses, destructive commands and edits of secret or agent-config files, and `PostToolUseFailure`
+  tells the agent to stop retrying a call that failed three times (see above).
+- **Evals:** behavior checks for the brain skills, the review, backlog, PR, lanes and session skills, the
+  agents, prompt-injection resistance and the skill triggers in [`evals/`](evals/README.md), run by hand with
+  `claude plugin eval`. Not part of the plugin payload.
 
 ## Documentation
 

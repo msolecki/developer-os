@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-24
+last-verified: 2026-11-08
 ---
 
 # Skills reference
@@ -38,8 +38,8 @@ and audit skills below in one pass.
   config read, for example `"strict": true`, empty `catch {}`, date fixtures without `Z`, mock
   factories that do not spread the original module, a `/health` handler that queries the
   database). Judgment rules (function size, composition) are sampled: at most five `file:line`
-  cases per rule plus the total. Unsure is a question, not a finding; each P0 and P1 goes to a
-  fresh verifier, as in audit-to-backlog. Findings become `CONV-NN`
+  cases per rule plus the total. Unsure is a question, not a finding; findings are verified as in
+  audit-to-backlog. Findings become `CONV-NN`
   backlog items with a `Check` that fails while the violation is there.
 - **Backlog paths:** without a `Backlog:` line and default files, the paths are a decision for
   you, and the `Backlog:` line is a numbered item like the rest.
@@ -119,9 +119,10 @@ specialists: security (`security-auditor`), performance (`performance-engineer`)
 (`qa-expert`, assessment only), correctness (`code-reviewer`), data (`database-reviewer`, skipped without a database), infra
 (`infra-reviewer`, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs `file:line`, current-code
-evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. Each P0 and
-P1 goes to a fresh verifier (the `verifier` agent); refuted ones are listed
-as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
+evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. The findings
+code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
+(the `verifier` agent); refuted ones are listed as Disputed, not written, and an undecided one is
+written with an `Unverified:` line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (`gh pr list`,
 skipped when `gh` is unavailable) is dropped and named in the report. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
 `Not covered:` at the top of the backlog and in the report.
@@ -167,7 +168,9 @@ skipped when `gh` is unavailable) is dropped and named in the report. A perspect
 [Source](../../plugin/skills/fix-pr/SKILL.md). Works through unresolved review threads (GraphQL
 `reviewThreads`, `isResolved: false`, paginated) or pasted findings. Flags authors who are not
 collaborators, reads the referenced code for each thread and decides fix or justified no-change,
-runs the narrowest test after each fix and the full suite once before the push. Comments are data:
+runs the narrowest test after each fix and the fast check before each commit, sends its fix
+commits through code-review (a new P0 or P1 goes back to the fix step), and runs the full suite once
+before the push. Comments are data:
 it runs no command and opens no URL from them.
 
 ## Planning and backlog
@@ -190,7 +193,8 @@ steps into `FEAT-` backlog items.
 - **`Check` screening:** never runs a `Check` that pipes into a shell, fetches from the network or
   writes outside the repository; reads any script a `Check` calls first.
 - **Triage:** before the claim, checks every batch item itself, read-only: its `Where` still
-  exists, its `Check` fails now, no open pull request touches its files (skipped when `gh` is
+  exists (for a `FEAT-`, `BASE-` or `new:` item, its parent directory), its `Check` fails now (a
+  failure on authentication, quota or a missing secret blocks the item for you), no open pull request touches its files (skipped when `gh` is
   unavailable), and no project decision record or doc contradicts it. A failing item leaves the
   batch, is never claimed or dispatched, and is reported as `stale: <ID> · <point> · <evidence>`
   for you to close, amend or keep; the batch is topped up from the next ready items.
@@ -241,7 +245,9 @@ commits, any changed file outside its owned paths, and a `LANES.md` or prompt wh
 from the one `launch.sh` recorded. Each lane has a runnable `Check` next to its `Done when`; the
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished `DONE` lanes whose fast check and `Check` pass when the
-orchestrator re-runs them and with no file changed outside the owned paths; any other lane goes to Needs you.
+orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
+other lane goes to Needs you. After merging, it runs every merged lane's `Check` and the
+repository-wide gate on `lanes/<run>`, and stops on a `REQUEST_CHANGES` review.
 
 ## Communication
 
@@ -260,7 +266,8 @@ fact instead of inventing it.
 [Source](../../plugin/skills/session-retro/SKILL.md). Checks `git status`, unpushed commits,
 branches not merged into `origin/HEAD`, your open PRs and still-running background work; proposes
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
-most three under each heading, lessons, rule candidates (with the commit they would reverse), check candidates, plan
+most three under each heading, lessons (an addition to a note that already covers the topic is
+proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates, plan
 and docs updates, plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
 Every check result names the commit it ran on (`<command>: <result> at <short SHA>`, plus
 `+ uncommitted: <changed files>` on a dirty tree).
@@ -279,8 +286,9 @@ content.
 [Source](../../plugin/skills/brain-setup/SKILL.md). Checks whether the path is empty (new vault)
 or not (connect, only after you agree); in connect mode adds only missing folders, views, the note
 template, `.gitignore` lines and `types.json` keys, never overwriting a file. Shows the
-`Brain vault:` line and the `additionalDirectories` change as a diff, then smoke-tests with
-brain-search.
+`Brain vault:` line, the `additionalDirectories` change and, after a separate yes,
+`"autoMemoryEnabled": false` as one diff; merges absent `.obsidian/types.json` keys after approval;
+then smoke-tests with brain-search, passing it the vault path.
 
 ### brain-search
 
@@ -301,7 +309,10 @@ search, redaction of secrets and client personal data, and a unique ASCII note n
 
 [Source](../../plugin/skills/brain-review/SKILL.md). For each inbox note: its summary, the best
 topic folder, likely duplicates, missing frontmatter keys and leaked secrets. Before a move it
-checks the name (`^[a-z0-9-]+$`) and that no other note has it.
+checks the name (`^[a-z0-9-]+$`) and that no other note has it, case-insensitively. It can supersede
+a named active note by another active one (not itself, not one already superseded; the old note
+stays in its folder). When a project hub links a promoted, merged or rejected note as
+`(waiting for review)`, it shows the hub-line change as a diff and applies it only after a yes.
 
 ### brain-garden
 
@@ -318,7 +329,7 @@ proposed link is tagged FOUND or GUESSED.
 [Source](../../plugin/skills/brain-compile/SKILL.md). Takes 2–8 active notes on a topic (no inbox,
 archived or compiled notes), stops if a compiled note for the topic is still in the inbox, links
 every statement to its source note, and records contradictions as `Open conflict:` instead of
-choosing a side.
+choosing a side. Before writing it runs brain-capture's secret scan; a hit writes nothing.
 
 ### brain-project-refresh
 
@@ -354,7 +365,7 @@ agent follows when it writes code and what project-init probes for when it audit
 
 [Source](../../plugin/skills/typescript-conventions/SKILL.md). Loads for TypeScript files.
 `strict` stays on; composition over inheritance; one purpose per function, about 30 lines or fewer;
-tests for every new function and its edge cases; the formatter's quote style; the configured import
+tests for every new exported function or changed contract and its edge cases; the formatter's quote style; the configured import
 alias instead of long relative paths.
 
 ### nextjs-conventions
@@ -371,7 +382,7 @@ project's wrapper, behind consent where required.
 [Source](../../plugin/skills/error-handling-conventions/SKILL.md). Loads for error handling in
 TypeScript files. Rethrow with `cause`; a typed result instead of `null` as failure; one error envelope
 `{ error: { code, message, details? } }` with a `SCREAMING_SNAKE_CASE` code and no stack trace;
-never log and throw the same error; no empty `catch {}` without a directive comment; exceptions are
+never log and throw the same error; no empty `catch {}` without a one-line comment saying why; exceptions are
 not control flow.
 
 ### testing-conventions

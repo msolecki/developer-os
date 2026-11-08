@@ -15,6 +15,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   changed gate counts only after it was seen to fail; a plan is deleted only after its steps landed.
 - Core rules for parallel lanes: stage explicit paths, re-run `git status` before the first edit, no `git stash`
   in a lane, run the repository-wide gate after integrating, never resume an interrupted lane.
+- brain-review can supersede a named active note by another active one (`status: superseded`, `superseded_by`);
+  the old note stays in its folder. It changes a project hub's `(waiting for review)` line only after a yes to the
+  shown diff.
+- fix-pr sends its fix commits through code-review before the push; a new P0 or P1 goes back to the fix step.
+- Backlog items may carry an optional `- Unverified: <reason>` line.
+- `scripts/check.sh`: an Imports stage fails a hook script that imports outside the standard-library allowlist or
+  names a network module (D2); the Evals stage fails a case without a positive deterministic grader; a `docs/*.md`
+  committed after its `last-verified` date prints a warning.
 
 ### Changed
 - The core-rules cap is 8900 bytes (was 8192). D10 amended.
@@ -22,6 +30,41 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - session-retro proposes a vault lesson only when it cost a retry, a correction or a re-derivation and
   `brain-search` finds no note that already says it; otherwise it proposes an update to that note. A decision needs no such cost,
   only the same `brain-search` check. Eval case `session-retro-capture-gate`.
+- Core rules are shorter (about 8.1 KB): the two full-suite lines are one, which also lets the full suite run
+  when a skill's gate requires it; the Self-correction and Boundaries sections are gone, except "I need X, Y,
+  and Z" under Communication; the duplicate test-runner line is dropped. Uncommitted subagent changes are the
+  caller's to commit; unfinished plan items go to the `Backlog:` paths.
+- implement-backlog: triage checks only the parent directory of `Where` for items without a `file:line`
+  (`FEAT-`, `BASE-`, `new:`); a `Check` that fails on authentication, quota or a missing secret blocks the item
+  for the user; an L item's plan goes to the user and the item stops; every brief carries the lane constraints
+  and the batch probes that `.worktrees/` is git-ignored before the claim; each `Unblock owner` has a defined
+  handling; open `Owner` lines are cleared in the record commit.
+- parallel-lanes: integrate sends a lane with uncommitted changes to Needs you, runs every merged lane's `Check`
+  and the repository-wide gate on `lanes/<run>`, stops on `REQUEST_CHANGES`, and deletes the state file when no
+  lane is left; the state keys are `Plan:` and `Agents:`.
+- fix-pr runs the fast check before each commit. pr-cycle fixes findings inline and dispatches no fix delegate.
+- The verifier's `UNDECIDED` is a complete answer that code-review does not retry; audit-to-backlog and
+  project-init verify what code-review selects (P0, P1 and up to five P2 correctness findings).
+- project-baseline rates the deny-list and secret-scanning practices P2, plans sessions of 5–7 items and states
+  the after-edit hook's shape inline. project-init allows baseline's `outdated` probe.
+- project-init, project-baseline, audit-to-backlog and implement-backlog descriptions name their neighbour skill;
+  several descriptions are shorter.
+- brain-capture leaves `project:` empty for a note about another project; every note-name uniqueness check is
+  case-insensitive; brain-compile runs brain-capture's secret scan before writing; brain-review no longer offers
+  to archive a compiled note's sources; session-retro proposes an addition to an existing note as a diff;
+  brain-setup and brain-garden create `_reports/`; brain-import-memory uses brain-capture's note format and
+  redaction list.
+- Agents: qa-expert says when a regression test was only seen green; the architect style writes an ADR from the
+  project's decision template with its frontmatter; performance-engineer, database-reviewer and infra-reviewer
+  share one MEASURED definition; research-analyst names what counts as a transient failure.
+- Conventions: typescript-conventions asks for tests for every new exported function or changed contract;
+  error-handling-conventions uses `{ ok: true, data? } | { ok: false, error }` and a one-line comment for an empty
+  `catch`; a long comment rationale goes to `docs/pitfalls.md` or a decision record.
+- The project template's `_Context.md` "Read first" is "Key code paths", and its `.gitignore` keeps `TODO-done.md`.
+- `scripts/check.sh`: the Site stage lists docs with `git ls-files`, so a git-ignored doc needs no page; the
+  Docs standard stage matches each template name as a fixed string on its own line; the Severity stage also reads
+  `docs/glossary.md`, which now quotes the P0–P3 scale verbatim.
+- Brain eval graders check the written note, not the trace.
 
 ### Fixed
 - parallel-lanes gives each lane a runnable `Check` next to its `Done when` and runs it itself at integrate;
@@ -36,6 +79,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   qa-expert, docs-writer, dependency-upgrader) runs only read-only git (`diff`, `log`, `show`, `status`, `blame`,
   `grep`, `ls-files`) and reads another revision with `git show` or `git diff`. An infra-reviewer had detached the
   orchestrator's HEAD mid-integration although the guard asks on that command: the ask was approved (#110).
+- The guard reads a shell backslash (`\rm -rf x`, `\npm i zod`) as the command it escapes, and still reads the
+  shell's own `\n` or `\t` as a break (`bash -c $'ls\nrm -rf x'`, `printf ... | sh`); checks every symlink
+  hop and the real path of an Edit or Write target, so a link to `.env` asks; lets `perl -M…` and `-I…` pass in a
+  read-only agent; counts a prefix of four or more characters of `--hard`, `--force`, `--dry-run`,
+  `--discard-changes`, `--worktree`, and rm's `--recursive`; asks in a read-only agent on a `git fetch` refspec that writes outside
+  `refs/remotes/`; and scans long git option lists in linear time.
+- capture-nudge counts only the `tool_use` blocks of assistant lines, so tool calls quoted in tool results no
+  longer bring the wrap-up nudge forward.
+- CI looks for gitleaks allow markers only in the pull request's own changes (`base...head`), and the marker pattern no longer matches its own line, so the workflow file stays scanned.
 
 ## [0.2.7] - 2026-10-31
 

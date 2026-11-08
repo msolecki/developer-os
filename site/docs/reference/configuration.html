@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/configuration.md@b5e46c22682d">
+<meta name="dos-source" content="docs/reference/configuration.md@c12588b9a28c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -46,7 +46,7 @@
 
   <main id="main" class="prose">
     <h1 id="configuration-reference">Configuration reference</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/configuration.md">docs/reference/configuration.md</a></span><span>Verified 2026-10-16</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/configuration.md">docs/reference/configuration.md</a></span><span>Verified 2026-11-08</span></p>
     <p>The plugin has no configuration file of its own. It is configured through lines and keys in files
     the user already has, which the skills read. This page lists every one of them.</p>
     <h2 id="user-level">User level</h2>
@@ -62,6 +62,7 @@
           <tr><td>Rule overrides</td><td><code>~/.claude/CLAUDE.md</code></td><td>The model, alongside the core rules</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code></td><td>Shell environment</td><td>The <code>Stop</code> hook (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_NOTICES</code></td><td>Shell environment</td><td>The <code>SessionStart</code> notices hook; <code>off</code> disables the version and upkeep notices (<a href="hooks.html#sessionstart-on-startup--noticespy">hooks.md</a>)</td><td>The user</td></tr>
+          <tr><td><code>DEVELOPER_OS_REPEAT_FAILURE</code></td><td>Shell environment</td><td>The <code>PostToolUseFailure</code> hook; <code>off</code> disables the repeated-failure reminder (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
         </tbody>
       </table>
     </div>
@@ -73,13 +74,13 @@
       <table>
         <thead><tr><th scope="col">Setting</th><th scope="col">Where</th><th scope="col">Read by</th><th scope="col">Default without it</th></tr></thead>
         <tbody>
-          <tr><td><code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code></td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>audit-to-backlog, implement-backlog, plan-status, project-baseline, spec, session-retro, the <code>SessionStart</code> hook (skips them as plans)</td><td><code>TODO.md</code>, <code>TODO-done.md</code>; audit-to-backlog and project-baseline ask before creating them and write the line</td></tr>
+          <tr><td><code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code></td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>audit-to-backlog, implement-backlog, plan-status, project-baseline, project-init, docs-sync, spec, session-retro, the <code>SessionStart</code> hook (skips them as plans)</td><td><code>TODO.md</code>, <code>TODO-done.md</code>; audit-to-backlog and project-baseline ask before creating them and write the line</td></tr>
           <tr><td>Planning location</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>Core rules, plan-status, spec, session-retro</td><td><code>docs/plans/&lt;YYYY-MM-DD-task&gt;.md</code>, git-ignored</td></tr>
           <tr><td>Specification location</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>spec</td><td>spec proposes <code>docs/specs/</code> and asks</td></tr>
           <tr><td>Fast check and full suite commands</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist</td><td>Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing</td></tr>
-          <tr><td><code>Vault project slug:</code></td><td><code>_Context.md</code></td><td>brain-search and brain-capture, which read <code>_Context.md</code> at the repository root when the line is not in context</td><td>Empty <code>project:</code></td></tr>
+          <tr><td><code>Vault project slug:</code></td><td><code>_Context.md</code></td><td>brain-search, brain-capture, brain-project-refresh and brain-import-memory, which read <code>_Context.md</code> at the repository root when the line is not in context</td><td>Empty <code>project:</code>; brain-project-refresh asks for the slug once, brain-import-memory proposes notes with an empty <code>project:</code> and asks</td></tr>
           <tr><td>Docs root</td><td><code>AGENTS.md</code></td><td>docs-sync</td><td><code>docs/</code></td></tr>
-          <tr><td>Task state</td><td><code>docs/plans/.devos-state.md</code> (fixed, even when the planning location is overridden)</td><td>The <code>SessionStart</code> hook after compaction</td><td>Written by implement-backlog, pr-cycle and audit-to-backlog; none</td></tr>
+          <tr><td>Task state</td><td><code>docs/plans/.devos-state.md</code> (fixed, even when the planning location is overridden)</td><td>The <code>SessionStart</code> hook after compaction</td><td>Written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes; none</td></tr>
           <tr><td><code>TODO.md</code> item format</td><td>The backlog todo file</td><td>audit-to-backlog, project-baseline, implement-backlog, plan-status</td><td><code>templates/project/TODO.md</code> shows it</td></tr>
           <tr><td><code>DESIGN.md</code></td><td>Repository root, for projects with a UI</td><td>Agents doing UI work (the template <code>AGENTS.md</code> line), project-baseline, docs-sync</td><td>project-baseline proposes it as a backlog item</td></tr>
         </tbody>
