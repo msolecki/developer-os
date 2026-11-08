@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@33c7cc9c77b7">
+<meta name="dos-source" content="docs/reference/skills.md@1a3d972ebe3b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -161,7 +161,8 @@ code-review would verify (each P0 and P1, up to five P2 correctness findings) go
 written with an <code>Unverified:</code> line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (<code>gh pr list</code>,
 skipped when <code>gh</code> is unavailable) is dropped and named in the report. A perspective whose reviewer ended <code>BLOCKED</code>, failed or hit its turn cap is listed under
-<code>Not covered:</code> at the top of the backlog and in the report.</p>
+<code>Not covered:</code> at the top of the backlog and in the report, with the union of the reviewers'
+<code>Not read:</code> lines (in-scope paths they did not open).</p>
     <h2 id="code-review-and-pull-requests">Code review and pull requests</h2>
     <h3 id="code-review">code-review</h3>
     <p><a href="../../skills/code-review.html">Source</a>. Reviews a PR, diff, commit or working tree.</p>
@@ -240,7 +241,8 @@ gap as a <code>FEAT-</code> item for your approval.</li>
     </ul>
     <h3 id="plan-status">plan-status</h3>
     <p><a href="../../skills/plan-status.html">Source</a>. Counts, never estimates: done, open and blocked
-in the active plan by a stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
+in the active plan (a top-level file of the planning location, not <code>approved/</code> or <code>lanes/</code>) by a
+stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
 <code>Owner</code> older than 7 days), waiting, claimed or ready. Open decisions become at most five numbered
 A/B/C questions. It runs no test or build to get a number.</p>
     <h3 id="bug-triage">bug-triage</h3>

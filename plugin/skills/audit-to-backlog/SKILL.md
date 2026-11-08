@@ -35,13 +35,13 @@ Run the requested perspectives in parallel:
 | ui | inline pass or a general-purpose agent |
 | a11y | inline pass or a general-purpose agent |
 
-Give each reviewer the objective, an explicit scope (directories or a file list), constraints, stack, output format, and the cap: every P0 and P1, plus at most 15 P2/P3 findings ordered by impact.
+Give each reviewer the objective, an explicit scope (directories or a file list), constraints, stack, output format, a `Not read:` line listing the in-scope paths it did not open, and the cap: every P0 and P1, plus at most 15 P2/P3 findings ordered by impact.
 
 Require each finding to include a unique category ID, `file:line`, severity, problem, current-code evidence, actionable fix, size, a `Done when` criterion, and a runnable `Check` command. Reject unsupported claims.
 
 Every brief ends with the final-status contract: the report's first line is `DONE`, `REVIEW`, `BLOCKED` (with `Unblock owner: user | orchestrator | <item ID>`) or `CONTINUING`. Send a report without one back once; a second miss is `BLOCKED`, `Unblock owner: orchestrator`.
 
-A perspective whose reviewer ended `BLOCKED`, failed, or returned output marked partial (its turn cap) is a missing pass: name it, with the reason, under `Not covered:` at the top of the backlog and in the report. Never present the backlog as a complete audit while one is missing.
+A perspective whose reviewer ended `BLOCKED`, failed, or returned output marked partial (its turn cap) is a missing pass: name it, with the reason, under `Not covered:` at the top of the backlog and in the report, with the union of the reviewers' `Not read:` lines. Never present the backlog as a complete audit while one is missing.
 
 Severity: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup.
 

@@ -127,7 +127,8 @@ code-review would verify (each P0 and P1, up to five P2 correctness findings) go
 written with an `Unverified:` line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (`gh pr list`,
 skipped when `gh` is unavailable) is dropped and named in the report. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
-`Not covered:` at the top of the backlog and in the report.
+`Not covered:` at the top of the backlog and in the report, with the union of the reviewers'
+`Not read:` lines (in-scope paths they did not open).
 
 ## Code review and pull requests
 
@@ -217,7 +218,8 @@ questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–
 ### plan-status
 
 [Source](../../plugin/skills/plan-status/SKILL.md). Counts, never estimates: done, open and blocked
-in the active plan by a stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
+in the active plan (a top-level file of the planning location, not `approved/` or `lanes/`) by a
+stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
 `Owner` older than 7 days), waiting, claimed or ready. Open decisions become at most five numbered
 A/B/C questions. It runs no test or build to get a number.
 
