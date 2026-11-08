@@ -310,6 +310,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   lint is proposed to projects yet.
 - **Why:** parallel agents took the same or blocked items, and implementers could lower a criterion
   to pass. A project lint waits until plan-status shows the format drifting.
+- **Amended 2026-11-08:** with a git-ignored backlog, implement-backlog keeps the `Owner` lines
+  uncommitted in the orchestrator's checkout and still runs parallel delegates, each brief carrying the
+  full item text, instead of running the batch sequentially; a run of 9 parallel lanes over 63 items
+  worked this way (#134). When the user asks for a PR, it pushes the batch branch and opens one, never
+  merging it, instead of the local fast-forward.
 
 ## D18. agnix in CI only, pinned
 
@@ -513,3 +518,6 @@ here before reversing a rule.
 | 2026-11-08 | Uncommitted subagent changes are the caller's to commit; "Agents produce commits" -> "Lanes produce commits" | `plugin/rules/core.md` | Agents never commit since #117 (RULE-01) |
 | 2026-11-08 | `-F <msg-file>`; test-config rule moved to Validation; unfinished plan items go to the `Backlog:` paths (default `TODO.md`) | `plugin/rules/core.md` | Wording fixes (RULE-02) |
 | 2026-11-08 | A site page in the repository that restates a doc or skill counts as a doc for the docs finding | `code-review` | Skill pages drifted from their `SKILL.md` while every review passed (D28) |
+| 2026-11-08 | security-auditor gets a closed not-a-finding list read with `docs/reference/review-exclusions.md`; rate limiting, including on auth endpoints, moves from the focus list to it (AGT-07, #133). Amended the same day: an excluded class (missing rate limiting, open redirect) is reported when the finding shows a concrete account-takeover or token-theft path with `file:line` (AGT-17) | `security-auditor` | The exclusions cut inflated P1s, but as a closed list they hid a login with no throttle and a `?next=` redirect that lead to takeover or token theft (PR #133 review) |
+| 2026-11-08 | audit-to-backlog briefs reviewers with a KEEP/DROP impact rubric, rejects a `Check` joined by prose, ending in `\| head`, already passing or restating the current code, runs each P1/P2 `Check` red before writing the item, and recommends re-verifying an old backlog (#126) | `audit-to-backlog` | About 30% of P2/P3 items were dropped on re-verification and 5 of about 50 P1/P2 Checks were wrong |
+| 2026-11-08 | implement-backlog runs parallel delegates with a git-ignored backlog (uncommitted `Owner` lines, full item text in each brief) and has an optional PR ending, only on request, that pushes the batch branch and opens a PR it never merges; implement-backlog and parallel-lanes run the project's regeneration command for derived files after each lane merge and every `Check` from the worktree root (#134; D17 amended) | `implement-backlog`, `parallel-lanes`, `audit-to-backlog` | A git-ignored backlog forced sequential work, a requested PR had no steps, site hashes conflicted on every lane merge, and a `Check` run from another checkout tested the wrong tree |

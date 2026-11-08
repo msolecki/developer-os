@@ -28,7 +28,7 @@ Authentication and authorization bypass, IDOR, missing server-side checks on cli
 
 ## Not a finding
 
-Do not report these classes, whatever their severity looks like; the list is closed. Also read `docs/reference/review-exclusions.md` when the project has one and apply its exclusions the same way.
+Do not report these classes, whatever their severity looks like; the list is closed. One exception: report an excluded class (missing rate limiting, open redirect) when the finding shows a concrete account-takeover or token-theft path with `file:line`. Also read `docs/reference/review-exclusions.md` when the project has one and apply its exclusions the same way.
 
 - Volumetric denial of service, resource exhaustion and missing rate limiting, including on auth endpoints.
 - Code in tests, fixtures, examples or dead code no entry point reaches.

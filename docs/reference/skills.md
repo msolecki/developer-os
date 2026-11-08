@@ -123,14 +123,19 @@ specialists: security (`security-auditor`), performance (`performance-engineer`)
 (`infra-reviewer`, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs `file:line`, current-code
 evidence, a fix, a `Done when` and a runnable `Check` (a negated grep paired with `test -f`, no
-error swallowed into a default); unsupported claims are rejected. The findings
+error swallowed into a default; not two commands joined by prose, a trailing `| head`, a test that
+already passes or a restatement of the current code); unsupported claims are rejected. Reviewers keep
+findings with real impact and drop style, comments, refactor wishes and unmeasured performance (the
+KEEP/DROP rubric). Each P1 and P2 `Check` is run once and must exit non-zero before its item is
+written. The findings
 code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
 (the `verifier` agent); refuted ones are listed as Disputed, not written, and an undecided one is
 written with an `Unverified:` line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (`gh pr list`,
 skipped when `gh` is unavailable) is dropped and named in the report. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
 `Not covered:` at the top of the backlog and in the report, with the union of the reviewers'
-`Not read:` lines (in-scope paths they did not open).
+`Not read:` lines (in-scope paths they did not open). For a backlog whose base commit is old, or after
+a large rename, it recommends re-verifying it before implement-backlog.
 
 ## Code review and pull requests
 
@@ -213,12 +218,17 @@ questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–
   unavailable), and no project decision record or doc contradicts it. A failing item leaves the
   batch, is never claimed or dispatched, and is reported as `stale: <ID> · <point> · <evidence>`
   for you to close, amend or keep; the batch is topped up from the next ready items.
-- **While running:** runs each item's `Check` itself on a `DONE` report, then the full build, types,
+- **Git-ignored backlog:** the `Owner` lines stay uncommitted in the orchestrator's checkout, and
+  each delegate's brief carries the full item text, so the batch can still run in parallel worktrees.
+- **While running:** runs each item's `Check` itself from the delegate's worktree root on a `DONE`
+  report, the project's regeneration command for derived files after each merge, then the full build, types,
   tests and lint for the batch; classifies a failure before editing; stops after three failed
   repair cycles.
 - **Review:** the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
   the item's `Done when` nor the spec settles goes to you as an intent gap; the base moves only by a
-  fast-forward after the review passes.
+  fast-forward after the review passes. When you ask for a PR, it pushes the batch branch and opens
+  one whose body lists the items, dropped and unverified items and review verdicts, instead of the
+  fast-forward; it never merges it, and the done items are marked `PR #N, open`.
 - **Spec convergence:** when the batch closes the last open item that cites a spec, checks each
   acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
   gap as a `FEAT-` item for your approval.
@@ -277,7 +287,8 @@ can be resumed: `resume.sh` continues its session with `claude -p --resume` afte
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished `DONE` lanes whose fast check and `Check` pass when the
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
-other lane goes to Needs you. After merging, it runs every merged lane's `Check` and the
+other lane goes to Needs you. After each lane merge it runs the project's regeneration command for
+derived files (in developer-os, `scripts/site-hashes.py`). After merging, it runs every merged lane's `Check` and the
 repository-wide gate on `lanes/<run>`, and stops on a `REQUEST_CHANGES` review.
 
 ## Communication
@@ -310,7 +321,9 @@ Every check result names the commit it ran on (`<command>: <result> at <short SH
 typed commands in local transcripts (deduplicated by message uuid): last 30 days, ever, last date,
 with a keep / rewrite-description / merge / remove / hide suggestion per skill (hide: only ever typed, so
 `disable-model-invocation: true` frees the shared skill listing). It prints no transcript
-content. It runs in a forked subagent (`context: fork`), so only its report reaches the conversation.
+content. It runs in a forked subagent (`context: fork`), so only its report reaches the conversation;
+`background: false`, a skill field that applies with `context: fork` ([skills frontmatter
+reference](https://code.claude.com/docs/en/skills)), makes the invoking turn wait for that report.
 
 ## Brain (Obsidian vault)
 

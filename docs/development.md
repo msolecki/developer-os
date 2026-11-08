@@ -103,7 +103,10 @@ Each page that restates a source carries `<meta name="dos-source" content="<sour
 first 12 hex digits of the source's SHA-256 with any `last-verified:` line removed, so re-verifying a
 doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style,
 the Site stage names the page to refresh: update its text, then its hash
-(`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). A page under `site/docs/` must
+(`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). The regeneration command for
+these derived hashes, which implement-backlog and parallel-lanes run after each lane merge, is
+`python3 scripts/site-hashes.py` from the repository root: it rewrites every `dos-source` hash to its
+source's current one and changes no page text. A page under `site/docs/` must
 carry its source's words in order, so a new hash on an unedited page still fails; skill, agent and
 output-style pages are summaries, which code-review checks instead (D28). A new doc or skill needs a new
 page, and a new doc an entry in `NAV`. The landing page and the skills index restate many sources
