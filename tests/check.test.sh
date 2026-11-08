@@ -272,6 +272,9 @@ run "an eval case with only llm graders" fail "evals: evals/spec-no-implementati
 printf 'import urllib.request\n' >> "$r/plugin/hooks/notices.py"
 run "a hook importing a network module" fail "imports: plugin/hooks: import outside the standard-library allowlist"
 
+printf 'import urllib.request\n' >> "$r/plugin/skills/session-retro/harvest.py"
+run "a skill script importing a network module" fail "imports: plugin/hooks: import outside the standard-library allowlist"
+
 printf 'x = __import__("socket")\n' >> "$r/plugin/hooks/notices.py"
 run "a hook loading a module dynamically" fail "imports: plugin/hooks: network module or dynamic import"
 

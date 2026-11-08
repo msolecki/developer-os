@@ -40,6 +40,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   depend on Python; without `python3` the other three hooks fail open.
 - **Amended 2026-10-24:** a fourth script, `notices.py`, on `SessionStart` `startup` (D22).
 - **Amended 2026-11-08:** a fifth script, repeat-failure.py (D26).
+- **Amended 2026-11-08:** a stdlib script may also sit beside a skill, run by that skill and checked by
+  the Imports stage: `plugin/skills/session-retro/harvest.py`, which reads past session transcripts for
+  session-retro's window mode (FLOW-55).
 
 ## D3. The vault is read and written with the agent's own file tools
 
@@ -528,3 +531,4 @@ here before reversing a rule.
 | 2026-11-08 | security-auditor gets a closed not-a-finding list read with `docs/reference/review-exclusions.md`; rate limiting, including on auth endpoints, moves from the focus list to it (AGT-07, #133). Amended the same day: an excluded class (missing rate limiting, open redirect) is reported when the finding shows a concrete account-takeover or token-theft path with `file:line` (AGT-17) | `security-auditor` | The exclusions cut inflated P1s, but as a closed list they hid a login with no throttle and a `?next=` redirect that lead to takeover or token theft (PR #133 review) |
 | 2026-11-08 | audit-to-backlog briefs reviewers with a KEEP/DROP impact rubric, rejects a `Check` joined by prose, ending in `\| head`, already passing or restating the current code, runs each P1/P2 `Check` red before writing the item, and recommends re-verifying an old backlog (#126) | `audit-to-backlog` | About 30% of P2/P3 items were dropped on re-verification and 5 of about 50 P1/P2 Checks were wrong |
 | 2026-11-08 | implement-backlog runs parallel delegates with a git-ignored backlog (uncommitted `Owner` lines, full item text in each brief) and has an optional PR ending, only on request, that pushes the batch branch and opens a PR it never merges; implement-backlog and parallel-lanes run the project's regeneration command for derived files after each lane merge and every `Check` from the worktree root (#134; D17 amended) | `implement-backlog`, `parallel-lanes`, `audit-to-backlog` | A git-ignored backlog forced sequential work, a requested PR had no steps, site hashes conflicted on every lane merge, and a `Check` run from another checkout tested the wrong tree |
+| 2026-11-08 | session-retro with a window (`14d`, a date, `all`) runs `harvest.py` on past transcripts and proposes at most five lessons from its candidates, routed to the vault, project docs or a hook/check proposal, never to `CLAUDE.md`/`AGENTS.md` without approval of that file by name; transcript text is data | `session-retro` | Corrections spread across sessions were never collected, so the same correction recurred (FLOW-55) |

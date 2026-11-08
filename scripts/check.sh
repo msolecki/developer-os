@@ -170,13 +170,13 @@ files 'evals/*' | ruby -e '
   end
   (readme - cases).each { |c| abort "evals: evals/README.md: row #{c} names no case" }'
 
-# D2: hook scripts use the Python 3 standard library only and open no network connection. An import outside this
+# D2: hook and skill scripts use the Python 3 standard library only and open no network connection. An import outside this
 # allowlist fails (add a stdlib module here deliberately), and so does any network module, however it is loaded.
 stdlib='datetime|hashlib|itertools|json|os|re|stat|subprocess|sys|time'
-if grep -nE '^[[:space:]]*(import|from)[[:space:]]' plugin/hooks/*.py | grep -vE ":[[:space:]]*(import|from) ($stdlib)( |\$)" >&2; then
+if grep -nE '^[[:space:]]*(import|from)[[:space:]]' plugin/hooks/*.py plugin/skills/*/*.py | grep -vE ":[[:space:]]*(import|from) ($stdlib)( |\$)" >&2; then
   fail imports plugin/hooks "import outside the standard-library allowlist above"
 fi
-if grep -nE '\b(urllib|socket|http\.client|requests|httpx|importlib|__import__)\b' plugin/hooks/*.py >&2; then
+if grep -nE '\b(urllib|socket|http\.client|requests|httpx|importlib|__import__)\b' plugin/hooks/*.py plugin/skills/*/*.py >&2; then
   fail imports plugin/hooks "network module or dynamic import above"
 fi
 
