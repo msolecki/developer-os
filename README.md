@@ -101,9 +101,9 @@ also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `
 `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form, and a command
 that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag (`rm -rf`),
 `git reset --hard`, `git clean -f`, `git checkout`/`git restore` of `.`, `:/` or `*`, `git checkout -f`,
-`git switch --discard-changes`, `git worktree remove --force`, `git stash drop`/`clear` or `find … -delete` (`git restore --staged .` and `git clean -n` pass). An Edit or Write asks when its file is a `.env`, `.envrc` or `.env.*` (not
+`git switch -f`/`--discard-changes`, `git worktree remove --force`, `git rm -f`, `git stash drop`/`clear` or `find … -delete` (`git restore --staged .` and `git clean -n` pass). An Edit or Write asks when its file is a `.env`, `.envrc` or `.env.*` (not
 `.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, or `~/.claude/` `hooks`,
-`rules`, `agents`, `skills` or `commands`, or is `~/.claude.json`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` or `settings.local.json` (also under `$CLAUDE_CONFIG_DIR`). Inside the five read-only review agents, a Bash
+`rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`, or is `~/.claude.json`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` or `settings.local.json` (also under `$CLAUDE_CONFIG_DIR`). Inside the five read-only review agents, a Bash
 call that writes outside the temp directories (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, `prettier --write`, `eslint --fix`, `gh pr checkout`, a git command that changes the
 tree, history or remotes) asks too. A `git commit` that asks for nothing gets a one-line reminder, as context for
 the agent, to run the fast check first. `$IFS`

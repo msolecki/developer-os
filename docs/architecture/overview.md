@@ -142,8 +142,10 @@ flowchart LR
 
 Every dispatched agent answers with a final status (`DONE`, `REVIEW`, `BLOCKED`, `CONTINUING`) that
 the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog), an offer
-the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Other edges: pr-cycle sends its conflict resolutions to code-reviewer; session-retro calls brain-search and offers docs-sync; brain-garden runs brain-compile for a shared rule the user names; bug-triage offers spec; brain-compile borrows brain-capture's step 5 secret scan and brain-import-memory its steps 5 and 6. Two skills sit outside the diagram: parallel-lanes reviews its integrated branch through
-code-review, and brain-project-refresh leaves a missing hub as an inbox draft for brain-review. audit-to-backlog also
+the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Other edges: pr-cycle sends its conflict resolutions to code-reviewer; session-retro calls brain-search and offers docs-sync; brain-garden runs brain-compile for a shared rule the user names; bug-triage offers spec; brain-compile borrows brain-capture's step 5 secret scan and brain-import-memory its steps 5 and 6. Three skills sit outside the diagram: parallel-lanes reviews its integrated branch through
+code-review, brain-project-refresh leaves a missing hub as an inbox draft for brain-review, and project-init runs
+project-baseline, docs-sync and instruction-review up to their reports, loads each applicable conventions skill and
+sends blocking findings to the verifier as audit-to-backlog does. audit-to-backlog also
 dispatches database-reviewer (data) and infra-reviewer (infra); code-review adds them for migration,
 schema, query, IaC or CI diffs; docs-sync may hand approved items to docs-writer; project-baseline asks
 dependency-upgrader for the three dependencies furthest behind. The backlog contract shared by audit-to-backlog, project-baseline and
@@ -181,7 +183,7 @@ web tools could send it further, which the plugin cannot prevent ([SECURITY.md](
 | Subagent output | A delegate's edits | Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare `git status` and `git diff` |
 | Plugin updates | A new commit's hooks and rules | `SECURITY.md`: review the diff from the installed commit before updating; auto-update is off by default |
 | Project instructions | A cloned repository's `CLAUDE.md` naming a vault | The brain skills and the notices hook read the `Brain vault:` line from the user-level `CLAUDE.md` only (D5, D22); the hook prints counts, never note names |
-| Session transcripts | Past conversations | Only skill-usage reads them, and only counts; session-retro and docs-sync never open them |
+| Session transcripts | Past conversations | skill-usage reads them and reports only counts; the capture-nudge hook reads the current session's transcript for its tool-call count and background-task and Monitor state, never printing its content; session-retro and docs-sync never open them |
 
 ## 7. Validation
 

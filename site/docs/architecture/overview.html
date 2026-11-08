@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@f73c58f34a5a">
+<meta name="dos-source" content="docs/architecture/overview.md@c8dcc81870c5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -258,8 +258,10 @@ site/                             public documentation site, published by .githu
 </svg></div>
     <p>Every dispatched agent answers with a final status (<code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code>) that
     the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog), an offer
-    the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Other edges: pr-cycle sends its conflict resolutions to code-reviewer; session-retro calls brain-search and offers docs-sync; brain-garden runs brain-compile for a shared rule the user names; bug-triage offers spec; brain-compile borrows brain-capture's step 5 secret scan and brain-import-memory its steps 5 and 6. Two skills sit outside the diagram: parallel-lanes reviews its integrated branch through
-code-review, and brain-project-refresh leaves a missing hub as an inbox draft for brain-review. audit-to-backlog also
+    the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Other edges: pr-cycle sends its conflict resolutions to code-reviewer; session-retro calls brain-search and offers docs-sync; brain-garden runs brain-compile for a shared rule the user names; bug-triage offers spec; brain-compile borrows brain-capture's step 5 secret scan and brain-import-memory its steps 5 and 6. Three skills sit outside the diagram: parallel-lanes reviews its integrated branch through
+code-review, brain-project-refresh leaves a missing hub as an inbox draft for brain-review, and project-init runs
+project-baseline, docs-sync and instruction-review up to their reports, loads each applicable conventions skill and
+sends blocking findings to the verifier as audit-to-backlog does. audit-to-backlog also
 dispatches database-reviewer (data) and infra-reviewer (infra); code-review adds them for migration,
 schema, query, IaC or CI diffs; docs-sync may hand approved items to docs-writer; project-baseline asks
 dependency-upgrader for the three dependencies furthest behind. The backlog contract shared by audit-to-backlog, project-baseline and
@@ -299,7 +301,7 @@ dependency-upgrader for the three dependencies furthest behind. The backlog cont
           <tr><td>Subagent output</td><td>A delegate's edits</td><td>Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare <code>git status</code> and <code>git diff</code></td></tr>
           <tr><td>Plugin updates</td><td>A new commit's hooks and rules</td><td><code>SECURITY.md</code>: review the diff from the installed commit before updating; auto-update is off by default</td></tr>
           <tr><td>Project instructions</td><td>A cloned repository's <code>CLAUDE.md</code> naming a vault</td><td>The brain skills and the notices hook read the <code>Brain vault:</code> line from the user-level <code>CLAUDE.md</code> only (D5, D22); the hook prints counts, never note names</td></tr>
-          <tr><td>Session transcripts</td><td>Past conversations</td><td>Only skill-usage reads them, and only counts; session-retro and docs-sync never open them</td></tr>
+          <tr><td>Session transcripts</td><td>Past conversations</td><td>skill-usage reads them and reports only counts; the capture-nudge hook reads the current session's transcript for its tool-call count and background-task and Monitor state, never printing its content; session-retro and docs-sync never open them</td></tr>
         </tbody>
       </table>
     </div>
