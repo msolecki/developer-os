@@ -100,6 +100,13 @@ run "an agnix finding fails the check" fail "agnix: .: agnix --strict failed abo
 rm "$tmp/bin/agnix"
 runpath=
 
+# In CI a missing agnix fails, never skips: a PATH without any directory that holds agnix.
+noagnix=$(IFS=:; for d in $PATH; do [ -x "$d/agnix" ] || printf '%s:' "$d"; done)
+out=$(cd "$r" && CI=1 PATH="${noagnix%:}" bash scripts/check.sh 2>&1) && got=pass || got=fail
+case $out in *"agnix not found; CI must set it up"*) ;; *) got="$got without the agnix message" ;; esac
+if [ "$got" = fail ]; then echo "ok   agnix missing in CI fails"; else echo "FAIL agnix missing in CI fails: got $got" >&2; failed=1; fi
+reset
+
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'
 run "an action skill without ## Never" fail "plugin/skills/spec/SKILL.md: skill has no ## Never section"
 
