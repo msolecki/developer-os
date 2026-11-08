@@ -113,7 +113,7 @@ evals/
     │                    plus planted defects (a broken link, an orphan without a summary)
     │                    (brain-garden-no-apply plants more in its own scaffold)
     ├── superseded.sh    the vault plus superseded notes per mode (chain, dangling, cycle, nofield)
-    ├── vault.sh         copies the vault into a workspace and writes CLAUDE.md with `Brain vault:`
+    ├── vault.sh         copies the vault into a workspace; each brain case's prompt names ./vault
     ├── repo.sh          a one-commit pnpm project in git
     ├── backlog.sh       repo.sh plus a passing test suite, for backlog cases
     └── cart-discount.sh the reviewed commit, with or without the off-by-one

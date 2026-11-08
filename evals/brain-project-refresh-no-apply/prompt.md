@@ -5,3 +5,5 @@ allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Skill]
 ---
 
 Refresh the project note for this repo in my brain.
+
+My brain vault is ./vault.

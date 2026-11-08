@@ -293,8 +293,8 @@ then smoke-tests with brain-search, passing it the vault path.
 
 ### brain-search
 
-[Source](../../plugin/skills/brain-search/SKILL.md). Finds the vault from the `Brain vault:` line
-(never by searching the disk), searches content and frontmatter with `rg`, drops archived notes,
+[Source](../../plugin/skills/brain-search/SKILL.md). Finds the vault from the path you give or the
+`Brain vault:` line of the user-level `CLAUDE.md` (never a project file, never by searching the disk), searches content and frontmatter with `rg`, drops archived notes,
 ranks by `summary`/`tags`/name match, project slug, `active` over `inbox` and recency, reads the
 top five, follows a superseded note's `superseded_by` chain to the current note (a broken or looping
 chain is incomplete history, with no note named current), and answers only from them with a path
@@ -302,9 +302,12 @@ per claim.
 
 ### brain-capture
 
-[Source](../../plugin/skills/brain-capture/SKILL.md). Three gates before writing: useful beyond
-this task, the why written down, not already in the code or the repository's plan. Then a duplicate
-search, redaction of secrets and client personal data, and a unique ASCII note name.
+[Source](../../plugin/skills/brain-capture/SKILL.md). Four gates before writing: useful beyond
+this task, the why written down, not already in the code or the repository's plan, not better held by
+a test, lint rule or project instruction (it names or proposes that instead). Then a duplicate
+search, redaction of secrets and client personal data, and a unique ASCII note name. Every claim about
+code is re-read in the current tree and cited as repository path plus defining symbol; merge state is
+a PR number, not a SHA.
 
 ### brain-review
 
@@ -335,7 +338,7 @@ choosing a side. Before writing it runs brain-capture's secret scan; a hit write
 ### brain-project-refresh
 
 [Source](../../plugin/skills/brain-project-refresh/SKILL.md). Finds the hub by the
-`Vault project slug:` line in `_Context.md` and a `type: project` note with that slug. Checks the
+`Vault project slug:` line in `_Context.md` (accepted only when it matches `^[a-z0-9-]+$`) and a `type: project` note with that slug. Checks the
 hub against the README, the docs map, `CURRENT-STATE.md`, the decision records and the last 30
 commits (claims the repository contradicts, repository paths that no longer exist) and against the
 vault (active or superseded notes of the slug it does not link, links to notes that do not exist, a

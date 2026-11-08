@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-compile/SKILL.md@27d6307b92f2">
+<meta name="dos-source" content="plugin/skills/brain-compile/SKILL.md@9f3d7d834899">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -66,7 +66,7 @@
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
-      <li><strong>Finds the vault</strong> from a path the calling skill just gave or the <code>Brain vault:</code> line, in the same order as the other brain skills, and asks once if there is none.</li>
+      <li><strong>Finds the vault</strong> from a path you or the calling skill gave, or the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code>, as the other brain skills do, and asks once if there is none.</li>
       <li><strong>Looks for an earlier compile.</strong> It matches names case-insensitively, as Obsidian does. If a <code>&lt;topic&gt;-compiled</code> note is already in <code>_inbox/</code>, it stops and tells you to review that one first. One elsewhere in the vault is named in the report as <code>Earlier compile:</code> so you can merge the two in review. If the name is taken anywhere in the vault, the new note gets a <code>-2</code> suffix.</li>
       <li><strong>Picks the sources.</strong> Only <code>status: active</code> notes in topic folders count; <code>_inbox/</code>, <code>_archive/</code>, <code>templates/</code>, <code>_views/</code>, <code>_reports/</code> and notes tagged <code>compiled</code> are skipped. It reads each candidate's <code>summary</code> and <code>tags</code> first, then at most eight relevant notes in full. With fewer than two sources it stops.</li>
       <li><strong>Writes the compiled note.</strong> The body has <code>## Context</code>, <code>## Decision</code>, <code>## Why</code> and <code>## Links</code>; the frontmatter has a <code>sources:</code> list with a quoted <code>"[[name]]"</code> link for every note used and only those; <code>project:</code> is the sources' shared slug when they all have the same non-empty one, otherwise empty. Every statement links the note it comes from, no fact is added that is not in a source, and contradictions become <code>Open conflict:</code> bullets instead of a chosen side. Secrets become <code>[REDACTED]</code>, and it tells you. Before writing, it runs brain-capture's secret-pattern scan on the note; a match writes nothing and it asks you how to redact the line.</li>

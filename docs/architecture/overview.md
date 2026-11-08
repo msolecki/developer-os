@@ -180,7 +180,7 @@ web tools could send it further, which the plugin cannot prevent ([SECURITY.md](
 | External repositories | `.claude/settings.json`, hooks, `.mcp.json` of a client or OSS repo | Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread |
 | Subagent output | A delegate's edits | Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare `git status` and `git diff` |
 | Plugin updates | A new commit's hooks and rules | `SECURITY.md`: review the diff from the installed commit before updating; auto-update is off by default |
-| Project instructions | A cloned repository's `CLAUDE.md` naming a vault | The notices hook reads the `Brain vault:` line from the user-level `CLAUDE.md` only and prints counts, never note names |
+| Project instructions | A cloned repository's `CLAUDE.md` naming a vault | The brain skills and the notices hook read the `Brain vault:` line from the user-level `CLAUDE.md` only (D5, D22); the hook prints counts, never note names |
 | Session transcripts | Past conversations | Only skill-usage reads them, and only counts; session-retro and docs-sync never open them |
 
 ## 7. Validation
