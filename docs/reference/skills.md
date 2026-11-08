@@ -120,7 +120,8 @@ specialists: security (`security-auditor`), performance (`performance-engineer`)
 (`qa-expert`, assessment only), correctness (`code-reviewer`), data (`database-reviewer`, skipped without a database), infra
 (`infra-reviewer`, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs `file:line`, current-code
-evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. The findings
+evidence, a fix, a `Done when` and a runnable `Check` (a negated grep paired with `test -f`, no
+error swallowed into a default); unsupported claims are rejected. The findings
 code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
 (the `verifier` agent); refuted ones are listed as Disputed, not written, and an undecided one is
 written with an `Unverified:` line. Findings are deduplicated by file and root cause against the backlog and
@@ -196,15 +197,18 @@ questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–
 - **`Check` screening:** never runs a `Check` that pipes into a shell, fetches from the network or
   writes outside the repository; reads any script a `Check` calls first.
 - **Triage:** before the claim, checks every batch item itself, read-only: its `Where` still
-  exists (for a `FEAT-`, `BASE-` or `new:` item, its parent directory), its `Check` fails now (a
-  failure on authentication, quota or a missing secret blocks the item for you), no open pull request touches its files (skipped when `gh` is
+  exists (for a `FEAT-`, `BASE-`, `PLAN-` or `new:` item, its parent directory), its `Check` fails
+  now (exit 126 or 127, a grep exit 2 or a "no such file" or "no tests found" message is a broken
+  `Check`, so the item is stale; a failure on authentication, quota or a missing secret blocks the
+  item for you), no open pull request touches its files (skipped when `gh` is
   unavailable), and no project decision record or doc contradicts it. A failing item leaves the
   batch, is never claimed or dispatched, and is reported as `stale: <ID> · <point> · <evidence>`
   for you to close, amend or keep; the batch is topped up from the next ready items.
 - **While running:** runs each item's `Check` itself on a `DONE` report, then the full build, types,
   tests and lint for the batch; classifies a failure before editing; stops after three failed
   repair cycles.
-- **Review:** the batch diff through code-review (at most two rounds); the base moves only by a
+- **Review:** the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
+  the item's `Done when` nor the spec settles goes to you as an intent gap; the base moves only by a
   fast-forward after the review passes.
 - **Spec convergence:** when the batch closes the last open item that cites a spec, checks each
   acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
@@ -274,7 +278,8 @@ branches not merged into `origin/HEAD`, your open PRs and still-running backgrou
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
 most three under each heading, lessons (an addition to a note that already covers the topic is
 proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates, plan
-and docs updates, plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
+and docs updates (open items of a finished plan become `PLAN-` backlog items, P2 by default, with a
+session line), plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
 Every check result names the commit it ran on (`<command>: <result> at <short SHA>`, plus
 `+ uncommitted: <changed files>` on a dirty tree).
 

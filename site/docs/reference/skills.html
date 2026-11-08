@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@318f44101dfa">
+<meta name="dos-source" content="docs/reference/skills.md@33c7cc9c77b7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -154,7 +154,8 @@ specialists: security (<code>security-auditor</code>), performance (<code>perfor
 (<code>qa-expert</code>, assessment only), correctness (<code>code-reviewer</code>), data (<code>database-reviewer</code>, skipped without a database), infra
 (<code>infra-reviewer</code>, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs <code>file:line</code>, current-code
-evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. The findings
+evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code> (a negated grep paired with <code>test -f</code>, no
+error swallowed into a default); unsupported claims are rejected. The findings
 code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
 (the <code>verifier</code> agent); refuted ones are listed as Disputed, not written, and an undecided one is
 written with an <code>Unverified:</code> line. Findings are deduplicated by file and root cause against the backlog and
@@ -220,15 +221,18 @@ auth/security items.</li>
 <li>**<code>Check</code> screening:** never runs a <code>Check</code> that pipes into a shell, fetches from the network or
 writes outside the repository; reads any script a <code>Check</code> calls first.</li>
 <li><strong>Triage:</strong> before the claim, checks every batch item itself, read-only: its <code>Where</code> still
-exists (for a <code>FEAT-</code>, <code>BASE-</code> or <code>new:</code> item, its parent directory), its <code>Check</code> fails now (a
-failure on authentication, quota or a missing secret blocks the item for you), no open pull request touches its files (skipped when <code>gh</code> is
+exists (for a <code>FEAT-</code>, <code>BASE-</code>, <code>PLAN-</code> or <code>new:</code> item, its parent directory), its <code>Check</code> fails
+now (exit 126 or 127, a grep exit 2 or a "no such file" or "no tests found" message is a broken
+<code>Check</code>, so the item is stale; a failure on authentication, quota or a missing secret blocks the
+item for you), no open pull request touches its files (skipped when <code>gh</code> is
 unavailable), and no project decision record or doc contradicts it. A failing item leaves the
 batch, is never claimed or dispatched, and is reported as <code>stale: &lt;ID&gt; · &lt;point&gt; · &lt;evidence&gt;</code>
 for you to close, amend or keep; the batch is topped up from the next ready items.</li>
 <li><strong>While running:</strong> runs each item's <code>Check</code> itself on a <code>DONE</code> report, then the full build, types,
 tests and lint for the batch; classifies a failure before editing; stops after three failed
 repair cycles.</li>
-<li><strong>Review:</strong> the batch diff through code-review (at most two rounds); the base moves only by a
+<li><strong>Review:</strong> the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
+the item's <code>Done when</code> nor the spec settles goes to you as an intent gap; the base moves only by a
 fast-forward after the review passes.</li>
 <li><strong>Spec convergence:</strong> when the batch closes the last open item that cites a spec, checks each
 acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
@@ -286,7 +290,8 @@ branches not merged into <code>origin/HEAD</code>, your open PRs and still-runni
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
 most three under each heading, lessons (an addition to a note that already covers the topic is
 proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates, plan
-and docs updates, plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.
+and docs updates (open items of a finished plan become <code>PLAN-</code> backlog items, P2 by default, with a
+session line), plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.
 Every check result names the commit it ran on (<code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus
 <code>+ uncommitted: &lt;changed files&gt;</code> on a dirty tree).</p>
     <h3 id="skill-usage">skill-usage</h3>

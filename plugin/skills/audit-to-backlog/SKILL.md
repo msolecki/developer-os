@@ -73,7 +73,7 @@ While reviewers run, keep `Backlog:` (the backlog path), `Agents:` (perspective 
 
 - **ID:** category prefix and number, unique across the todo and done files, never reused. `FEAT-` items come from the spec skill and cite the spec path and section as `Evidence`.
 - **Size:** S, M or L, as in plan steps.
-- **Check:** a command that exits non-zero while `Done when` does not hold. `Manual: <steps> — <why no command can check it>` only when no command can.
+- **Check:** a command that exits non-zero while `Done when` does not hold. `Manual: <steps> — <why no command can check it>` only when no command can. Pair a negated grep with `test -f <file>` (`test -f f && ! grep -q X f`), and never swallow an error into a default (`2>/dev/null || echo 0`).
 - **Blocked by:** optional item IDs; the item is ready when each is checked or in the done file.
 - **Unverified:** optional, `- Unverified: <reason>` when the verifier could not decide the finding.
 - **Owner:** absent when the item is written; only implement-backlog writes it, before dispatch, and clears an orphaned one after the user confirms.
