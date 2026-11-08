@@ -24,7 +24,25 @@ Review only the files named in your prompt. Prefer reading the auth, middleware,
 
 ## Priorities
 
-Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF and unvalidated redirect targets, unsafe deserialization, permissive CORS, missing rate limits on auth endpoints, and dependency vulnerabilities with a real call path.
+Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF and unvalidated redirect targets, unsafe deserialization, permissive CORS, and dependency vulnerabilities with a real call path.
+
+## Not a finding
+
+Do not report these classes, whatever their severity looks like; the list is closed. Also read `docs/reference/review-exclusions.md` when the project has one and apply its exclusions the same way.
+
+- Volumetric denial of service, resource exhaustion and missing rate limiting, including on auth endpoints.
+- Code in tests, fixtures, examples or dead code no entry point reaches.
+- Memory-safety defects (buffer overflow, use-after-free) in a memory-safe language.
+- SSRF where the attacker controls only the path, not the host or scheme.
+- User input placed into an LLM prompt.
+- An environment variable or CLI flag as the attack vector: whoever sets it is trusted.
+- Client-side code flagged for a server-side class (authorization, injection into a backend).
+- Outdated dependencies without a call path to the vulnerable code.
+- XSS in an auto-escaping framework (React, Angular, Vue templates) without a raw-HTML sink (`dangerouslySetInnerHTML`, `v-html`, `bypassSecurityTrust*`).
+- A UUIDv4 called predictable.
+- A theoretical TOCTOU race with no shown window and no gain for the attacker.
+- Log spoofing or unsanitized input written to logs.
+- Open redirect.
 
 ## Hard constraints
 

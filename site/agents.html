@@ -22,8 +22,8 @@
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@dd129f54420d">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@c67d9add005b">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@89c690b4a0ed">
-<meta name="dos-source" content="plugin/agents/verifier.md@30a0a59a8278">
-<meta name="dos-source" content="plugin/agents/security-auditor.md@c7d651c79b2a">
+<meta name="dos-source" content="plugin/agents/verifier.md@28852e17195a">
+<meta name="dos-source" content="plugin/agents/security-auditor.md@faf95ef63600">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@a31093b64b9f">
 <meta name="dos-source" content="plugin/agents/dependency-upgrader.md@e9b15925f839">
 <meta name="dos-source" content="plugin/agents/infra-reviewer.md@c081e0ee49a5">
@@ -291,7 +291,8 @@
     <h3 id="what-security-auditor-checks">What security-auditor checks</h3>
     <ul>
       <li>Only the named files, reading the auth, middleware, API route and data-access layers before anything else. An installed scanner (<code>npm audit</code>, <code>semgrep</code>, <code>gitleaks</code>) is one input among several, not the audit.</li>
-      <li>Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF and unvalidated redirects, unsafe deserialization, permissive CORS, missing rate limits on auth endpoints, and dependency vulnerabilities with a real call path.</li>
+      <li>Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF and unvalidated redirects, unsafe deserialization, permissive CORS, and dependency vulnerabilities with a real call path.</li>
+      <li>A closed <strong>not a finding</strong> list it never reports: volumetric denial of service and missing rate limiting, test, fixture or dead code, memory safety in a memory-safe language, path-only SSRF, user input into an LLM prompt, an environment variable or CLI flag as the vector, client-side code flagged for a server-side class, outdated dependencies without a call path, XSS in an auto-escaping framework without a raw-HTML sink, a UUIDv4 called predictable, a theoretical TOCTOU race, log spoofing and open redirect. A project adds its own in <code>docs/reference/review-exclusions.md</code>, read when present.</li>
       <li>Any switch that turns a control off, such as an environment flag that disables 2FA, is itself the defect.</li>
     </ul>
     <h3 id="security-auditor-report">security-auditor report</h3>
@@ -316,7 +317,7 @@
       <div class="fact"><dt>Used by</dt><dd>code-review, audit-to-backlog and project-init (P0/P1 verification, plus up to five P2 correctness findings), pr-cycle through code-review</dd></div>
     </dl>
     <h3 id="verifier-report">verifier report</h3>
-    <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it, or when it did not read the cited <code>file:line</code>. <code>UNDECIDED</code> is a complete answer that goes with <code>DONE</code>; callers mark the finding unverified and do not retry. It has no shell, so the diff reaches it as a file; for an untrusted head the files on disk are not the head, so it reads the head's changed lines from the diff file.</p>
+    <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it, or when it did not read the cited <code>file:line</code>. <code>UNDECIDED</code> is a complete answer that goes with <code>DONE</code>; callers mark the finding unverified and do not retry. It has no shell, so the diff reaches it as a file; for an untrusted head the files on disk are not the head, so it reads the head's changed lines from the diff file. A diff file is read only when the prompt names one. A guard refutes a finding only when it holds on every path from the input to the sink, and a <code>REFUTED</code> answer ends with <code>REFUTE_REASON:</code> <code>doesnt_exist</code>, <code>already_handled</code>, <code>implausible_trigger</code>, <code>intentional_behavior</code>, <code>misread_code</code> or <code>duplicate</code>. It starts without the user's, project's and local <code>CLAUDE.md</code> (<code>omitClaudeMd: true</code>), so it sees only the claim and the code.</p>
     <div class="callout never">
       <h3 id="what-verifier-never-does">What verifier never does</h3>
       <ul>
