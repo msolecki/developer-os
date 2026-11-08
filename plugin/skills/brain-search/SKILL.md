@@ -1,6 +1,6 @@
 ---
 name: brain-search
-description: Search the user's Obsidian knowledge vault for earlier decisions, lessons, and references on a topic, and answer only from the notes found, citing their paths. Use before a large task when a `Brain vault:` line is configured, when the user asks "what did we decide about X", or when the user asks you to search the brain, vault, or knowledge base, for example "what do we know about X?", "search the brain".
+description: Search the user's Obsidian knowledge vault for earlier decisions, lessons, and references on a topic, and answer only from the notes found, citing their paths. Use before a large task when a `Brain vault:` line is configured, when the user asks "what did we decide about X", or when the user asks you to search the brain, vault, or knowledge base, for example "what do we know about X?", "what did we agree on X", "search the brain".
 license: MIT
 compatibility: "Claude Code"
 ---
