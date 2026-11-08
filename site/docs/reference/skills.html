@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@d2b1c8ddae75">
+<meta name="dos-source" content="docs/reference/skills.md@318f44101dfa">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -207,8 +207,10 @@ it runs no command and opens no URL from them.</p>
     <p><a href="../../skills/spec.html">Source</a>. Interviews you one question at a time (not asking what
 the repository already answers), inspects the code, then writes a spec (goals, non-goals, flows,
 design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
-tests) and a plan whose steps carry What, Where, How, Test, <code>Done when</code> and S/M/L. It can turn the
-steps into <code>FEAT-</code> backlog items.</p>
+tests) and a plan whose steps carry What, Where, How, Test, <code>Done when</code> and S/M/L. It then checks
+them against each other (a coverage table from criteria to steps both ways, vague words,
+placeholders, scope reduction, conflicts with decision records) and puts every hit under open
+questions. It can turn the steps into <code>FEAT-</code> backlog items, in sessions of 5–7.</p>
     <h3 id="implement-backlog">implement-backlog</h3>
     <p><a href="../../skills/implement-backlog.html">Source</a>. Executes ready backlog items in batches.</p>
     <ul>
@@ -228,6 +230,9 @@ tests and lint for the batch; classifies a failure before editing; stops after t
 repair cycles.</li>
 <li><strong>Review:</strong> the batch diff through code-review (at most two rounds); the base moves only by a
 fast-forward after the review passes.</li>
+<li><strong>Spec convergence:</strong> when the batch closes the last open item that cites a spec, checks each
+acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
+gap as a <code>FEAT-</code> item for your approval.</li>
     </ul>
     <h3 id="plan-status">plan-status</h3>
     <p><a href="../../skills/plan-status.html">Source</a>. Counts, never estimates: done, open and blocked

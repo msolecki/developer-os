@@ -181,8 +181,10 @@ it runs no command and opens no URL from them.
 [Source](../../plugin/skills/spec/SKILL.md). Interviews you one question at a time (not asking what
 the repository already answers), inspects the code, then writes a spec (goals, non-goals, flows,
 design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
-tests) and a plan whose steps carry What, Where, How, Test, `Done when` and S/M/L. It can turn the
-steps into `FEAT-` backlog items.
+tests) and a plan whose steps carry What, Where, How, Test, `Done when` and S/M/L. It then checks
+them against each other (a coverage table from criteria to steps both ways, vague words,
+placeholders, scope reduction, conflicts with decision records) and puts every hit under open
+questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–7.
 
 ### implement-backlog
 
@@ -204,6 +206,9 @@ steps into `FEAT-` backlog items.
   repair cycles.
 - **Review:** the batch diff through code-review (at most two rounds); the base moves only by a
   fast-forward after the review passes.
+- **Spec convergence:** when the batch closes the last open item that cites a spec, checks each
+  acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
+  gap as a `FEAT-` item for your approval.
 
 ### plan-status
 
