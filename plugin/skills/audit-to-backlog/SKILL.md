@@ -1,6 +1,6 @@
 ---
 name: audit-to-backlog
-description: Run parallel specialist reviews of a repository, require file-and-line evidence, deduplicate findings, and write an implementation-ready backlog. Use when the user invokes audit-to-backlog or asks for a broad codebase audit that should produce a task backlog, for example "audit this repo", "audit the code", "scan the repo and build a backlog".
+description: Run parallel specialist reviews of a repository, require file-and-line evidence, deduplicate findings, and write an implementation-ready backlog; for missing practices, project-baseline. Use for a broad codebase audit that should produce a task backlog, for example "audit this repo", "audit the code", "scan the repo and build a backlog".
 license: MIT
 compatibility: "Claude Code"
 argument-hint: "[path | --diff <ref>] [--perspectives security,correctness,types,performance,tests,data,infra,arch,ui,a11y]"
@@ -49,11 +49,11 @@ For dead code, require zero references, invariant flags, old unreferenced code, 
 
 ## Verify blocking findings
 
-Before writing the backlog, send every P0 and P1 finding to a fresh `developer-os:verifier` agent that did not produce it, retried as in `developer-os:code-review` Verify blocking findings. Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause) and the repository path, without the reviewer's evidence or reasoning, and prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
+Before writing the backlog, verify the findings `developer-os:code-review` Verify blocking findings selects (P0, P1, and at most five P2 correctness findings), each with a fresh `developer-os:verifier` agent that did not produce it, retried as there. Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause) and the repository path, without the reviewer's evidence or reasoning, and prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED, REFUTED or UNDECIDED, with the `file:line` evidence for your answer."
 
-Keep CONFIRMED findings, and mark a finding unverified when the verifier cannot decide. Leave REFUTED findings out of the backlog and list them, with the verifier's evidence, under Disputed in the report.
+Keep CONFIRMED findings. Keep an UNDECIDED or unverified finding with an `Unverified: <reason>` line. Leave REFUTED findings out of the backlog and list them, with the verifier's evidence, under Disputed in the report.
 
-While reviewers run, keep `Plan:` (the backlog path), `Agents:` (perspective → reviewer) and `Next:` in `docs/plans/.devos-state.md`, overwritten at every stage change, so the `SessionStart` hook can show them after a compaction.
+While reviewers run, keep `Backlog:` (the backlog path), `Agents:` (perspective → reviewer) and `Next:` in `docs/plans/.devos-state.md`, overwritten at every stage change, so the `SessionStart` hook can show them after a compaction.
 
 ## Merge the backlog
 
@@ -75,6 +75,7 @@ While reviewers run, keep `Plan:` (the backlog path), `Agents:` (perspective →
 - **Size:** S, M or L, as in plan steps.
 - **Check:** a command that exits non-zero while `Done when` does not hold. `Manual: <steps> — <why no command can check it>` only when no command can.
 - **Blocked by:** optional item IDs; the item is ready when each is checked or in the done file.
+- **Unverified:** optional, `- Unverified: <reason>` when the verifier could not decide the finding.
 - **Owner:** absent when the item is written; only implement-backlog writes it, before dispatch, and clears an orphaned one after the user confirms.
 - **Done when:** never edited or deleted. A change is appended as `Amended YYYY-MM-DD: <new criterion> — <reason and evidence>`, with the user's approval.
 

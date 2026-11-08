@@ -38,7 +38,7 @@ done
 ```
 
    Show the lanes table and the whole `launch.sh`, then ask: **Launch these N lanes? A: yes  B: change lanes  C: no.** Run `bash "$R/launch.sh"` only after A. A lane's `Check` command, and any other tool its task needs, is appended for that lane only (a `case "$lane"` before the `python3` line), shown in the same question.
-7. **State.** Overwrite `docs/plans/.devos-state.md` (git-ignored): `Lanes: <run dir>`, one line per lane with its worktree, `Next: status`.
+7. **State.** Overwrite `docs/plans/.devos-state.md` (git-ignored): `Plan: <run dir>`, `Agents:` with each lane's worktree, `Next: status`.
 
 ## Status
 
@@ -60,15 +60,15 @@ Answer with one table, `| Lane | State | Report | Commits | Uncommitted |`, and 
 
 ## Integrate
 
-1. Only lanes whose report starts with `DONE` and whose process has finished; copy each report from `.worktrees/<lane>/$R/REPORT-<lane>.md` to `$R/REPORT-<lane>.md`. A lane whose prompt or `LANES.md` changed since launch (the `hashes.txt` comparison from Status), or with a changed file outside its owned paths (a lane could weaken the files its `Check` runs), moves to Needs you. Run each lane's fast check and its `Check` from `LANES.md` yourself in its worktree; the lane's own report does not count as evidence. A red fast check, a red `Check` or a `Manual` check moves the lane to Needs you, never into the merge plan.
+1. Only lanes whose report starts with `DONE` and whose process has finished; copy each report from `.worktrees/<lane>/$R/REPORT-<lane>.md` to `$R/REPORT-<lane>.md`. A lane whose prompt or `LANES.md` changed since launch (the `hashes.txt` comparison from Status), or with a changed file outside its owned paths (a lane could weaken the files its `Check` runs), or with uncommitted changes (the merge would not carry them), moves to Needs you. Run each lane's fast check and its `Check` from `LANES.md` yourself in its worktree; the lane's own report does not count as evidence. A red fast check, a red `Check` or a `Manual` check moves the lane to Needs you, never into the merge plan.
 2. Show the plan (lanes to merge, in order, onto a new local branch `lanes/<run>` from the base) and ask before creating it. Merge or cherry-pick each lane in order; on a conflict, stop, leave the branch as it is, and report the files.
-3. Make the shared-file changes from Start step 2 (a lockfile changes only through the install command the user approves), then run the fast check on `lanes/<run>`.
-4. Review the integrated diff with `developer-os:code-review`: the lanes' code counts as written in this session.
+3. Make the shared-file changes from Start step 2 (a lockfile changes only through the install command the user approves), then run, on `lanes/<run>`, every merged lane's `Check` and the repository-wide gate (the project's full validation, not only the fast check). A red one stops here with the failures.
+4. Review the integrated diff with `developer-os:code-review`: the lanes' code counts as written in this session. On `REQUEST_CHANGES`, or a `COMMENT` naming a blocked reviewer, list the findings under Needs you, keep every worktree and branch, and stop.
 5. After the user approves, remove each integrated worktree (`git worktree remove .worktrees/<lane>`) and its branch (`git branch -D lanes/<lane>`: a cherry-picked branch does not count as merged); keep the run directory until the plan is closed.
 
 ## Stop point
 
-Start stops after the launch with the lane table and the run directory, or at the launch question. Status stops at the table. Integrate stops at a green, reviewed `lanes/<run>` branch, or at the first conflict or red check, with what remains for the user.
+Start stops after the launch with the lane table and the run directory, or at the launch question. Status stops at the table. Integrate stops at a green, reviewed `lanes/<run>` branch, or at the first conflict, red check or `REQUEST_CHANGES`, with what remains for the user. When Integrate ends with no lane left to integrate, delete `docs/plans/.devos-state.md`.
 
 ## Never
 

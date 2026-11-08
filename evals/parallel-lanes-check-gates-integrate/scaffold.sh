@@ -71,4 +71,4 @@ for lane in cart-empty cart-tax; do
   printf 'DONE\n\n$ node --test\n# pass 1\n# fail 0\n' > ".worktrees/$lane/$R/REPORT-$lane.md"
 done
 for f in "$R/LANES.md" "$R"/prompt-*.md; do echo "$(git hash-object "$f") $f"; done > "$R/hashes.txt"
-printf 'Lanes: %s\ncart-empty .worktrees/cart-empty\ncart-tax .worktrees/cart-tax\nNext: status\n' "$R" > docs/plans/.devos-state.md
+printf 'Plan: %s\nAgents: cart-empty .worktrees/cart-empty, cart-tax .worktrees/cart-tax\nNext: status\n' "$R" > docs/plans/.devos-state.md

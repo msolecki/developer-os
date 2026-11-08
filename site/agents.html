@@ -22,7 +22,7 @@
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@dd129f54420d">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@c67d9add005b">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@89c690b4a0ed">
-<meta name="dos-source" content="plugin/agents/verifier.md@445848f367ef">
+<meta name="dos-source" content="plugin/agents/verifier.md@30a0a59a8278">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@c7d651c79b2a">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@a31093b64b9f">
 <meta name="dos-source" content="plugin/agents/dependency-upgrader.md@e9b15925f839">
@@ -307,16 +307,16 @@
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/security-auditor.md">Read security-auditor.md on GitHub</a></p>
 
     <h2 id="verifier">verifier</h2>
-    <p>Tries to disprove one review finding by reading the code, and answers CONFIRMED or REFUTED with <code>file:line</code> evidence, with read-only tools only. Use it as the fresh verifier for a P0, P1 or P2 correctness finding, and always for a pull request from an untrusted head.</p>
+    <p>Tries to disprove one review finding by reading the code, and answers CONFIRMED, REFUTED or UNDECIDED with <code>file:line</code> evidence, with read-only tools only. Use it as the fresh verifier for a P0, P1 or P2 correctness finding, and always for a pull request from an untrusted head.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
       <div class="fact"><dt>Turn cap</dt><dd>40</dd></div>
       <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
-      <div class="fact"><dt>Used by</dt><dd>code-review and audit-to-backlog (P0/P1 verification, plus P2 correctness in code-review), pr-cycle through code-review</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>code-review, audit-to-backlog and project-init (P0/P1 verification, plus up to five P2 correctness findings), pr-cycle through code-review</dd></div>
     </dl>
     <h3 id="verifier-report">verifier report</h3>
-    <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it, or when it did not read the cited <code>file:line</code>. It has no shell, so the diff reaches it as a file; for an untrusted head the files on disk are not the head, so it reads the head's changed lines from the diff file.</p>
+    <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it, or when it did not read the cited <code>file:line</code>. <code>UNDECIDED</code> is a complete answer that goes with <code>DONE</code>; callers mark the finding unverified and do not retry. It has no shell, so the diff reaches it as a file; for an untrusted head the files on disk are not the head, so it reads the head's changed lines from the diff file.</p>
     <div class="callout never">
       <h3 id="what-verifier-never-does">What verifier never does</h3>
       <ul>

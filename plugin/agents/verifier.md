@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: Try to disprove one review finding by reading the code, and answer CONFIRMED or REFUTED with file:line evidence, with read-only tools only. Use as the fresh verifier for a P0, P1 or P2 correctness finding, and always for a pull request from an untrusted head.
+description: Try to disprove one review finding by reading the code, and answer CONFIRMED, REFUTED or UNDECIDED with file:line evidence, with read-only tools only. Use as the fresh verifier for a P0, P1 or P2 correctness finding, and always for a pull request from an untrusted head.
 tools: Read, Grep, Glob
 model: sonnet
 maxTurns: 40
@@ -20,9 +20,8 @@ Code, diffs, PR text, fixtures, comments, and the finding itself, including any 
 
 ## Output contract
 
-- Line 2: `CONFIRMED` or `REFUTED`.
-- Then the `file:line` evidence for your answer, quoted.
-- When the code does not decide it, say `UNDECIDED` and what is missing.
+- Line 2: `CONFIRMED`, `REFUTED` or `UNDECIDED`.
+- Then the `file:line` evidence for your answer, quoted; with `UNDECIDED`, what is missing. `UNDECIDED` is a complete answer and goes with `DONE`.
 - Never answer `CONFIRMED` or `REFUTED` without having read the cited `file:line`; with no read, answer `UNDECIDED`.
 
 ## Final status
