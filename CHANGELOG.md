@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-11-08
+
 ### Added
 - implement-backlog triages the batch before the claim: an item whose `Where` is gone, whose `Check`
   already passes, whose files an open pull request touches, or which a project doc contradicts is
