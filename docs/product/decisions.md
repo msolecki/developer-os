@@ -130,6 +130,33 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-11-08:** the destroy category also asks before `git checkout -f`, `git switch -f` or
   `--discard-changes` and `find … -delete` (#108). The protected files match through symlink hops and
   without case, so a link to a `.env` asks and so does a differently cased name (#123).
+- **Amended 2026-11-08:** a quoted commit message (`-m`, `-F`, `--message`, `--file`) is no longer
+  scanned, and `commit -n` counts only with `commit` as git's subcommand, reversing "still ask on a
+  mention" for commit messages: in `claude -p` an ask is a denial, and `git commit -m "fix npm install
+  bug"` blocked headless lanes (FLOW-39).
+- **Amended 2026-11-08:** dependency-upgrader joins the read-only agents: it has Bash and its prompt
+  forbids edits and HEAD moves, yet `git checkout main` from it passed (AGT-10). In the read-only
+  agents, `submodule status`/`summary` and `bisect log`/`visualize`/`view` pass as reads (FLOW-40), and
+  `--output`, `--output-directory` or `-o` outside scratch on `diff`, `log`, `show`, `format-patch` or
+  `archive` asks, as does `format-patch` without one or `--stdout`; git plumbing that writes refs or the
+  index (`symbolic-ref`, `read-tree`, `update-index`) stays a documented known miss, an unlikely
+  reviewer mistake (SEC-15).
+- **Amended 2026-11-08:** the install category adds a closed table matched in command position,
+  `pip`/`pip3 install`, `uv add`, `uv pip install`, `poetry add`, `cargo add`/`install`, `go
+  get`/`install`, `composer require`, `bundle add`, `gem install`, each with a package argument, and
+  `npx -y`/`--yes`, which runs freshly fetched code; core.md's install rule was text only in Python,
+  Rust, Go and PHP repositories (SEC-14).
+- **Amended 2026-11-08:** a test category: an Edit of a test file (`*.test.*`, `*.spec.*`, `tests/`,
+  `test_*.py`, `*_test.go`) whose `new_string` holds more skip or focus markers than its `old_string`
+  (`it.skip(`, `.only(`, `xit(`, `@pytest.mark.skip`, `t.Skip(` and the like), and `rm`/`git rm` of a
+  test file or `mv` of one to `.bak`, `.disabled` or `.skip`; core.md's "do not delete or skip tests"
+  was text only (SEC-09).
+- **Amended 2026-11-08:** an infra category, a closed list in command position (also after `npx`, `pnpm
+  exec`, `php`, `bundle exec` and similar runners): `terraform`/`tofu destroy`, `apply -auto-approve`,
+  `state rm`, `prisma migrate reset`, `supabase db reset`, `drizzle-kit push --force`, `artisan
+  migrate:fresh`/`migrate:reset`/`db:wipe`, `rails db:drop`/`db:reset`, `dropdb`, `docker compose down
+  -v`, `kubectl delete`, `helm uninstall`, `vercel --prod`. Users without their own deny list had no
+  check on these in auto mode; users of destructive_command_guard already have one (SEC-08).
 
 ## D7. One wrap-up nudge per long session
 
