@@ -23,7 +23,7 @@
 <meta name="dos-source" content="plugin/agents/qa-expert.md@51af119a191d">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@89c690b4a0ed">
 <meta name="dos-source" content="plugin/agents/verifier.md@28852e17195a">
-<meta name="dos-source" content="plugin/agents/security-auditor.md@de2322881df6">
+<meta name="dos-source" content="plugin/agents/security-auditor.md@94f5ea505522">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@a31093b64b9f">
 <meta name="dos-source" content="plugin/agents/dependency-upgrader.md@e9b15925f839">
 <meta name="dos-source" content="plugin/agents/infra-reviewer.md@0338a1c56542">
@@ -293,7 +293,7 @@
     <h3 id="what-security-auditor-checks">What security-auditor checks</h3>
     <ul>
       <li>Only the named files, reading the auth, middleware, API route and data-access layers before anything else. An installed scanner (<code>npm audit</code>, <code>semgrep</code>, <code>gitleaks</code>) is one input among several, not the audit. Tests run in CI mode (<code>CI=true</code>, and <code>--ci</code> for Jest) so a run writes no missing snapshot; a new untracked file that <code>git status</code> shows afterwards is reported.</li>
-      <li>Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF and unvalidated redirects, unsafe deserialization, permissive CORS, and dependency vulnerabilities with a real call path.</li>
+      <li>Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF, unsafe deserialization, permissive CORS, and dependency vulnerabilities with a real call path.</li>
       <li>A closed <strong>not a finding</strong> list it never reports: volumetric denial of service and missing rate limiting, test, fixture or dead code, memory safety in a memory-safe language, path-only SSRF, user input into an LLM prompt, an environment variable or CLI flag as the vector, client-side code flagged for a server-side class, outdated dependencies without a call path, XSS in an auto-escaping framework without a raw-HTML sink, a UUIDv4 called predictable, a theoretical TOCTOU race, log spoofing and open redirect. A project adds its own in <code>docs/reference/review-exclusions.md</code>, read when present.</li>
       <li>Any switch that turns a control off, such as an environment flag that disables 2FA, is itself the defect.</li>
     </ul>

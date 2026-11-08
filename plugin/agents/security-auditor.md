@@ -24,7 +24,7 @@ Review only the files named in your prompt. Prefer reading the auth, middleware,
 
 ## Priorities
 
-Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF and unvalidated redirect targets, unsafe deserialization, permissive CORS, and dependency vulnerabilities with a real call path.
+Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF, unsafe deserialization, permissive CORS, and dependency vulnerabilities with a real call path.
 
 ## Not a finding
 
