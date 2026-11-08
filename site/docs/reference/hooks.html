@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@5949e3b86115">
+<meta name="dos-source" content="docs/reference/hooks.md@0f8a811748b6">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -46,7 +46,7 @@
 
   <main id="main" class="prose">
     <h1 id="hooks-reference">Hooks reference</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/hooks.md">docs/reference/hooks.md</a></span><span>Verified 2026-10-16</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/hooks.md">docs/reference/hooks.md</a></span><span>Verified 2026-11-08</span></p>
     <p>Defined in <code>plugin/hooks/hooks.json</code>. Commands run with <code>${CLAUDE_PLUGIN_ROOT}</code> set to the installed
     <code>plugin/</code> directory; each has a 10-second timeout. There are 6 hooks: one <code>cat</code> and five
     Python 3 scripts run as <code>python3 "${CLAUDE_PLUGIN_ROOT}/hooks/&lt;script&gt;.py"</code>. The scripts use the
@@ -56,7 +56,7 @@
     <a href="../product/decisions.html#d2-no-runtime-small-hook-scripts-without-dependencies">decisions D2</a>.
     Tests: <code>tests/state-card.test.sh</code>, <code>tests/notices.test.sh</code>, <code>tests/guard.test.sh</code>, <code>tests/repeat-failure.test.sh</code>, <code>tests/capture-nudge.test.sh</code>.</p>
     <h2 id="sessionstart--core-rules-and-state-card">SessionStart — core rules and state card</h2>
-    <p>Two hooks on the same event, run independently, so the card is not guaranteed to follow the rules.</p>
+    <p>The core rules and the state card are separate <code>SessionStart</code> entries that run independently on compact, resume and fork, so the card is not guaranteed to follow the rules.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th scope="col"></th><th scope="col">Core rules</th><th scope="col">State card</th></tr></thead>
@@ -103,12 +103,13 @@ Worktrees:
     <p>Claude Code has no install or update hook, so this hook stands in for one, and for a schedule: it
     reminds, it runs nothing. Matcher <code>startup</code>, so it never runs beside the state card (<code>compact|resume|fork</code>);
     its output is a few hundred bytes.</p>
-    <p><strong>Input:</strong> the hook JSON on stdin; uses <code>source</code> (anything but <code>startup</code> prints nothing). It also reads
+    <p><strong>Input:</strong> the hook JSON on stdin; uses <code>source</code> (anything but <code>startup</code> prints nothing; a missing <code>source</code> does not stop the hook). It also reads
     <code>${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json</code> for the version and the <code>Brain vault:</code> line from
     <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code> (or <code>~/.claude/CLAUDE.md</code>), the user-level file brain-setup writes. A
     project's <code>CLAUDE.md</code> or <code>AGENTS.md</code> is never read, so a cloned repository cannot point the hook at a
-    directory of its choosing.</p>
-    <p><strong>Notices,</strong> each one line, only when due:</p>
+    directory of its choosing. A <code>version</code> in <code>plugin.json</code> that does not match <code>[0-9A-Za-z.+-]{1,32}</code> makes
+    the hook print nothing, the vault notices included.</p>
+    <p><strong>Notices,</strong> only when due, each on its own line; a first install prints the version notice and the vault line as two lines, so up to four lines can print:</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th scope="col">Notice</th><th scope="col">When</th><th scope="col">Repeats</th></tr></thead>
@@ -210,7 +211,8 @@ Worktrees:
     <p><strong>Counts</strong> one failure per call key: <code>agent_id</code>, <code>tool_name</code> and <code>tool_input</code> (for Bash only
     <code>tool_input.command</code>, since the description changes between otherwise identical retries), hashed. A failure more than 10 minutes after the previous one of the same key starts the count again at 1. A success does not reset it (that would need a hook on every call), so a test run that is red, green and red again within the window counts; the message tells the agent to stop only if nothing changed between the runs.</p>
     <p><strong>Exits 0 silently when</strong> <code>DEVELOPER_OS_REPEAT_FAILURE=off</code>, <code>is_interrupt</code> is <code>true</code>, the input is not
-    a JSON object, <code>session_id</code> is empty or has characters other than <code>A-Z a-z 0-9 _ -</code>, or the count for
+    a JSON object, <code>session_id</code> is empty or has characters other than <code>A-Z a-z 0-9 _ -</code>, <code>tool_name</code> is not a
+    string, <code>tool_input</code> is not an object, the per-session state file is a symlink, or the count for
     the key in the current run of failures is not exactly 3.</p>
     <p><strong>Otherwise</strong> (the third failure of the key within one run) prints</p>
     <pre><code class="language-json">{"hookSpecificOutput": {"hookEventName": "PostToolUseFailure", "additionalContext": "developer-os: this exact &lt;tool&gt; call has failed 3 times, each within 10 minutes of the last. If nothing changed between the runs, do not run it again unchanged: read the error, find the cause, then change the approach or ask the user."}}</code></pre>
@@ -241,7 +243,7 @@ Worktrees:
         </tbody>
       </table>
     </div>
-    <p><strong>Otherwise:</strong> writes the marker, removes markers older than 7 days, prints to stdout</p>
+    <p><strong>Otherwise:</strong> writes the marker, removes markers 8 days old or older, prints to stdout</p>
 <pre><code>{"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": "developer-os: this session made &lt;n&gt; tool calls. Run the developer-os:session-retro skill: propose the wrap-up to the user and apply only what they approve. If nothing qualifies, end your turn with no output."}}</code></pre>
     <p>and exits 0. Claude Code feeds the message back to the agent instead of stopping and labels it <code>Stop hook feedback</code>;
     exit 2 or <code>decision: "block"</code> would show the same reminder as a hook error.</p>

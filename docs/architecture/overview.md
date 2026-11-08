@@ -74,7 +74,7 @@ sequenceDiagram
   CC->>NO: new session (startup)
   NO-->>CC: nothing or systemMessage (user) + additionalContext (agent)
   CC->>G: every Bash, Edit and Write call, JSON on stdin
-  G-->>CC: nothing (allow normal flow) or {"permissionDecision":"ask", reason}
+  G-->>CC: nothing (allow normal flow), {"permissionDecision":"ask", reason} or additionalContext (fast-check reminder) on git commit
   CC->>F: a tool call failed, JSON on stdin
   F-->>CC: nothing, or additionalContext "stop retrying" at the third identical failure
   CC->>N: agent finishes a turn, JSON on stdin
@@ -91,13 +91,17 @@ sequenceDiagram
   `systemMessage`, each throttled by its own marker.
 - `guard.py` extracts `tool_input.command` with a regular expression, unescapes JSON, joins line continuations,
   drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
-  purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.
+  purpose, so a mention inside a commit message also asks. Any parse failure prints nothing. For Edit and Write it reads
+  `tool_input.file_path` instead and asks when the path is a secret file or part of the user-level Claude config
+  (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops. A Bash call from one of the
+  read-only review agents, named by `agent_type`, also asks when it writes. A `git commit` that hits no category gets an
+  `additionalContext` reminder to run the fast check, with no decision.
 - `capture-nudge.py` reads `session_id` and `transcript_path` from the input, counts the
   `tool_use` blocks of the transcript's assistant lines, defers while a background task
   launched in the session has no `<task-notification>` and a fresh output file under a `tasks/`
   directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session
-  marker in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/capture-nudge/` so it fires once. Markers older than
-  7 days are removed.
+  marker in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/capture-nudge/` so it fires once. Markers 8 days old
+  or older are removed.
 - `repeat-failure.py` hashes the agent, tool and input of each failed call (for Bash, the command),
   keeps the counts per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/repeat-failure/`,
   and at the third failure of the same hash, each within 10 minutes of the last, adds a "stop retrying" reminder. It stores no command text.
@@ -112,6 +116,8 @@ Skills call each other by name and dispatch agents. The dependencies that exist 
 flowchart LR
   pr-cycle --> code-review
   pr-cycle --> fix-pr
+  fix-pr --> code-review
+  code-review -. next step .-> fix-pr
   fix-pr -. Trust check .-> pr-cycle
   code-review --> code-reviewer[[code-reviewer]]
   code-review --> verifier[[fresh verifier agent]]
@@ -136,7 +142,7 @@ flowchart LR
 
 Every dispatched agent answers with a final status (`DONE`, `REVIEW`, `BLOCKED`, `CONTINUING`) that
 the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog), an offer
-the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Two skills sit outside the diagram: parallel-lanes reviews its integrated branch through
+the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). Other edges: pr-cycle sends its conflict resolutions to code-reviewer; session-retro calls brain-search and offers docs-sync; brain-garden runs brain-compile for a shared rule the user names; bug-triage offers spec; brain-compile borrows brain-capture's step 5 secret scan and brain-import-memory its steps 5 and 6. Two skills sit outside the diagram: parallel-lanes reviews its integrated branch through
 code-review, and brain-project-refresh leaves a missing hub as an inbox draft for brain-review. audit-to-backlog also
 dispatches database-reviewer (data) and infra-reviewer (infra); code-review adds them for migration,
 schema, query, IaC or CI diffs; docs-sync may hand approved items to docs-writer; project-baseline asks

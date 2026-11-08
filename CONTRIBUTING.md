@@ -12,7 +12,7 @@ scripts/check.sh
 
 It is a bash script: run it directly or with `bash`, not `sh`.
 
-It parses every JSON file and every YAML frontmatter and `.base` file, requires `status`, `owner` and
+It parses every JSON file, every `.base` and `evals/*.yaml` file and the frontmatter of Markdown in `plugin/`, `templates/`, `evals/` and `docs/`, checks the eval cases, requires `status`, `owner` and
 `last-verified` frontmatter in every `docs/*.md`, validates skills (name
 matches the folder, description 80–1024 characters and at most 12000 in total, `## Stop point` and
 `## Never` in action skills), rejects local paths such as `/Users/` anywhere in `plugin/` and `site/`, caps

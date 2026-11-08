@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@58469a01872b">
+<meta name="dos-source" content="README.md@02847cc1b255">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -102,8 +102,8 @@ when you call a skill; read <a href="https://github.com/msolecki/developer-os/bl
 change a rule, override it explicitly in your user-level <code>~/.claude/CLAUDE.md</code> (for example, "Ignore
 the developer-os rule on plan files"); that file loads alongside the core rules in every session.</p>
     <p>On a new session (<code>startup</code>), <a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/notices.py"><code>plugin/hooks/notices.py</code></a> shows you up to
-three one-line notices: after an install or update, the version and a link to the
-<a href="https://msolecki.github.io/developer-os/docs/changelog.html">changelog</a>; when inbox notes are older
+four one-line notices: after an install or update, the version and a link to the
+<a href="https://msolecki.github.io/developer-os/docs/changelog.html">changelog</a> (an install adds a line on vault upkeep or on brain-setup); when inbox notes are older
 than 7 days, a brain-review reminder (at most weekly); when brain-garden has not run for 30 days, a
 garden reminder (at most monthly). Vault upkeep never runs on its own: the hook only reminds. It reads
 the vault path from your user-level <code>CLAUDE.md</code> only and prints counts, never note names. Set

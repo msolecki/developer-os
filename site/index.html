@@ -128,7 +128,7 @@
         <article class="layer">
           <span class="k">guard rails</span>
           <h3>Hooks that ask, never deny</h3>
-          <p>Six small hooks: two load the rules and, after a compaction, the state card, one shows version and vault-upkeep notices on a new session, one asks before risky commands, one tells the agent to stop retrying a call that failed three times, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
+          <p>Six small hooks: two load the rules and, after a compaction, resume or fork, the state card, one shows version and vault-upkeep notices on a new session, one asks before risky commands, one tells the agent to stop retrying a call that failed three times, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
           <ul>
             <li><span>Hooks</span><span>6</span></li>
             <li><span>Network calls</span><span>none</span></li>
@@ -270,7 +270,7 @@ Which items should I apply?</code></pre></div>
         <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">Read core.md</a>. Disagree with a rule? Override it in your own <code>~/.claude/CLAUDE.md</code>, which loads alongside it.</p>
       </div>
       <ul class="checklist">
-        <li>Run lint, types and the changed area's tests before each commit; the full suite before a push or PR.</li>
+        <li>Run lint, types and the changed area's tests before each commit; the full suite before a push or PR or when a skill's gate requires it.</li>
         <li>Never delete or skip tests to make a build green.</li>
         <li>Write a plan before changing more than 50 lines of code, and keep it current so work survives a context reset.</li>
         <li>Agent-written code is reviewed by a fresh agent that did not write it.</li>
@@ -312,7 +312,7 @@ Which items should I apply?</code></pre></div>
           <li><a href="skills/brain-setup.html"><b>brain-setup</b><span>Create a vault from the template or connect yours, with config edits shown as a diff.</span></a></li>
           <li><a href="skills/brain-search.html"><b>brain-search</b><span>Answer from your notes only, citing each one.</span></a></li>
           <li><a href="skills/brain-capture.html"><b>brain-capture</b><span>Save a decision, lesson or reference to the inbox, secrets redacted.</span></a></li>
-          <li><a href="skills/brain-review.html"><b>brain-review</b><span>Walk the inbox: promote, merge or reject the notes you name.</span></a></li>
+          <li><a href="skills/brain-review.html"><b>brain-review</b><span>Walk the inbox: promote, merge, reject or supersede the notes you name.</span></a></li>
           <li><a href="skills/brain-garden.html"><b>brain-garden</b><span>Vault health report: stale notes, broken links, duplicates, shared rules, orphans.</span></a></li>
           <li><a href="skills/brain-compile.html"><b>brain-compile</b><span>Synthesize several notes on one topic into one compiled draft.</span></a></li>
           <li><a href="skills/brain-project-refresh.html"><b>brain-project-refresh</b><span>Bring the project hub note up to date with the code, on approval.</span></a></li>
@@ -374,7 +374,7 @@ Which items should I apply?</code></pre></div>
         <h2>A rhythm, not another tool to babysit.</h2>
         <p class="section-copy">The plugin connects moments where you already make decisions. The full loop, with what goes where, is in <a href="docs/workflow.html#the-daily-loop">How to work: brain + code</a>.</p>
         <h3 style="margin-top:2rem">The vault is plain Markdown you own</h3>
-        <p class="small">Folders by topic (<code>_inbox/</code>, <code>PROJECTS/</code>, <code>DEV/</code>, <code>TOOLS/</code>, <code>INFRA/</code>, <code>QA/</code>, <code>_archive/</code>), one frontmatter shape for every note, and Bases views for the inbox and stale notes. brain-setup connects your existing vault without touching its <code>.obsidian/</code> folder. <a href="docs/workflow.html#vault-layout">Vault layout</a></p>
+        <p class="small">Folders by topic (<code>_inbox/</code>, <code>PROJECTS/</code>, <code>DEV/</code>, <code>TOOLS/</code>, <code>INFRA/</code>, <code>QA/</code>, <code>_archive/</code>, <code>_reports/</code>, <code>templates/</code>), one frontmatter shape for every note, and Bases views for the inbox, stale notes and notes by project. brain-setup connects your existing vault by adding only what is missing; in <code>.obsidian/types.json</code> it adds absent keys after your approval and never changes an existing value. <a href="docs/workflow.html#vault-layout">Vault layout</a></p>
       </div>
       <div class="table-wrap">
         <table class="cadence">

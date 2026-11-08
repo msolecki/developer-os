@@ -122,6 +122,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   rm"` passes in a reviewer, and quoted text after `-c` is read as a script only after a shell or `su`,
   so `python3 -c "print(1>2)"` passes. Downloads, unpacking and installs without a package stay known
   misses: a review may need them to run tests.
+- **Amended 2026-11-08:** the destroy category also asks before `git checkout -f`, `git switch -f` or
+  `--discard-changes` and `find … -delete` (#108). The protected files match through symlink hops and
+  without case, so a link to a `.env` asks and so does a differently cased name (#123).
 
 ## D7. One wrap-up nudge per long session
 

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CONTRIBUTING.md@1b7c231d1219">
+<meta name="dos-source" content="CONTRIBUTING.md@b23a95920f73">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,7 +52,7 @@
     <p>Run before every commit:</p>
     <pre><code>scripts/check.sh</code></pre>
     <p>It is a bash script: run it directly or with <code>bash</code>, not <code>sh</code>.</p>
-    <p>It parses every JSON file and every YAML frontmatter and <code>.base</code> file, requires <code>status</code>, <code>owner</code> and
+    <p>It parses every JSON file, every <code>.base</code> and <code>evals/*.yaml</code> file and the frontmatter of Markdown in <code>plugin/</code>, <code>templates/</code>, <code>evals/</code> and <code>docs/</code>, checks the eval cases, requires <code>status</code>, <code>owner</code> and
 <code>last-verified</code> frontmatter in every <code>docs/*.md</code>, validates skills (name
 matches the folder, description 80–1024 characters and at most 12000 in total, <code>## Stop point</code> and
 <code>## Never</code> in action skills), rejects local paths such as <code>/Users&#47;</code> anywhere in <code>plugin/</code> and <code>site/</code>, caps

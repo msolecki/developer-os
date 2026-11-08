@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@1a95003092f0">
+<meta name="dos-source" content="docs/development.md@c16c66906980">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -64,10 +64,10 @@
         <tbody>
           <tr><td>JSON</td><td>Any <code>*.json</code> does not parse (<code>jq empty</code>)</td></tr>
           <tr><td>Frontmatter</td><td>Frontmatter in <code>plugin/</code>, <code>templates/</code>, <code>evals/</code> or <code>docs/</code> Markdown does not parse; a <code>docs/*.md</code> lacks <code>status</code> (<code>current</code>, <code>draft</code>, <code>deprecated</code>), <code>owner</code> or a <code>last-verified</code> date; a skill, agent or output style lacks <code>name</code>/<code>description</code> or its <code>name</code> differs from the folder or file name; a line inside the frontmatter of an <code>evals/</code> file contains <code>---</code> (the eval loader ends frontmatter there)</td></tr>
-          <tr><td>Last-verified (warning)</td><td>A <code>docs/*.md</code> committed after its <code>last-verified</code> date prints a warning; the exit status does not change</td></tr>
           <tr><td>Skill fields</td><td>A skill lacks <code>license</code> or <code>compatibility</code>, or its name does not match <code>^[a-z0-9-]{1,64}$</code></td></tr>
           <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or all together exceed 12000</td></tr>
           <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>)</td></tr>
+          <tr><td>Last-verified (warning)</td><td>A <code>docs/*.md</code> committed after its <code>last-verified</code> date prints a warning; the exit status does not change</td></tr>
           <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code>, <code>brain-import-memory</code>, <code>brain-project-refresh</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>
           <tr><td>Docs standard</td><td>A <code>## </code> heading or bold field of <code>templates/project/docs/decisions/0001-template.md</code>, a bold field of <code>templates/project/docs/pitfalls.md</code>, or a <code>## </code> heading of <code>templates/project/docs/CURRENT-STATE.md</code> does not appear whole, as a fixed string, on that template file's own line of <code>## The standard</code> in <code>docs-sync</code> (the plugin does not ship <code>templates/</code>, so the skill restates them)</td></tr>
           <tr><td>Severity</td><td>A skill, an agent or <code>docs/glossary.md</code> that writes out the P0–P3 scale (inline <code>P0 = …</code> or four <code>- **P0:**</code> bullets) words it differently from the others</td></tr>
@@ -79,7 +79,7 @@
           <tr><td>Agents</td><td>An agent lacks <code>## Final status</code> or one of <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code></td></tr>
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>
           <tr><td>Stale names</td><td>A skill, agent or output-style name removed from <code>plugin/SURFACE.txt</code> in the uncommitted diff (in a pull request, since the merge base with <code>origin/$GITHUB_BASE_REF</code>) still appears as a bare word (the prefixed form fails in References) in <code>plugin/</code>, <code>templates/</code> or <code>README.md</code>; the check runs before the rename is committed</td></tr>
-          <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code> or a page under <code>site/</code> ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk</td></tr>
+          <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code> or <code>site/docs/changelog.html</code> (both are read only up to the first released section), <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code> or a page under <code>site/</code> ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk</td></tr>
           <tr><td>Core-rules size</td><td><code>plugin/rules/core.md</code> exceeds 8900 bytes, or <code>CAP</code> in <code>state-card.py</code> no longer fits under the 10,000-character hook output limit</td></tr>
           <tr><td>References</td><td>A <code>developer-os:&lt;name&gt;</code> string in <code>plugin/</code> (Markdown and hook scripts), <code>docs/</code>, <code>templates/</code>, <code>evals/</code>, <code>README.md</code>, <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code> or <code>SECURITY.md</code> names no skill, agent or output style</td></tr>
           <tr><td>Links</td><td>A relative Markdown link outside fenced or inline code does not resolve from its own file, or its <code>#fragment</code> matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, <code>-1</code>, <code>-2</code> for repeated headings)</td></tr>
@@ -153,7 +153,7 @@
     <ul>
       <li><code>main</code> is the default branch and what the marketplace installs; it moves only on a release (D20).</li>
       <li><code>development</code> is the work branch. Work lands there through pull requests; the repository disallows merge commits.</li>
-      <li><code>plugin/.claude-plugin/plugin.json</code> and <code>.claude-plugin/marketplace.json</code> carry the same <code>version</code>; the Validate stage fails when they differ. Claude Code caches an install by that version, so an update reaches users only when it changes.</li>
+      <li><code>plugin/.claude-plugin/plugin.json</code> and <code>.claude-plugin/marketplace.json</code> carry the same <code>version</code>; the Plugin validation stage fails when they differ. Claude Code caches an install by that version, so an update reaches users only when it changes.</li>
       <li><code>CHANGELOG.md</code> follows Keep a Changelog. A user pins a release by its tag: <code>/plugin marketplace add msolecki/developer-os#v&lt;version&gt;</code>.</li>
     </ul>
     <p>Release, by hand:</p>

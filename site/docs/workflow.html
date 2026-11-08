@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@fd9be4f234f4">
+<meta name="dos-source" content="docs/workflow.md@6c8a10c66ac2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -220,7 +220,7 @@ your yes.</p>
 rejected options are still on screen.</p>
     <h3 id="4-end-of-session-wrap-up">4. End of session: wrap up</h3>
     <p>End the session with <strong>session-retro</strong>: it checks for unpushed or unmerged work, proposes cleanup,
-prints the status block, closes or updates the plan, and offers 0–3 things to capture. Apply only
+prints the status block, closes or updates the plan, and offers findings to apply, at most three under each of seven headings (lessons, rule candidates, check candidates, plan update, docs, developer-os feedback, skill or hook candidates). Apply only
 what you approve. After a long session (30+ tool calls) the <code>Stop</code> hook offers this wrap-up once;
 you approve each item.</p>
     <h3 id="5-end-of-day-or-week-review-the-inbox">5. End of day or week: review the inbox</h3>
@@ -419,7 +419,7 @@ reads. An agent with web access could also send it elsewhere.</li>
 <li>Never commit the vault to a public repository. If you sync it with git, use a private remote; a
 vault holds client context and decisions you would not publish. The template's <code>.gitignore</code> keeps
 Obsidian's UI state (<code>workspace.json</code>, <code>workspace-mobile.json</code>, <code>graph.json</code>, <code>.trash/</code>) out of
-commits; <code>brain-setup</code> appends missing lines to an existing vault's <code>.gitignore</code>.</li>
+commits; <code>brain-setup</code> appends missing lines to an existing vault's <code>.gitignore</code> when that vault is a git repository or already has one.</li>
 <li>brain-capture redacts secrets (tokens, passwords, keys, connection strings) and scans for secret
 patterns before writing. Review
 still matters: check inbox notes for client names, personal data and internal URLs before you set
@@ -431,8 +431,8 @@ manager, entry X"), never to its value.</li>
     <h2 id="what-else-the-plugin-ships">What else the plugin ships</h2>
     <p>The full list of skills, agents and output styles is in the
 <a href="readme.html#whats-inside">README</a>.</p>
-    <p>code-review and audit-to-backlog send every P0/P1 finding (code-review also up to five P2
-correctness findings) to a fresh verifier that sees only the claim (the read-only <code>verifier</code>
+    <p>code-review, audit-to-backlog and project-init send every P0/P1 finding and up to five P2
+correctness findings to a fresh verifier that sees only the claim (the read-only <code>verifier</code>
 agent); refuted findings move to a
 Disputed list and do not block the verdict or enter the backlog.</p>
     <p>Run <code>instruction-review --prune</code> when the default model changes and every six months: it gives each

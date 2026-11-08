@@ -25,7 +25,7 @@ last-verified: 2026-11-08
 | Vault project slug | The `project:` value for a repository's notes, recorded in its `_Context.md`. |
 | P0–P3 | The single severity scale, as the skills and agents state it: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup. |
 | Verdict | `APPROVE`, `COMMENT` (an open question decides P0/P1) or `REQUEST_CHANGES` (an open P0/P1). |
-| Fresh verifier | An agent that did not produce a P0/P1 (or, in code-review, a P2 correctness) finding and sees only the claim, asked to disprove it: the read-only `verifier` agent. |
+| Fresh verifier | An agent that did not produce a P0/P1 finding or one of up to five P2 correctness findings and sees only the claim, asked to disprove it: the read-only `verifier` agent. |
 | Disputed | A finding the verifier refuted; listed with evidence, does not block the verdict or enter the backlog. |
 | Fast check | Lint, types and tests of the changed area, run before every commit. |
 | Full suite | The project's complete validation, run once before a push or PR. |

@@ -27,7 +27,7 @@ and audit skills below in one pass.
 - **Which skills apply:** project-baseline and docs-sync always; instruction-review when a
   `CLAUDE.md`/`AGENTS.md` exists; each conventions skill when its stack is present (typescript:
   `tsconfig.json` or `*.ts`; nextjs: `next.config.*` or a `next` dependency; testing: test files;
-  error-handling: TypeScript server code; monitoring: infrastructure, CI workflows, alerts or health endpoints;
+  error-handling: TypeScript server code, API routes or handlers; monitoring: infrastructure, CI workflows, alerts or health endpoints;
   defensive-coding: external input, authentication, money, concurrency,
   persistence or error paths).
   comments-conventions is never audited, since it governs only comments an agent adds;
@@ -110,7 +110,8 @@ standard.
   would reverse.
 - **Repeated mechanical mistake:** proposes a lint rule, test or script instead of a line.
 - **`--prune`:** a DELETE/KEEP/REWRITE verdict for every line, each with its source; never deletes
-  a truthfulness rule; lists every check it did not run under `NOT RUN`.
+  a truthfulness rule; lists every check it did not run under `NOT RUN`. Inside the developer-os
+  repository it also reviews `plugin/rules/core.md`.
 
 ### audit-to-backlog
 
@@ -155,7 +156,7 @@ skipped when `gh` is unavailable) is dropped and named in the report. A perspect
 [Source](../../plugin/skills/pr-cycle/SKILL.md). Takes a PR to a merge verdict.
 
 - **Trust check:** the head is untrusted when it is a fork or its author is not an owner, member or
-  collaborator; an untrusted head is fetched, not checked out, until you say yes.
+  collaborator, or either read of its author or head fails; an untrusted head is fetched, not checked out, until you say yes.
 - **Merge:** merges the base in (never rebases a pushed branch), resolves only conflicts whose
   intent is clear, never takes a side wholesale, and runs the fast check before the merge commit.
 - **Review:** code-review on the PR diff, the conflict resolutions sent to `code-reviewer`, and the
@@ -416,7 +417,7 @@ retried, in one layer; authorization reads server-held facts.
 
 ### comments-conventions
 
-[Source](../../plugin/skills/comments-conventions/SKILL.md). Loads when writing code. No comment by
+[Source](../../plugin/skills/comments-conventions/SKILL.md). Loads when writing or reviewing code comments in TypeScript, JavaScript, Python or shell files. No comment by
 default (rename or extract first); never restate the next line or explain the change; a comment
 only for a past bug, a directive or a non-obvious platform fact, in one line; update or delete the
 comment with the code it describes. It governs only the comments the agent adds and leaves

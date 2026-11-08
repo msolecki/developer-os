@@ -78,8 +78,8 @@ change a rule, override it explicitly in your user-level `~/.claude/CLAUDE.md` (
 the developer-os rule on plan files"); that file loads alongside the core rules in every session.
 
 On a new session (`startup`), [`plugin/hooks/notices.py`](plugin/hooks/notices.py) shows you up to
-three one-line notices: after an install or update, the version and a link to the
-[changelog](https://msolecki.github.io/developer-os/docs/changelog.html); when inbox notes are older
+four one-line notices: after an install or update, the version and a link to the
+[changelog](https://msolecki.github.io/developer-os/docs/changelog.html) (an install adds a line on vault upkeep or on brain-setup); when inbox notes are older
 than 7 days, a brain-review reminder (at most weekly); when brain-garden has not run for 30 days, a
 garden reminder (at most monthly). Vault upkeep never runs on its own: the hook only reminds. It reads
 the vault path from your user-level `CLAUDE.md` only and prints counts, never note names. Set

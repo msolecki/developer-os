@@ -207,7 +207,7 @@ rejected options are still on screen.
 ### 4. End of session: wrap up
 
 End the session with **session-retro**: it checks for unpushed or unmerged work, proposes cleanup,
-prints the status block, closes or updates the plan, and offers 0–3 things to capture. Apply only
+prints the status block, closes or updates the plan, and offers findings to apply, at most three under each of seven headings (lessons, rule candidates, check candidates, plan update, docs, developer-os feedback, skill or hook candidates). Apply only
 what you approve. After a long session (30+ tool calls) the `Stop` hook offers this wrap-up once;
 you approve each item.
 
@@ -430,7 +430,7 @@ Link from the vault to the repository by path or URL; do not copy repository con
 - Never commit the vault to a public repository. If you sync it with git, use a private remote; a
   vault holds client context and decisions you would not publish. The template's `.gitignore` keeps
   Obsidian's UI state (`workspace.json`, `workspace-mobile.json`, `graph.json`, `.trash/`) out of
-  commits; `brain-setup` appends missing lines to an existing vault's `.gitignore`.
+  commits; `brain-setup` appends missing lines to an existing vault's `.gitignore` when that vault is a git repository or already has one.
 - brain-capture redacts secrets (tokens, passwords, keys, connection strings) and scans for secret
   patterns before writing. Review
   still matters: check inbox notes for client names, personal data and internal URLs before you set
@@ -444,8 +444,8 @@ Link from the vault to the repository by path or URL; do not copy repository con
 The full list of skills, agents and output styles is in the
 [README](../README.md#whats-inside).
 
-code-review and audit-to-backlog send every P0/P1 finding (code-review also up to five P2
-correctness findings) to a fresh verifier that sees only the claim (the read-only `verifier`
+code-review, audit-to-backlog and project-init send every P0/P1 finding and up to five P2
+correctness findings to a fresh verifier that sees only the claim (the read-only `verifier`
 agent); refuted findings move to a
 Disputed list and do not block the verdict or enter the backlog.
 

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@8c9592d43fe7">
+<meta name="dos-source" content="docs/reference/skills.md@d2b1c8ddae75">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -64,7 +64,7 @@ migrations, a UI. It runs nothing to find them.</li>
 <li><strong>Which skills apply:</strong> project-baseline and docs-sync always; instruction-review when a
 <code>CLAUDE.md</code>/<code>AGENTS.md</code> exists; each conventions skill when its stack is present (typescript:
 <code>tsconfig.json</code> or <code>*.ts</code>; nextjs: <code>next.config.*</code> or a <code>next</code> dependency; testing: test files;
-error-handling: TypeScript server code; monitoring: infrastructure, CI workflows, alerts or health endpoints;
+error-handling: TypeScript server code, API routes or handlers; monitoring: infrastructure, CI workflows, alerts or health endpoints;
 defensive-coding: external input, authentication, money, concurrency,
 persistence or error paths).
 comments-conventions is never audited, since it governs only comments an agent adds;
@@ -146,7 +146,7 @@ rules or global instructions; flags stale or contradicted lines; keeps the file 
 would reverse.</li>
 <li><strong>Repeated mechanical mistake:</strong> proposes a lint rule, test or script instead of a line.</li>
 <li>**<code>--prune</code>:** a DELETE/KEEP/REWRITE verdict for every line, each with its source; never deletes
-a truthfulness rule; lists every check it did not run under <code>NOT RUN</code>.</li>
+a truthfulness rule; lists every check it did not run under <code>NOT RUN</code>. Inside the developer-os repository it also reviews <code>plugin/rules/core.md</code>.</li>
     </ul>
     <h3 id="audit-to-backlog">audit-to-backlog</h3>
     <p><a href="../../skills/audit-to-backlog.html">Source</a>. A broad code audit by parallel
@@ -186,7 +186,7 @@ and Evidence checked for a clean <code>APPROVE</code>.</li>
     <p><a href="../../skills/pr-cycle.html">Source</a>. Takes a PR to a merge verdict.</p>
     <ul>
 <li><strong>Trust check:</strong> the head is untrusted when it is a fork or its author is not an owner, member or
-collaborator; an untrusted head is fetched, not checked out, until you say yes.</li>
+collaborator, or either read of its author or head fails; an untrusted head is fetched, not checked out, until you say yes.</li>
 <li><strong>Merge:</strong> merges the base in (never rebases a pushed branch), resolves only conflicts whose
 intent is clear, never takes a side wholesale, and runs the fast check before the merge commit.</li>
 <li><strong>Review:</strong> code-review on the PR diff, the conflict resolutions sent to <code>code-reviewer</code>, and the
@@ -394,7 +394,7 @@ claimed with a status; check and act share one transaction; <code>LIMIT</code> h
 setup; redaction runs before truncation; money is integers in the smallest unit; only safe calls are
 retried, in one layer; authorization reads server-held facts.</p>
     <h3 id="comments-conventions">comments-conventions</h3>
-    <p><a href="../../skills/comments-conventions.html">Source</a>. Loads when writing code. No comment by
+    <p><a href="../../skills/comments-conventions.html">Source</a>. Loads when writing or reviewing code comments in TypeScript, JavaScript, Python or shell files. No comment by
 default (rename or extract first); never restate the next line or explain the change; a comment
 only for a past bug, a directive or a non-obvious platform fact, in one line; update or delete the
 comment with the code it describes. It governs only the comments the agent adds and leaves

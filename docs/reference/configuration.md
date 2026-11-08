@@ -34,11 +34,11 @@ stay symlinks.
 | `Backlog: <todo path>, <done path>` | Project `AGENTS.md` or `CLAUDE.md` | audit-to-backlog, implement-backlog, plan-status, project-baseline, project-init, docs-sync, spec, session-retro, the `SessionStart` hook (skips them as plans) | `TODO.md`, `TODO-done.md`; audit-to-backlog and project-baseline ask before creating them and write the line |
 | Planning location | Project `AGENTS.md` or `CLAUDE.md` | Core rules, plan-status, spec, session-retro | `docs/plans/<YYYY-MM-DD-task>.md`, git-ignored |
 | Specification location | Project `AGENTS.md` or `CLAUDE.md` | spec | spec proposes `docs/specs/` and asks |
-| Fast check and full suite commands | Project `AGENTS.md` or `CLAUDE.md` | Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist | Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing |
+| Fast check and full suite commands | Project `AGENTS.md` or `CLAUDE.md` | Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist, parallel-lanes | Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing |
 | `Vault project slug:` | `_Context.md` | brain-search, brain-capture, brain-project-refresh and brain-import-memory, which read `_Context.md` at the repository root when the line is not in context | Empty `project:`; brain-project-refresh asks for the slug once, brain-import-memory proposes notes with an empty `project:` and asks |
 | Docs root | `AGENTS.md` | docs-sync | `docs/` |
-| Task state | `docs/plans/.devos-state.md` (fixed, even when the planning location is overridden) | The `SessionStart` hook after compaction | Written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes; none |
-| `TODO.md` item format | The backlog todo file | audit-to-backlog, project-baseline, implement-backlog, plan-status | `templates/project/TODO.md` shows it |
+| Task state | `docs/plans/.devos-state.md` (fixed, even when the planning location is overridden) | The `SessionStart` hook after compaction, resume and fork | Written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes; none |
+| `TODO.md` item format | The backlog todo file | audit-to-backlog, project-baseline, implement-backlog, plan-status, spec (`FEAT-` items), project-init (`CONV-` items), session-retro (open items of a finished plan) | `templates/project/TODO.md` shows it |
 | `DESIGN.md` | Repository root, for projects with a UI | Agents doing UI work (the template `AGENTS.md` line), project-baseline, docs-sync | project-baseline proposes it as a backlog item |
 
 ## Vault
