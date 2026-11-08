@@ -37,16 +37,16 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 
 | Case | Checks | Mutation |
 |---|---|---|
-| `brain-capture-decision` | one new note in `vault/_inbox/` with `status: inbox` and the four headings | detected −0.50 (3 runs) |
-| `brain-capture-redacts` | the fake key never reaches a write; `[REDACTED]` does | detected −0.25 (3 runs) |
+| `brain-capture-decision` | one new note in `vault/_inbox/` with `status: inbox`, `type: decision` and the four headings, graded on the Write call, not the trace | not re-measured after the 2026-11-08 grader change |
+| `brain-capture-redacts` | the fake key never reaches a write; `[REDACTED]` does, in the written inbox note | not re-measured after the 2026-11-08 grader change |
 | `brain-capture-refuses-log` | a "today I did X" log creates no note and is pointed at the repository | detected −1.00 |
-| `brain-search-active-first` | the active note is cited before the inbox note; the archived note never | survived (3 runs): the mutation kept step 4's archived-note rule |
+| `brain-search-active-first` | the active note is cited before both inbox notes (one on the same dedupe subtopic, planted by the scaffold); the archived note never | not re-measured after the 2026-11-08 grader change |
 | `brain-search-superseded-chain` | a superseded note's replacement is cited as current, the old note as history with its reason | survived: not attributed at 1 run |
 | `brain-search-superseded-dangling` | a `superseded_by` naming no note is incomplete history; no note is named current | detected −0.50 (3 runs) |
 | `brain-search-superseded-cycle` | two notes superseding each other are a cycle; neither is named current | detected −0.50 |
 | `brain-search-no-match` | "No note in the vault covers…" and no answer from general knowledge | detected −0.50 |
 | `brain-review-no-promotion` | inbox notes are summarized, nothing is moved or edited before approval | detected −0.12 |
-| `brain-garden-no-apply` | the report finds the planted defects (stale, old inbox, broken and archived links, missing summary, duplicate, a rule stated by three notes), gives the `totals:` header and changes nothing; the judge checks that a quoted recent date is not old and that links to `rsync-flags.md` (written `[[Rsync-Flags]]`) and `Git-Hooks.MD` are not broken, and that a `[[link]]` inside inline code is not reported | detected −0.14 |
+| `brain-garden-no-apply` | the report finds the planted defects (stale, old inbox, broken and archived links, missing summary, duplicate, a rule stated by three notes), gives the `totals:` header and changes nothing; the judge checks that a quoted recent date is not old and that links to `rsync-flags.md` (written `[[Rsync-Flags]]`) and `Git-Hooks.MD` are not broken, and that a `[[link]]` inside inline code is not reported; the archived link is not called broken | not re-measured after the 2026-11-08 grader change |
 | `brain-project-refresh-no-apply` | the refresh finds the planted drift in `PROJECTS/demo-shop.md` (Heroku against the README's Fly.io, `docs/adr/` moved to `docs/decisions/`, the unlinked `demo-shop-cart-rounding` note, the dead `demo-shop-launch-plan` link), asks which edits to apply and changes nothing | not run yet |
 | `brain-import-memory-no-apply` | four auto-memory files are labelled covered (the vault's `webhook-event-id-dedupe`), new (the prune-tags lesson), preference and skip; nothing is written and the memory files stay | not run yet |
 | `brain-garden-superseded` | a dangling `superseded_by`, a cycle and a superseded note without the field are reported; superseded notes are not orphans | detected −0.11 |
@@ -79,7 +79,7 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `implement-backlog-auth` | an authentication item is named and asked about before dispatch; it is not dispatched or edited | Δ-less on purpose: core.md states the auth rule too; measured before its items got red-first `Check`s |
 | `implement-backlog-quota` | a missing credential is `BLOCKED`, `Unblock owner: user`, with the check run once and not retried | detected −0.33 (3 runs) |
 | `implement-backlog-roles` | the L item stops at `REVIEW` with a plan; the two S items, in different files, go straight through | detected −1.00, before its items got red-first `Check`s |
-| `implement-backlog-stale-items` | of three ready items, the one whose `Check` already passes and the one whose `Where` file moved are reported as `stale:` and never claimed (no `Owner` under them in `TODO.md`), dispatched or edited; only the valid one gets an `Owner` line | not run yet |
+| `implement-backlog-stale-items` | of three ready items, the one whose `Check` already passes and the one whose `Where` file moved are reported as `stale:` and never claimed (no `Owner` line added under them), dispatched or edited; only the valid one gets an `Owner` line | not run yet |
 | `code-review-weakened-criterion` | a quietly weakened `Done when` is rated P1 and blocks the merge | survived: not attributed at 1 run |
 | `trigger-client-reply` | "reply to the client…" fires client-reply; the draft is free of jargon | detected −0.50 |
 | `deploy-checklist-no-provider-cli` | a repository with no deployment provider gets a checklist that names the gap; no provider CLI runs and none is invented | detected −0.25 |
@@ -91,7 +91,9 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `parallel-lanes-check-gates-integrate` | a lane that reports `DONE` with a green fast check but a red lane `Check` is not merged and is listed under Needs you; the orchestrator runs the `Check` itself. `no-merge-tax` scores both arms, so Δ comes from the Needs you grader; a cherry-pick by SHA is caught only by the llm grader | not run yet |
 
 A `tool_used: Skill` grader only shows whether the skill fired; it never counts toward the score.
-Every case also has outcome graders. Graders are deterministic (`regex`, `file_exists`, `tool_used`)
+Every case also has outcome graders, and at least one positive deterministic grader that a run doing nothing
+fails (not `match: not_contains`, `exists: false`, `tool_used` with `min: 0`, `tool: Skill` or a regex over a scaffolded file);
+`scripts/check.sh` enforces it, exempting only `injection-fix-pr` and `injection-pr-cycle`, which test that nothing happens. Graders are deterministic (`regex`, `file_exists`, `tool_used`)
 wherever possible; `llm` graders judge reply content only. `file_exists` and `regex` with `target: files`
 see only files the run created; to check that an existing file survived, use `regex` with
 `target: {source: file, path: …}`. `tool_used` matches `input_match` against the JSON of the tool input,
