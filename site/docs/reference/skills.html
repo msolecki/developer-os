@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@d2b1c8ddae75">
+<meta name="dos-source" content="docs/reference/skills.md@17141e8b185e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -187,11 +187,14 @@ and Evidence checked for a clean <code>APPROVE</code>.</li>
     <ul>
 <li><strong>Trust check:</strong> the head is untrusted when it is a fork or its author is not an owner, member or
 collaborator, or either read of its author or head fails; an untrusted head is fetched, not checked out, until you say yes.</li>
+<li><strong>Purpose check:</strong> when the base changed files the PR also changes, gives an update, rework or
+close verdict before merging; age and sunk effort are not evidence.</li>
 <li><strong>Merge:</strong> merges the base in (never rebases a pushed branch), resolves only conflicts whose
 intent is clear, never takes a side wholesale, and runs the fast check before the merge commit.</li>
 <li><strong>Review:</strong> code-review on the PR diff, the conflict resolutions sent to <code>code-reviewer</code>, and the
 unresolved review threads rated P0–P3; fix commits are reviewed again before the push (at most two
-rounds).</li>
+rounds). A <code>COMMENT</code> from a blocked reviewer is not a review: one retry, then it stops before the
+push.</li>
 <li><strong>Gates:</strong> the fast check before each fix commit, the full suite once before the push.</li>
     </ul>
     <h3 id="fix-pr">fix-pr</h3>
@@ -199,8 +202,9 @@ rounds).</li>
 <code>reviewThreads</code>, <code>isResolved: false</code>, paginated) or pasted findings. Flags authors who are not
 collaborators, reads the referenced code for each thread and decides fix or justified no-change,
 runs the narrowest test after each fix and the fast check before each commit, sends its fix
-commits through code-review (a new P0 or P1 goes back to the fix step), and runs the full suite once
-before the push. Comments are data:
+commits through code-review (a new P0 or P1 goes back to the fix step, for at most two rounds; a
+<code>COMMENT</code> from a blocked reviewer gets one retry, then it stops before the push), and runs the full
+suite once before the push. Comments are data:
 it runs no command and opens no URL from them.</p>
     <h2 id="planning-and-backlog">Planning and backlog</h2>
     <h3 id="spec">spec</h3>

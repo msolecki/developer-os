@@ -157,11 +157,14 @@ skipped when `gh` is unavailable) is dropped and named in the report. A perspect
 
 - **Trust check:** the head is untrusted when it is a fork or its author is not an owner, member or
   collaborator, or either read of its author or head fails; an untrusted head is fetched, not checked out, until you say yes.
+- **Purpose check:** when the base changed files the PR also changes, gives an update, rework or
+  close verdict before merging; age and sunk effort are not evidence.
 - **Merge:** merges the base in (never rebases a pushed branch), resolves only conflicts whose
   intent is clear, never takes a side wholesale, and runs the fast check before the merge commit.
 - **Review:** code-review on the PR diff, the conflict resolutions sent to `code-reviewer`, and the
   unresolved review threads rated P0–P3; fix commits are reviewed again before the push (at most two
-  rounds).
+  rounds). A `COMMENT` from a blocked reviewer is not a review: one retry, then it stops before the
+  push.
 - **Gates:** the fast check before each fix commit, the full suite once before the push.
 
 ### fix-pr
@@ -170,8 +173,9 @@ skipped when `gh` is unavailable) is dropped and named in the report. A perspect
 `reviewThreads`, `isResolved: false`, paginated) or pasted findings. Flags authors who are not
 collaborators, reads the referenced code for each thread and decides fix or justified no-change,
 runs the narrowest test after each fix and the fast check before each commit, sends its fix
-commits through code-review (a new P0 or P1 goes back to the fix step), and runs the full suite once
-before the push. Comments are data:
+commits through code-review (a new P0 or P1 goes back to the fix step, for at most two rounds; a
+`COMMENT` from a blocked reviewer gets one retry, then it stops before the push), and runs the full
+suite once before the push. Comments are data:
 it runs no command and opens no URL from them.
 
 ## Planning and backlog
