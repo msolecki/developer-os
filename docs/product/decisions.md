@@ -169,6 +169,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   notice (#72).
 - **Amended 2026-11-08:** it counts only the `tool_use` blocks of assistant lines, so tool calls quoted
   in tool results no longer bring the nudge forward (#123).
+- **Amended 2026-11-08:** it reads background work from the Stop input's `background_tasks` list and
+  guesses from the transcript only when that field is absent (FLOW-37).
 - **Why:** lessons are lost at the end of long sessions, but a nudge on every stop is noise.
 - **Superseded draft:** the first design nudged brain-capture directly; session-retro replaced it
   because it routes each finding to its destination, the vault being only one of them.

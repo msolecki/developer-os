@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@ef9523529753">
+<meta name="dos-source" content="docs/product/decisions.md@4229ea285049">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -113,6 +113,7 @@
 <li><strong>Decision:</strong> the <code>Stop</code> hook asks for session-retro once per session after 30 tool calls, skipping headless/SDK runs and subagents, and deferring while a background task it launched is still running (PR #69). It counts entries and reads background-task ids and output paths, never message content.</li>
 <li><strong>Amended 2026-10-15:</strong> it also defers while a Monitor started in the last 30 minutes has no terminal notice (#72).</li>
 <li><strong>Amended 2026-11-08:</strong> it counts only the <code>tool_use</code> blocks of assistant lines, so tool calls quoted in tool results no longer bring the nudge forward (#123).</li>
+<li><strong>Amended 2026-11-08:</strong> it reads background work from the Stop input's <code>background_tasks</code> list and guesses from the transcript only when that field is absent (FLOW-37).</li>
 <li><strong>Why:</strong> lessons are lost at the end of long sessions, but a nudge on every stop is noise.</li>
 <li><strong>Superseded draft:</strong> the first design nudged brain-capture directly; session-retro replaced it because it routes each finding to its destination, the vault being only one of them.</li>
 </ul>
