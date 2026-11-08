@@ -22,7 +22,7 @@ done
 # Skills also carry the portable Agent Skills fields license and compatibility, and a name matching ^[a-z0-9-]{1,64}$.
 # Skill descriptions are 80-1024 characters and together at most 12000: every description loads into every session.
 # Every skill has a non-empty ## Stop point and a ## Never section with at least one `- ` rule, except the read-only ones: *-conventions,
-# brain-search, code-review, plan-status and skill-usage (they never write files, send anything or change git state).
+# brain-search, code-review, plan-status and skill-usage (they write nothing inside the repository, send nothing and change no git state).
 files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
   require "date"; require "yaml"
   read_only = %w[brain-search code-review plan-status skill-usage]
@@ -70,6 +70,16 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
   end
   abort "skills: descriptions total #{total} characters, limit 12000" if total > 12000'
 
+# A doc committed after its last-verified date was likely edited without being re-checked against the code.
+# A warning only: the exit status does not change.
+files 'docs/*.md' | while IFS= read -r -d '' f; do
+  committed=$(git log -1 --format=%cs -- "$f")
+  verified=$(awk '/^last-verified: / { print $2; exit }' "$f")
+  if [ -n "$committed" ] && [[ "$committed" > "$verified" ]]; then
+    echo "warning: last-verified: $f: committed $committed, last-verified $verified" >&2
+  fi
+done
+
 # The brain skills share one "Locate the vault" paragraph (the first after that heading); it must stay identical.
 para() { awk '/^## 1\. Locate the vault$/ { f = 1; next } f && NF { p = 1; print; next } p { exit }' "$1"; }
 for s in brain-capture brain-compile brain-garden brain-import-memory brain-project-refresh brain-review; do
@@ -80,20 +90,27 @@ done
 [ -n "$(para plugin/skills/brain-search/SKILL.md)" ] || fail vault plugin/skills/brain-search/SKILL.md "no \"## 1. Locate the vault\" paragraph"
 
 # The plugin does not ship templates/project/, so docs-sync restates its standard. Each ADR heading and field, pitfalls
-# field and CURRENT-STATE heading of the template must appear, whole, under docs-sync's "## The standard".
-# The AGENTS.md sections are paraphrased there, so they are not compared.
+# field and CURRENT-STATE heading of the template must appear, whole, on that file's line under docs-sync's
+# "## The standard". The AGENTS.md sections are paraphrased there, so they are not compared.
 std=$(awk '/^## The standard$/ { f = 1; next } f && /^## / { exit } f' plugin/skills/docs-sync/SKILL.md)
 t=templates/project/docs
-{ sed -nE 's/^## (.*)/\1/p; s/^\*\*([^*:]+):\*\*.*/\1/p' "$t/decisions/0001-template.md"
-  sed -nE 's/^- \*\*([^*:]+):\*\*.*/\1/p' "$t/pitfalls.md"
-  sed -nE 's/^(## .*)/\1/p' "$t/CURRENT-STATE.md"
-} | while IFS= read -r h; do
-  printf '%s\n' "$std" | grep -qE -- "(^|[^A-Za-z_])$h([,.\`]| \(|\$)" ||
-    fail standard plugin/skills/docs-sync/SKILL.md "\"$h\" from templates/project/ is missing from \"## The standard\""
-done
+# names DOC: each name on stdin appears, as a fixed string after a space or ` and before , . ( or `, on the "- `docs/DOC" line.
+names() {
+  line=$(printf '%s\n' "$std" | grep -m 1 -F -e "- \`docs/$1") ||
+    fail standard plugin/skills/docs-sync/SKILL.md "no \"- \`docs/$1\" line under \"## The standard\""
+  while IFS= read -r h; do
+    for b in ' ' '`'; do for a in ',' '.' ' (' '`'; do
+      case $line in *"$b$h$a"*) continue 3 ;; esac
+    done; done
+    fail standard plugin/skills/docs-sync/SKILL.md "\"$h\" from templates/project/ is missing from the docs/$1 line of \"## The standard\""
+  done
+}
+sed -nE 's/^## (.*)/\1/p; s/^\*\*([^*:]+):\*\*.*/\1/p' "$t/decisions/0001-template.md" | names decisions/
+sed -nE 's/^- \*\*([^*:]+):\*\*.*/\1/p' "$t/pitfalls.md" | names pitfalls.md
+sed -nE 's/^(## .*)/\1/p' "$t/CURRENT-STATE.md" | names CURRENT-STATE.md
 
-# The P0–P3 scale is written out in skills and agents, inline (`P0 = …; P3 = ….`) or as four bullets; every copy must match.
-git grep --untracked -l -E 'P0 = |^- \*\*P0:\*\* ' -- plugin | ruby -e '
+# The P0–P3 scale is written out in skills, agents and the glossary, inline (`P0 = …; P3 = ….`) or as four bullets; every copy must match.
+git grep --untracked -l -E 'P0 = |^- \*\*P0:\*\* ' -- plugin docs/glossary.md | ruby -e '
   seen = {}
   $stdin.read.split.each do |f|
     t = File.read(f)
@@ -115,11 +132,12 @@ files '*.base' 'evals/*.yaml' | while IFS= read -r -d '' f; do
 done
 
 # Every eval case directory has a case.yaml whose name is the folder, a prompt.md, the scaffold_script it names,
-# graders/*.md of a known type with at least one deterministic (non-llm) grader, and its own row in evals/README.md.
+# graders/*.md of a known type with at least one deterministic (non-llm) grader and one positive grader, and its own row in evals/README.md.
 # A mistyped grader or a renamed case would otherwise fail only in a paid eval run.
 files 'evals/*' | ruby -e '
   require "yaml"
   types = %w[llm regex file_exists tool_used]
+  negative_only = %w[injection-fix-pr injection-pr-cycle]
   readme = File.read("evals/README.md").scan(/^\| `([^`]+)` \|/).flatten
   cases = $stdin.read.split("\0").map { |f| f.split("/") }.select { |p| p.size > 2 && p[1] != "fixtures" }.map { |p| p[1] }.uniq
   cases.each do |c|
@@ -132,14 +150,34 @@ files 'evals/*' | ruby -e '
     bad.("scaffold_script #{s} does not exist") if s && !File.file?("#{d}/#{s}")
     graders = Dir.glob("#{d}/graders/*.md").sort
     bad.("no graders/*.md") if graders.empty?
-    kinds = graders.map do |g|
-      t = File.read(g)[/\A---\n(.*?)^---$/m, 1].then { |fm| fm && YAML.safe_load(fm)["type"] rescue nil }
-      types.include?(t) ? t : abort("evals: #{g}: grader type #{t.inspect} is not one of #{types.join(", ")}")
+    fms = graders.map do |g|
+      fm = File.read(g)[/\A---\n(.*?)^---$/m, 1].then { |s| s && YAML.safe_load(s) rescue nil } || {}
+      types.include?(fm["type"]) ? fm : abort("evals: #{g}: grader type #{fm["type"].inspect} is not one of #{types.join(", ")}")
     end
-    bad.("no deterministic grader (regex, file_exists or tool_used)") if kinds.all?("llm")
+    bad.("no deterministic grader (regex, file_exists or tool_used)") if fms.all? { |fm| fm["type"] == "llm" }
+    # A positive grader fails a run that does nothing; a case of only negative ones (not_contains, exists: false,
+    # max: 0, tool: Skill, a regex over a scaffolded file) passes an empty run. Two injection cases test only that nothing happens.
+    positive = fms.any? do |fm|
+      case fm["type"]
+      when "regex" then fm["match"] != "not_contains" && !fm["target"].is_a?(Hash)
+      when "file_exists" then fm["exists"] != false
+      when "tool_used" then fm["tool"] != "Skill" && fm.fetch("min", 1).to_i >= 1
+      end
+    end
+    bad.("no positive deterministic grader (one that fails a run that does nothing)") unless positive || negative_only.include?(c)
     bad.("no row in evals/README.md") unless readme.include?(c)
   end
   (readme - cases).each { |c| abort "evals: evals/README.md: row #{c} names no case" }'
+
+# D2: hook scripts use the Python 3 standard library only and open no network connection. An import outside this
+# allowlist fails (add a stdlib module here deliberately), and so does any network module, however it is loaded.
+stdlib='datetime|hashlib|itertools|json|os|re|stat|subprocess|sys|time'
+if grep -nE '^[[:space:]]*(import|from)[[:space:]]' plugin/hooks/*.py | grep -vE ":[[:space:]]*(import|from) ($stdlib)( |\$)" >&2; then
+  fail imports plugin/hooks "import outside the standard-library allowlist above"
+fi
+if grep -nE '\b(urllib|socket|http\.client|requests|httpx|importlib|__import__)\b' plugin/hooks/*.py >&2; then
+  fail imports plugin/hooks "network module or dynamic import above"
+fi
 
 targets=$(grep -o '\${CLAUDE_PLUGIN_ROOT}/[^"\\[:space:]]*' plugin/hooks/hooks.json | sed 's|^\${CLAUDE_PLUGIN_ROOT}/||') || true
 [ -n "$targets" ] || fail hooks plugin/hooks/hooks.json "no \${CLAUDE_PLUGIN_ROOT} target"
@@ -270,7 +308,9 @@ files '*.md' | ruby -e '
 files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
   sha = ->(f) { Digest::SHA256.hexdigest(File.read(f).gsub(/^last-verified: .*\n/, ""))[0, 12] }
   want = {}
-  Dir.glob("docs/**/*.md").reject { |f| f.start_with?("docs/plans/") }.each { |f| want[f] = "site/#{f.sub(/\.md\z/, ".html")}" }
+  # git ls-files, not Dir.glob: a git-ignored doc (docs/superpowers/) is not published.
+  `git ls-files -z --cached --others --exclude-standard -- "docs/*.md"`.split("\0").select { |f| File.file?(f) }
+    .reject { |f| f.start_with?("docs/plans/") }.each { |f| want[f] = "site/#{f.sub(/\.md\z/, ".html")}" }
   %w[README CHANGELOG CONTRIBUTING SECURITY].each { |n| want["#{n}.md"] = "site/docs/#{n.downcase}.html" }
   Dir.glob("plugin/skills/*/SKILL.md").each { |f| want[f] = "site/skills/#{File.basename(File.dirname(f))}.html" }
   Dir.glob("plugin/agents/*.md").each { |f| want[f] = "site/agents.html" }
@@ -323,7 +363,7 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
   sitemap.tally.each { |u, n| errs << "site: site/sitemap.xml: #{u} is listed #{n} times" if n > 1 }
   abort errs.uniq.join("\n") unless errs.empty?'
 
-# tests/check.test.sh runs the whole check about forty times (about two minutes), so it runs only in CI or with CI=1.
+# tests/check.test.sh runs the whole check once per case (minutes), so it runs only in CI or with CI=1.
 for t in tests/*.test.sh; do
   [ -e "$t" ] || continue
   [ "$t" != tests/check.test.sh ] || [ -n "${CI:-}" ] || continue

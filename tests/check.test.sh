@@ -101,7 +101,7 @@ run "an action skill without ## Never" fail "plugin/skills/spec/SKILL.md: skill 
 edit plugin/skills/spec/SKILL.md 's/^description: .*/description: Too short./'
 run "a skill description under 80 characters" fail "description is 10 characters, allowed 80-1024"
 
-# Each description stays within 80-1024; 100 more characters on each of the 28 skills pass the 12000 total.
+# Each description stays within 80-1024; 100 more characters on every skill pass the 12000 total.
 for f in "$r"/plugin/skills/*/SKILL.md; do
   perl -pi -e 's/^(description: .*)$/$1 . " pad" x 25/e' "$f"
 done
@@ -204,6 +204,49 @@ EOF
 rehash CHANGELOG.md site/docs/changelog.html
 rehash docs/development.md site/docs/development.html
 run "a count in a released CHANGELOG section, 'N cases of' prose, diacritic, repeated and linked headings pass" pass
+
+printf '{' > "$r/x.json"
+run "an invalid JSON file" fail "json: x.json: invalid JSON"
+
+edit plugin/skills/spec/SKILL.md '/^license: /d'
+run "a skill without license" fail "frontmatter: plugin/skills/spec/SKILL.md: license is empty"
+
+edit plugin/agents/qa-expert.md 's/^name: qa-expert$/name: qa-expert2/'
+run "an agent name that does not match its file" fail "name \"qa-expert2\" does not match \"qa-expert\""
+
+edit plugin/agents/qa-expert.md '/^- `CONTINUING`/d'
+run "an agent without one final status" fail "agents: plugin/agents/qa-expert.md: final status CONTINUING missing"
+
+edit docs/development.md 's/^owner: .*/owner:/'
+run "a doc without owner" fail "frontmatter: docs/development.md: owner is empty"
+
+edit docs/glossary.md 's/^last-verified: .*/last-verified: 2000-01-01/'
+run "a doc committed after its last-verified only warns" pass "warning: last-verified: docs/glossary.md"
+
+edit evals/spec-no-implementation/case.yaml 's/^  scaffold_script: .*/  scaffold_script: nope.sh/'
+run "an eval case naming a missing scaffold_script" fail "evals: evals/spec-no-implementation: scaffold_script nope.sh does not exist"
+
+rm "$r/evals/spec-no-implementation/graders/asks.md"
+run "an eval case with no positive grader" fail "evals: evals/spec-no-implementation: no positive deterministic grader"
+
+rm "$r/evals/spec-no-implementation/graders/asks.md" "$r"/evals/spec-no-implementation/graders/no-*.md
+run "an eval case with only llm graders" fail "evals: evals/spec-no-implementation: no deterministic grader"
+
+printf 'import urllib.request\n' >> "$r/plugin/hooks/notices.py"
+run "a hook importing a network module" fail "imports: plugin/hooks: import outside the standard-library allowlist"
+
+printf 'x = __import__("socket")\n' >> "$r/plugin/hooks/notices.py"
+run "a hook loading a module dynamically" fail "imports: plugin/hooks: network module or dynamic import"
+
+# An ignored doc (docs/superpowers/ is in .gitignore) has no site page; reset keeps ignored files, so remove it.
+mkdir -p "$r/docs/superpowers/plans"
+printf '# Local plan\n' > "$r/docs/superpowers/plans/x.md"
+run "a git-ignored doc under docs/superpowers/ has no site page" pass
+rm -r "$r/docs/superpowers"
+
+# The token is built at run time: a literal one here would fail the real check's own gitleaks scan.
+printf 'token = "gh%s_%s"\n' p "$(LC_ALL=C tr -dc A-Za-z0-9 < /dev/urandom | head -c 36)" > "$r/leak.txt"
+run "a secret in an untracked file" fail "leaks found"
 
 jq '.plugins[0].version = "9.9.9"' "$r/.claude-plugin/marketplace.json" > "$tmp/x" && mv "$tmp/x" "$r/.claude-plugin/marketplace.json"
 run "marketplace and plugin versions differ" fail 'Entry declares version "9.9.9"'

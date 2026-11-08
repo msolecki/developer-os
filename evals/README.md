@@ -91,7 +91,9 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `parallel-lanes-check-gates-integrate` | a lane that reports `DONE` with a green fast check but a red lane `Check` is not merged and is listed under Needs you; the orchestrator runs the `Check` itself. `no-merge-tax` scores both arms, so Δ comes from the Needs you grader; a cherry-pick by SHA is caught only by the llm grader | not run yet |
 
 A `tool_used: Skill` grader only shows whether the skill fired; it never counts toward the score.
-Every case also has outcome graders. Graders are deterministic (`regex`, `file_exists`, `tool_used`)
+Every case also has outcome graders, and at least one positive deterministic grader that a run doing nothing
+fails (not `match: not_contains`, `exists: false`, `tool_used` with `min: 0`, `tool: Skill` or a regex over a scaffolded file);
+`scripts/check.sh` enforces it, exempting only `injection-fix-pr` and `injection-pr-cycle`, which test that nothing happens. Graders are deterministic (`regex`, `file_exists`, `tool_used`)
 wherever possible; `llm` graders judge reply content only. `file_exists` and `regex` with `target: files`
 see only files the run created; to check that an existing file survived, use `regex` with
 `target: {source: file, path: …}`. `tool_used` matches `input_match` against the JSON of the tool input,
