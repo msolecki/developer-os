@@ -133,6 +133,10 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   skipping headless/SDK runs and subagents, and deferring while a background task it launched is
   still running (PR #69). It counts entries and reads background-task ids and output paths, never
   message content.
+- **Amended 2026-10-15:** it also defers while a Monitor started in the last 30 minutes has no terminal
+  notice (#72).
+- **Amended 2026-11-08:** it counts only the `tool_use` blocks of assistant lines, so tool calls quoted
+  in tool results no longer bring the nudge forward (#123).
 - **Why:** lessons are lost at the end of long sessions, but a nudge on every stop is noise.
 - **Superseded draft:** the first design nudged brain-capture directly; session-retro replaced it
   because it routes each finding to its destination, the vault being only one of them.
