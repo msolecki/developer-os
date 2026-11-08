@@ -56,7 +56,7 @@ Route each item by this table:
 | lessons and decisions that apply beyond this project | vault, via brain-capture |
 | facts about this project (commands, stack, conventions) | the project's `AGENTS.md`/`CLAUDE.md` or an ADR |
 
-- **Lessons**: a decision or lesson that outlives the task, with its destination. Propose a vault lesson only when it cost a retry, a correction or a re-derivation in this session; a decision needs no such cost. Propose either only after `brain-search` finds no note that already says it; otherwise propose an update to that note.
+- **Lessons**: a decision or lesson that outlives the task, with its destination. Propose a vault lesson only when it cost a retry, a correction or a re-derivation in this session; a decision needs no such cost. Propose either only after `brain-search` finds no note that already says it. When a note covers the topic but lacks the new part, propose the addition to that note as a diff instead of a new note.
 - **Rule candidates**: a correction the user made (e.g. "no, use pnpm"), as a minimal diff to the destination file in instruction-review style. Before proposing one, search the destination's history for its key phrase (`git log -p -S '<phrase>' -- <file>`; in the developer-os repository, `plugin/rules` and `plugin/skills`). If the change reverses an earlier commit, show that commit and ask whether to reverse it.
 - **Check candidates**: the same mistake made at least twice that a lint rule, a test, a `check.sh`-style script or a hook can detect. Propose the check, not a rule; prose does not stop a repeated mechanical mistake.
 - **Plan update**: for the active plan (declared planning location, default `docs/plans/`; the `Backlog:` files are not plans). Finished: propose deleting it and `docs/plans/.devos-state.md`, and moving open items to the backlog (the todo path of the project's `Backlog:` line, default `TODO.md`), each as an item in the `developer-os:audit-to-backlog` format with the plan path as `Evidence`. Not finished: the new status line and a Next action ending with `Next session: 3 notes` (what to do first, what to avoid, what is still unverified), and each check that ran in the Done format, so a later commit or edit visibly outdates it.
@@ -66,7 +66,7 @@ Route each item by this table:
 
 ## 5. Apply
 
-Ask which items to apply, by number. Apply only those: lessons through brain-capture, rule, preference and plan changes as a shown diff. When the destination repository keeps a rules history (in developer-os, the Rules history table in `docs/product/decisions.md`), add one row for each approved rule change: `date | change | target | reason`.
+Ask which items to apply, by number. Apply only those: new lessons through brain-capture; an addition to an existing vault note, rule, preference and plan changes as the shown diff (for a vault note, keep its other frontmatter keys and set `updated` to today). When the destination repository keeps a rules history (in developer-os, the Rules history table in `docs/product/decisions.md`), add one row for each approved rule change: `date | change | target | reason`.
 
 ## Stop point
 

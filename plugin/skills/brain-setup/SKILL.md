@@ -1,6 +1,6 @@
 ---
 name: brain-setup
-description: Create the user's Obsidian knowledge vault from the developer-os template, or connect an existing vault by adding only the missing pieces, then point Claude Code at it (`Brain vault:` line and `permissions.additionalDirectories`, optionally auto memory off) after the user approves the diff. Use when the user sets up developer-os, has no `Brain vault:` line yet, or says "set up the vault", "create a vault", "connect my vault", "setup brain".
+description: Create the user's Obsidian knowledge vault from the developer-os template, or connect an existing one by adding only what is missing, then point Claude Code at it after the user approves the diff. Use when the user sets up developer-os, has no `Brain vault:` line yet, or says "set up the vault", "create a vault", "connect my vault", "setup brain".
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -31,7 +31,7 @@ Add only what is missing; never overwrite, move or delete a file. Do not copy th
 
 ```bash
 TPL="/abs/path/to/plugin/vault-template"; V="/abs/path/to/vault"
-for d in DEV INFRA PROJECTS QA TOOLS _archive _inbox _views templates; do mkdir -p "$V/$d"; done
+for d in DEV INFRA PROJECTS QA TOOLS _archive _inbox _reports _views templates; do mkdir -p "$V/$d"; done
 (cd "$TPL" && for f in _views/*.base templates/note.md; do [ -e "$V/$f" ] || cp "$f" "$V/$f"; done)
 if [ -e "$V/.git" ] || [ -e "$V/.gitignore" ]; then
   touch "$V/.gitignore"
