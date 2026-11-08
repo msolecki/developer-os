@@ -168,6 +168,15 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-11-06:** the core-rules cap is 8900 bytes, to take the lessons on parallel lanes,
   reviewer findings and red-first gates; 8900 plus the 1024-byte state card and 64 bytes of margin stays
   under the 10,000-character hook limit.
+- **Amended 2026-11-08:** the 12000 total counts only model-visible descriptions: a skill with
+  `disable-model-invocation: true` is left out of the skill listing. The listing has its own character budget,
+  1% of the model's context window, shared by every installed plugin and the user's own skills; when it
+  overflows, Claude Code drops descriptions starting with the least-invoked skills, so a skill can lose its
+  description while this plugin is under 12000 (seen for bug-triage, deploy-checklist, spec,
+  brain-import-memory and brain-project-refresh). Such a skill is still invoked as `/developer-os:<name>`;
+  disabling unused plugins, raising `skillListingBudgetFraction`, or hiding a skill that is only ever typed
+  (the `hide` verdict of skill-usage) frees the budget. Source: Claude Code's skills documentation,
+  "Skill descriptions are cut short".
 
 ## D11. Plans are local
 

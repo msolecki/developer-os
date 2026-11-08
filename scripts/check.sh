@@ -20,7 +20,8 @@ done
 # Frontmatter (plugin, templates, evals, docs) must parse. Skills, agents and output styles need name (matching the folder or file) and description;
 # docs/*.md need status (current, draft or deprecated), owner and a last-verified date; other files only need parseable frontmatter.
 # Skills also carry the portable Agent Skills fields license and compatibility, and a name matching ^[a-z0-9-]{1,64}$.
-# Skill descriptions are 80-1024 characters and together at most 12000: every description loads into every session.
+# Skill descriptions are 80-1024 characters, and the model-visible ones together at most 12000: they load into every
+# session's skill listing. A skill with disable-model-invocation: true is not in the listing, so it does not count.
 # Every skill has a non-empty ## Stop point and a ## Never section with at least one `- ` rule, except the read-only ones: *-conventions,
 # brain-search, code-review, plan-status and skill-usage (they write nothing inside the repository, send nothing and change no git state).
 files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
@@ -59,7 +60,7 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
     %w[license compatibility].each { |k| bad.("#{k} is empty") if y[k].to_s.strip.empty? }
     n = y["description"].to_s.size
     bad.("description is #{n} characters, allowed 80-1024") unless (80..1024).cover?(n)
-    total += n
+    total += n unless y["disable-model-invocation"] == true
     next if read_only.include?(want) || want.end_with?("-conventions")
     body = lines[close..].join("\n")
     ["## Stop point", "## Never"].each do |h|

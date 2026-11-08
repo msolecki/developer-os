@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/skill-usage/SKILL.md@005a623fe059">
+<meta name="dos-source" content="plugin/skills/skill-usage/SKILL.md@41d5d3d1fa65">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,7 +68,7 @@
     <ol>
       <li><strong>Lists the skills.</strong> From the plugin's own <code>skills/</code> directory, so a skill with zero calls still appears.</li>
       <li><strong>Counts calls.</strong> It searches the <code>*.jsonl</code> transcripts under your Claude config directory's <code>projects</code> folder (subagent transcripts included, plus the <code>projects</code> folder of any extra config directory you name) for model-invoked <code>developer-os:&lt;name&gt;</code> Skill calls and typed <code>/developer-os:&lt;name&gt;</code> commands. It counts calls in the last 30 days and ever, with the last date, drops lines a resumed or forked transcript repeats, and never prints file names, which encode local paths. If reading the transcripts is denied, it asks you to grant access or to run the command and paste the output.</li>
-      <li><strong>Reports with a verdict.</strong> One row per skill, fewest calls first. The verdicts are suggestions, not actions: <code>keep</code> (called in the last 30 days), <code>rewrite-description</code> (not called in 30 days; the description likely misses how you ask), <code>merge</code> (two skills cover the same request, named as a pair) and <code>remove</code> (never called, and another skill does the job). Below the table it lists names found that are no longer skills and the date range covered.</li>
+      <li><strong>Reports with a verdict.</strong> One row per skill, fewest calls first. The verdicts are suggestions, not actions: <code>keep</code> (called in the last 30 days), <code>rewrite-description</code> (not called in 30 days; the description likely misses how you ask), <code>merge</code> (two skills cover the same request, named as a pair), <code>remove</code> (never called, and another skill does the job) and <code>hide</code> (only ever typed as <code>/developer-os:&lt;name&gt;</code>: set <code>disable-model-invocation: true</code>, so its description leaves the skill listing that every installed plugin shares, and the typed command keeps working). Below the table it lists names found that are no longer skills and the date range covered.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>

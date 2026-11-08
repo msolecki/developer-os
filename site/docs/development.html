@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@dd040c98e7c7">
+<meta name="dos-source" content="docs/development.md@18385dc011c4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -65,7 +65,7 @@
           <tr><td>JSON</td><td>Any <code>*.json</code> does not parse (<code>jq empty</code>)</td></tr>
           <tr><td>Frontmatter</td><td>Frontmatter in <code>plugin/</code>, <code>templates/</code>, <code>evals/</code> or <code>docs/</code> Markdown does not parse; a <code>docs/*.md</code> lacks <code>status</code> (<code>current</code>, <code>draft</code>, <code>deprecated</code>), <code>owner</code> or a <code>last-verified</code> date; a skill, agent or output style lacks <code>name</code>/<code>description</code> or its <code>name</code> differs from the folder or file name; a line inside the frontmatter of an <code>evals/</code> file contains <code>---</code> (the eval loader ends frontmatter there)</td></tr>
           <tr><td>Skill fields</td><td>A skill lacks <code>license</code> or <code>compatibility</code>, or its name does not match <code>^[a-z0-9-]{1,64}$</code></td></tr>
-          <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or all together exceed 12000</td></tr>
+          <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or the descriptions of skills without <code>disable-model-invocation: true</code> together exceed 12000</td></tr>
           <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>)</td></tr>
           <tr><td>Last-verified (warning)</td><td>A <code>docs/*.md</code> committed after its <code>last-verified</code> date prints a warning; the exit status does not change</td></tr>
           <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code>, <code>brain-import-memory</code>, <code>brain-project-refresh</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>

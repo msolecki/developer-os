@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@d2b1c8ddae75">
+<meta name="dos-source" content="docs/reference/skills.md@b5ef362e8ecf">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -287,7 +287,8 @@ Every check result names the commit it ran on (<code>&lt;command&gt;: &lt;result
     <h3 id="skill-usage">skill-usage</h3>
     <p><a href="../../skills/skill-usage.html">Source</a>. Counts <code>developer-os:&lt;name&gt;</code> Skill calls and
 typed commands in local transcripts (deduplicated by message uuid): last 30 days, ever, last date,
-with a keep / rewrite-description / merge / remove suggestion per skill. It prints no transcript
+with a keep / rewrite-description / merge / remove / hide suggestion per skill (hide: only ever typed, so
+<code>disable-model-invocation: true</code> frees the shared skill listing). It prints no transcript
 content.</p>
     <h2 id="brain-obsidian-vault">Brain (Obsidian vault)</h2>
     <h3 id="brain-setup">brain-setup</h3>

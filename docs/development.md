@@ -32,7 +32,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | JSON | Any `*.json` does not parse (`jq empty`) |
 | Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name; a line inside the frontmatter of an `evals/` file contains `---` (the eval loader ends frontmatter there) |
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
-| Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
+| Skill descriptions | A description is outside 80–1024 characters, or the descriptions of skills without `disable-model-invocation: true` together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
 | Last-verified (warning) | A `docs/*.md` committed after its `last-verified` date prints a warning; the exit status does not change |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden`, `brain-import-memory`, `brain-project-refresh` or `brain-review` differs from `brain-search`'s |

@@ -112,6 +112,15 @@ for f in "$r"/plugin/skills/*/SKILL.md; do
 done
 run "skill descriptions over 12000 characters in total" fail "limit 12000"
 
+# The same padding, with the brain skills hidden from the model: their descriptions leave the listing and the total.
+for f in "$r"/plugin/skills/*/SKILL.md; do
+  perl -pi -e 's/^(description: .*)$/$1 . " pad" x 25/e' "$f"
+done
+for f in "$r"/plugin/skills/brain-*/SKILL.md; do
+  perl -pi -e 's/^(description: .*)$/$1\ndisable-model-invocation: true/' "$f"
+done
+run "descriptions of skills with disable-model-invocation do not count toward 12000" pass
+
 mkdir "$r/plugin/skills/zzz-new"
 # a short description, so the skill-descriptions budget does not fail first
 sed -e 's/^name: spec$/name: zzz-new/' -e 's/^description: .*/description: A placeholder skill that exists only so the check can see one missing from SURFACE.txt./' \
