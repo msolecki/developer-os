@@ -112,14 +112,15 @@ for f in "$r"/plugin/skills/*/SKILL.md; do
 done
 run "skill descriptions over 12000 characters in total" fail "limit 12000"
 
-# The same padding, with the brain skills hidden from the model: their descriptions leave the listing and the total.
+# The same padding, with the brain skills hidden from the model: their descriptions leave the listing and the total,
+# so the check passes the Skill descriptions stage and fails only later, at the Site stage, on the edited skills.
 for f in "$r"/plugin/skills/*/SKILL.md; do
   perl -pi -e 's/^(description: .*)$/$1 . " pad" x 25/e' "$f"
 done
 for f in "$r"/plugin/skills/brain-*/SKILL.md; do
   perl -pi -e 's/^(description: .*)$/$1\ndisable-model-invocation: true/' "$f"
 done
-run "descriptions of skills with disable-model-invocation do not count toward 12000" pass
+run "descriptions of skills with disable-model-invocation do not count toward 12000" fail "changed since the page was written"
 
 mkdir "$r/plugin/skills/zzz-new"
 # a short description, so the skill-descriptions budget does not fail first
