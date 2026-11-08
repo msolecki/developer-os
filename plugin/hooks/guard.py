@@ -77,6 +77,9 @@ TEST_RUNNERS = {"test", "jest", "vitest", "playwright"}
 TEMP = ("/tmp/", "/private/tmp/", "/var/folders/", "TMPDIR/")
 WHOLE_TREE = (".", "./", ":/", "*")
 PM_VALUE = {"--filter", "-F", "--prefix", "--dir", "-C"}
+# `git fetch` options whose value is the next word, so it is neither the remote nor a refspec.
+FETCH_VALUE = {"--depth", "--deepen", "--shallow-since", "--shallow-exclude", "-j", "--jobs", "--negotiation-tip",
+               "--server-option", "-o", "--upload-pack", "--refmap", "--recurse-submodules-default"}
 
 
 def command(raw):
@@ -154,12 +157,11 @@ def git_subs(words, pos=None):
     for i, w in enumerate(words):
         if (pos is not None and i not in pos) or not re.search(r"(^|/)git$", w):
             continue
-        rest = words[i + 1:]
-        while rest and rest[0].startswith("-"):
-            takes = rest[0] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace")
-            rest = rest[2:] if takes else rest[1:]
-        if rest:
-            yield rest[0], rest[1:]
+        j = i + 1  # by index: slicing per option is quadratic on `git -c a=b -c a=b ...`
+        while j < len(words) and words[j].startswith("-"):
+            j += 2 if words[j] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace") else 1
+        if j < len(words):
+            yield words[j], words[j + 1:]
 
 
 def destroys(words):
@@ -261,6 +263,7 @@ def git_writes(sub, rest):
         return True
     args = [x for x in rest if not x.startswith("-")]
     if sub == "fetch":  # a refspec after the remote that writes outside refs/remotes moves a local ref (`main:main`)
+        args = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in FETCH_VALUE)]
         dsts = [x.split(":", 1)[1] for x in args[1:] if ":" in x and "://" not in x]
         return any(d and not d.startswith("refs/remotes/") for d in dsts)
     if sub == "stash":
@@ -398,13 +401,25 @@ def commits(line):
     return False
 
 
+def hops(path, limit=8):
+    """The path and each link target it leads to in turn (`ok.txt` -> `.env` -> `secrets.txt`), at most limit."""
+    out = [path]
+    for _ in range(limit):
+        try:
+            target = os.readlink(out[-1])
+        except OSError:
+            break
+        out.append(os.path.normpath(os.path.join(os.path.dirname(out[-1]), target)))
+    return out
+
+
 def protected(path):
     """A secret file or the agent's own user-level config, by the path as written (`~` expanded,
-    normalized) or by the path its links resolve to, compared without case (macOS volumes ignore it).
+    normalized), by each link it passes through, or by the path its links resolve to, compared without case (macOS volumes ignore it).
     A path Python cannot resolve (a NUL byte) counts as protected."""
     try:
         forms = lambda q: {os.path.abspath(os.path.expanduser(q)).lower(), os.path.realpath(os.path.expanduser(q)).lower()}
-        paths, homes = forms(path), forms("~")
+        paths, homes = forms(path) | {h.lower() for h in hops(os.path.abspath(os.path.expanduser(path)))}, forms("~")
         other = os.environ.get("CLAUDE_CONFIG_DIR")
         configs = forms(other) if other else set()
     except ValueError:

@@ -429,6 +429,8 @@ check ask "$(fx 'ls\nrm -rf x')" "deletes"
 lnk=$(mktemp -d) && touch "$lnk/secrets.txt" && ln -s secrets.txt "$lnk/.env" && ln -s "$lnk/secrets.txt" "$lnk/plain"
 check ask "$(fe Write "$lnk/.env")" "secrets"
 check pass "$(fe Write "$lnk/plain")"
+ln -s .env "$lnk/ok.txt"  # a chain: ok.txt -> .env -> secrets.txt
+check ask "$(fe Write "$lnk/ok.txt")" "secrets"
 check ask '{"tool_name":"Write","tool_input":{"file_path":"/x/a\u0000b","content":"x"}}' "secrets"
 rm -rf "$lnk"
 # SEC-03: perl -M/-I take a value; -pi is still in place
@@ -449,11 +451,18 @@ check ask "$(fa $r 'git fetch origin +main:refs/heads/x')" "read-only"
 check pass "$(fa $r 'git fetch origin main')"
 check pass "$(fa $r 'git fetch origin main:refs/remotes/origin/main')"
 check pass "$(fa $r 'git fetch https://x/y.git main')"
+check pass "$(fa $r 'git fetch --depth 1 git@host:a/b.git main')"
+check pass "$(fa $r 'git fetch -j 4 git@host:a/b.git main')"
+check ask "$(fa $r 'git fetch --depth 1 origin main:main')" "read-only"
 # SEC-06: many -c words stay linear
 c=$(python3 -c "print(' '.join(['-c']*2000))")
 t0=$(python3 -c 'import time;print(time.time())')
 check pass "$(fx "$c")"
 python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: 2000 -c words took over 1 s"; }
+c=$(python3 -c "print('git ' + ' '.join(['-c x=y']*3000) + ' status')")
+t0=$(python3 -c 'import time;print(time.time())')
+check pass "$(fa $r "$c")"
+python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: git with 3000 -c pairs took over 1 s"; }
 
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail
