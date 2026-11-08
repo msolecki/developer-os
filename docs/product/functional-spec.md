@@ -136,7 +136,7 @@ Dispatched by skills or by the main agent. All treat code, diffs, PR text and fe
 Every agent starts its report with a final status: `DONE` (with evidence), `REVIEW`, `BLOCKED` (with
 `Unblock owner: user | orchestrator | <item ID>`) or `CONTINUING`; it retries transient failures at
 most twice and blocks at once on what only a person can fix. Reviewer agents use the same P0–P3
-scale and verdicts as code-review; code-reviewer reads both sides of every changed contract and
+scale and verdicts as code-review; code-reviewer reads both sides of every changed contract, names the trigger of every P0 and P1, and
 lists Evidence checked under an `APPROVE` without P0–P2. qa-expert ends with
 `VERIFIED` or `UNVERIFIED: <what>`; performance-engineer labels each finding MEASURED or INFERRED;
 security-auditor drops any finding without an attack path or on its not-a-finding list; verifier ends a refutation with a `REFUTE_REASON`; database-reviewer ends with the deploy order

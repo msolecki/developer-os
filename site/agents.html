@@ -18,12 +18,12 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os agents and output styles">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/agents/code-reviewer.md@7263f3de6031">
-<meta name="dos-source" content="plugin/agents/performance-engineer.md@dd129f54420d">
-<meta name="dos-source" content="plugin/agents/qa-expert.md@c67d9add005b">
+<meta name="dos-source" content="plugin/agents/code-reviewer.md@6d80fba42303">
+<meta name="dos-source" content="plugin/agents/performance-engineer.md@bb02daec2f3f">
+<meta name="dos-source" content="plugin/agents/qa-expert.md@b92b79b3156b">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@89c690b4a0ed">
 <meta name="dos-source" content="plugin/agents/verifier.md@28852e17195a">
-<meta name="dos-source" content="plugin/agents/security-auditor.md@faf95ef63600">
+<meta name="dos-source" content="plugin/agents/security-auditor.md@de2322881df6">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@a31093b64b9f">
 <meta name="dos-source" content="plugin/agents/dependency-upgrader.md@e9b15925f839">
 <meta name="dos-source" content="plugin/agents/infra-reviewer.md@c081e0ee49a5">
@@ -85,9 +85,10 @@
       <li>A backlog item's <code>Done when</code> deleted or weakened without an appended <code>Amended YYYY-MM-DD: …</code> line is P1. A doc the change makes false is a P2 docs finding. A style preference is never above P3.</li>
       <li>A domain formula, a field type or a value format is rated against the project's canonical definition (a shared helper, the schema, a business doc); code that matches it is not a defect. Without one, say so in the finding.</li>
       <li>It rates the code, not the framing: a prompt that says who wrote the change, or that it looks good, changes no severity.</li>
+      <li>Tests run in CI mode (<code>CI=true</code>, and <code>--ci</code> for Jest) so a run writes no missing snapshot; a new untracked file that <code>git status</code> shows afterwards is reported.</li>
     </ul>
     <h3 id="code-reviewer-report">code-reviewer report</h3>
-    <p>After the final status, the verdict: <code>REQUEST_CHANGES</code> when any P0 or P1 exists, <code>COMMENT</code> when an open question decides whether a finding is P0 or P1, otherwise <code>APPROVE</code>. Findings sit under P0 to P3 headings (<code>None</code> when empty), each with <code>file:line</code>, evidence, impact and a concrete fix. Every P0 and P1 is reported. An <code>APPROVE</code> with no P0, P1 or P2 ends with <strong>Evidence checked</strong>, the files read and commands run; without it the report is invalid.</p>
+    <p>After the final status, the verdict: <code>REQUEST_CHANGES</code> when any P0 or P1 exists, <code>COMMENT</code> when an open question decides whether a finding is P0 or P1, otherwise <code>APPROVE</code>. Findings sit under P0 to P3 headings (<code>None</code> when empty), each with <code>file:line</code>, evidence, impact and a concrete fix. Every P0 and P1 is reported and names its trigger, the concrete input or sequence of calls that makes it happen; before reporting, it tries to disprove each against the guards, validation and call sites on its path and drops or downgrades the ones that do not survive. An <code>APPROVE</code> with no P0, P1 or P2 ends with <strong>Evidence checked</strong>, the files read and commands run; without it the report is invalid.</p>
     <div class="callout never">
       <h3 id="what-code-reviewer-never-does">What code-reviewer never does</h3>
       <ul>
@@ -212,11 +213,11 @@
     </dl>
     <h3 id="what-performance-engineer-checks">What performance-engineer checks</h3>
     <ul>
-      <li>Only the named files, and only after it identifies the actual hot path: a slow endpoint, page or job. A rewrite of code nobody executes is not a finding.</li>
+      <li>Only the named files, and only after it identifies the actual hot path: a slow endpoint, page or job. A rewrite of code nobody executes is not a finding. Tests run in CI mode (<code>CI=true</code>, and <code>--ci</code> for Jest) so a run writes no missing snapshot; a new untracked file that <code>git status</code> shows afterwards is reported.</li>
       <li>Database N+1 and missing indexes, serial awaits that could be <code>Promise.all</code>, blocking I/O on a request path, unbounded result sets, per-item work that could be hoisted, bundle regressions from barrel imports or eager third-party scripts, and UI re-render cascades.</li>
     </ul>
     <h3 id="performance-engineer-report">performance-engineer report</h3>
-    <p>Findings ordered by impact on the hot path, each with <code>file:line</code>, severity, the mechanism, the expected magnitude, the fix and how to measure it. Every finding is labelled MEASURED (a number or output produced by running, or recorded from a run) or INFERRED (it read the code), never inferred presented as measured. The report ends with the single highest-impact change and its expected effect.</p>
+    <p>Findings under P0–P3 headings (<code>None</code> when empty), ordered within each by impact on the hot path, each with <code>file:line</code>, severity, the mechanism, the expected magnitude, the fix and how to measure it. Every finding is labelled MEASURED (a number or output produced by running, or recorded from a run) or INFERRED (it read the code), never inferred presented as measured. The report ends with the single highest-impact change and its expected effect.</p>
     <div class="callout never">
       <h3 id="what-performance-engineer-never-does">What performance-engineer never does</h3>
       <ul>
@@ -237,7 +238,7 @@
     </dl>
     <h3 id="what-qa-expert-checks">What qa-expert checks</h3>
     <ul>
-      <li>Only the named files. It runs the project's real test command for the tests that cover them (the full suite only when asked) and shows failures, never a passing log.</li>
+      <li>Only the named files. It runs the project's real test command for the tests that cover them (the full suite only when asked) and shows failures, never a passing log. Tests run in CI mode (<code>CI=true</code>, and <code>--ci</code> for Jest) so a run writes no missing snapshot; a new untracked file that <code>git status</code> shows afterwards is reported.</li>
       <li>It loads <a href="skills/testing-conventions.html">testing-conventions</a> and applies it to every test it writes or assesses: pin the contract, fixed UTC instants, partial mocks.</li>
       <li>When it writes tests: one test per contract, and for a regression test the failing run before the passing one; when the fix is already in the tree, it says the test was only seen green, names the fixing commit and leaves the red run to the caller. A characterization test that passes at once is named as such. A test that passes only after it changed the test is called out, with why the new assertion is correct.</li>
     </ul>
@@ -290,13 +291,13 @@
     </dl>
     <h3 id="what-security-auditor-checks">What security-auditor checks</h3>
     <ul>
-      <li>Only the named files, reading the auth, middleware, API route and data-access layers before anything else. An installed scanner (<code>npm audit</code>, <code>semgrep</code>, <code>gitleaks</code>) is one input among several, not the audit.</li>
+      <li>Only the named files, reading the auth, middleware, API route and data-access layers before anything else. An installed scanner (<code>npm audit</code>, <code>semgrep</code>, <code>gitleaks</code>) is one input among several, not the audit. Tests run in CI mode (<code>CI=true</code>, and <code>--ci</code> for Jest) so a run writes no missing snapshot; a new untracked file that <code>git status</code> shows afterwards is reported.</li>
       <li>Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF and unvalidated redirects, unsafe deserialization, permissive CORS, and dependency vulnerabilities with a real call path.</li>
       <li>A closed <strong>not a finding</strong> list it never reports: volumetric denial of service and missing rate limiting, test, fixture or dead code, memory safety in a memory-safe language, path-only SSRF, user input into an LLM prompt, an environment variable or CLI flag as the vector, client-side code flagged for a server-side class, outdated dependencies without a call path, XSS in an auto-escaping framework without a raw-HTML sink, a UUIDv4 called predictable, a theoretical TOCTOU race, log spoofing and open redirect. A project adds its own in <code>docs/reference/review-exclusions.md</code>, read when present.</li>
       <li>Any switch that turns a control off, such as an environment flag that disables 2FA, is itself the defect.</li>
     </ul>
     <h3 id="security-auditor-report">security-auditor report</h3>
-    <p>Every P0 and P1, ordered by impact, each with <code>file:line</code>, severity, the concrete attack (who does what, and what they get), the vulnerable excerpt and a fix. A finding without an attack path is dropped. It ends with <code>P0: n, P1: n, P2: n, P3: n</code>.</p>
+    <p>Findings under P0–P3 headings (<code>None</code> when empty), every P0 and P1 included and ordered by impact, each with <code>file:line</code>, severity, the concrete attack (who does what, and what they get), the vulnerable excerpt and a fix. A finding without an attack path is dropped. It ends with <code>P0: n, P1: n, P2: n, P3: n</code>.</p>
     <div class="callout never">
       <h3 id="what-security-auditor-never-does">What security-auditor never does</h3>
       <ul>
