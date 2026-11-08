@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en" data-root="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workflow at a glance · developer-os</title>
+<meta name="description" content="How knowledge moves between an agent session, an Obsidian vault and the repository with developer-os: the daily loop, the life of a note and the hooks in one session.">
+<link rel="canonical" href="https://msolecki.github.io/developer-os/workflow.html">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="developer-os">
+<meta property="og:title" content="Workflow at a glance · developer-os">
+<meta property="og:description" content="How knowledge moves between an agent session, an Obsidian vault and the repository with developer-os.">
+<meta property="og:url" content="https://msolecki.github.io/developer-os/workflow.html">
+<meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/docs.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="developer-os documentation">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+<style>
+/* Page-local diagrams. Session = --ask (amber, it forgets), vault = --ok (green, your approval), repository = --pine. */
+.wf-stage { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; margin: 0 0 1.25rem; min-width: 0; }
+.wf-scroll { overflow-x: auto; }
+.wf-svg { width: 100%; height: auto; display: block; min-width: 520px; }
+.wf-svg text { font-family: "IBM Plex Sans", system-ui, sans-serif; fill: var(--ink); }
+.wf-svg .lbl { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; fill: var(--muted); }
+.wf-svg .node-t { font-size: 20px; font-weight: 600; }
+.wf-svg .node-s { font-size: 13px; fill: var(--muted); }
+.wf-path { fill: none; stroke: var(--rule-strong); stroke-width: 2; stroke-dasharray: 6 6; }
+.wf-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; font-size: 0.85rem; color: var(--muted); margin: 0 0 1rem; }
+.wf-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+.wf-btn { font: 500 0.88rem/1 "IBM Plex Sans", sans-serif; border: 1px solid var(--rule-strong); background: var(--sheet); color: var(--ink); border-radius: 8px; padding: 0.5rem 0.8rem; cursor: pointer; }
+.wf-btn:hover { border-color: var(--pine); }
+.wf-btn[aria-pressed="true"] { border-color: var(--ok); background: var(--ok-soft); }
+
+.wf-loop { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+@media (max-width: 640px) { .wf-loop { grid-template-columns: 1fr; } }
+.wf-ring { width: 100%; max-width: 240px; height: auto; display: block; margin: 0 auto; }
+.wf-ring text { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; fill: var(--muted); }
+.wf-ring .seg { fill: none; stroke: var(--rule); stroke-width: 14; transition: stroke 0.4s; }
+.wf-ring .seg.on { stroke: var(--c); }
+.wf-ring .center-t { font-family: "IBM Plex Sans", sans-serif; font-size: 17px; font-weight: 600; fill: var(--ink); }
+.wf-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; min-width: 0; }
+.prose .wf-steps li { margin: 0; }
+.wf-steps button { width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 0.55rem 0.7rem; display: grid; grid-template-columns: 1.4rem 1fr; gap: 0.5rem; color: var(--ink); font: inherit; cursor: pointer; transition: background 0.3s, border-color 0.3s; }
+.wf-steps .n { font-family: "IBM Plex Mono", monospace; font-size: 0.8rem; color: var(--muted); padding-top: 0.15rem; }
+.wf-steps strong { font-weight: 600; }
+.wf-steps .who { font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; color: var(--c); display: block; }
+.wf-steps .d { display: block; color: var(--ink-2); font-size: 0.9rem; max-height: 0; overflow: hidden; transition: max-height 0.4s; }
+.wf-steps li.on button { background: var(--soft); border-color: var(--c); }
+.wf-steps li.on .d { max-height: 14em; margin-top: 0.25rem; }
+.wf-controls { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
+
+.wf-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.9rem; }
+.wf-life { position: relative; height: 320px; }
+.wf-cols { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.wf-col { border: 1px dashed var(--rule-strong); border-radius: 8px; padding: 0.6rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.wf-col b { font-family: "IBM Plex Mono", monospace; font-size: 0.85rem; font-weight: 500; }
+.wf-col small { color: var(--muted); font-size: 0.76rem; line-height: 1.35; }
+.wf-col.inbox b { color: var(--ask); }
+.wf-col.topic b { color: var(--ok); }
+.wf-col.arch b { color: var(--muted); }
+.wf-note { position: absolute; width: calc((100% - 24px) / 3 - 16px); top: 96px; left: 8px; background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid var(--nc, var(--ask)); border-radius: 6px; padding: 0.55rem; font-size: 0.78rem; line-height: 1.4; box-shadow: 0 6px 18px -10px rgba(15, 23, 42, 0.35); transition: left 0.9s cubic-bezier(.6,.05,.3,1), top 0.9s cubic-bezier(.6,.05,.3,1), opacity 0.6s; }
+.wf-note .fn { font-family: "IBM Plex Mono", monospace; font-weight: 500; overflow-wrap: anywhere; color: var(--ink); }
+.wf-note .fm { font-family: "IBM Plex Mono", monospace; color: var(--muted); font-size: 0.7rem; margin-top: 0.25rem; overflow-wrap: anywhere; }
+.wf-note .st { color: var(--nc, var(--ask)); }
+.wf-cap { color: var(--ink-2); min-height: 3em; margin: 0.9rem 0 0; }
+@media (max-width: 600px) { .wf-life { height: 400px; } .wf-note .fm { display: none; } }
+
+.wf-track { position: relative; height: 6px; background: var(--rule); border-radius: 3px; margin: 3rem 0.5rem 0; }
+.wf-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ask); border-radius: 3px; }
+.wf-ev { position: absolute; top: -9px; width: 24px; height: 24px; margin-left: -12px; border-radius: 50%; background: var(--sheet); border: 3px solid var(--rule-strong); transition: border-color 0.3s, transform 0.3s; }
+.wf-ev.lit { border-color: var(--c); transform: scale(1.15); }
+.wf-ev span { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-family: "IBM Plex Mono", monospace; font-size: 0.7rem; color: var(--muted); }
+@media (max-width: 600px) { .wf-ev span { display: none; } }
+.wf-hooks { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.75rem; margin-top: 1.5rem; }
+.wf-hook { border: 1px solid var(--rule); border-radius: 8px; padding: 0.75rem; display: grid; gap: 0.3rem; align-content: start; transition: border-color 0.3s, background 0.3s; min-width: 0; }
+.wf-hook.lit { border-color: var(--c); background: var(--soft); }
+.wf-hook .ev { font-family: "IBM Plex Mono", monospace; font-size: 0.75rem; color: var(--c); }
+.wf-hook b { font-family: "IBM Plex Mono", monospace; font-size: 0.85rem; font-weight: 500; color: var(--ink); }
+.wf-hook span.p { font-size: 0.86rem; color: var(--ink-2); line-height: 1.5; }
+
+.wf-chain { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.wf-chip { font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; border: 1px solid var(--pine); color: var(--pine); border-radius: 999px; padding: 0.3rem 0.7rem; background: var(--sheet); animation: wf-pulse 6s infinite; animation-delay: calc(var(--i) * 0.75s); }
+.wf-chip:hover { text-decoration: none; }
+.wf-arrow { color: var(--muted); font-family: "IBM Plex Mono", monospace; }
+@keyframes wf-pulse { 0%, 12%, 100% { background: var(--sheet); } 5% { background: var(--pine-soft); } }
+@media (prefers-reduced-motion: reduce) { .wf-dot { display: none; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="docs/index.html">Docs</a>
+      <a href="skills/index.html">Skills</a>
+      <a href="agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="workflow-at-a-glance">Workflow at a glance</h1>
+    <p class="lede">An agent session forgets. The vault remembers. You decide what stays. developer-os connects every session to two durable places: an Obsidian vault for knowledge that outlives the project, and the repository for the plan and the code. New knowledge enters through <code>_inbox/</code> and becomes trusted only after you approve it.</p>
+
+    <div class="wf-stage wf-scroll">
+      <svg class="wf-svg" viewBox="0 0 960 360" role="img" aria-label="Knowledge flows between the agent session, the Obsidian vault and the repository">
+        <defs>
+          <path id="wf-p-search" d="M300 120 C 420 40, 540 40, 660 120"/>
+          <path id="wf-p-capture" d="M660 175 C 540 255, 420 255, 300 175"/>
+          <path id="wf-p-plan" d="M200 215 C 220 300, 360 320, 405 305"/>
+        </defs>
+        <use href="#wf-p-search" class="wf-path"/>
+        <use href="#wf-p-capture" class="wf-path"/>
+        <use href="#wf-p-plan" class="wf-path"/>
+        <circle cx="200" cy="148" r="92" fill="var(--ask-soft)" stroke="var(--ask)" stroke-width="2"/>
+        <text x="200" y="142" text-anchor="middle" class="node-t">Agent session</text>
+        <text x="200" y="164" text-anchor="middle" class="node-s">context ends with it</text>
+        <rect x="660" y="56" width="250" height="184" rx="12" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="2"/>
+        <text x="785" y="92" text-anchor="middle" class="node-t">Obsidian vault</text>
+        <text x="785" y="114" text-anchor="middle" class="node-s">durable knowledge in Markdown</text>
+        <text x="690" y="148" class="lbl">_inbox/  ← new notes</text>
+        <text x="690" y="170" class="lbl">PROJECTS/ DEV/ TOOLS/</text>
+        <text x="690" y="192" class="lbl">INFRA/ QA/  ← active</text>
+        <text x="690" y="214" class="lbl">_archive/  ← nothing deleted</text>
+        <rect x="405" y="270" width="150" height="70" rx="10" fill="var(--pine-soft)" stroke="var(--pine)" stroke-width="2"/>
+        <text x="480" y="300" text-anchor="middle" class="node-t" style="font-size:18px">Repository</text>
+        <text x="480" y="320" text-anchor="middle" class="node-s">plan · code · ADRs</text>
+        <text x="480" y="44" text-anchor="middle" class="lbl">brain-search: read before planning</text>
+        <text x="480" y="252" text-anchor="middle" class="lbl">brain-capture: decision → _inbox/</text>
+        <text x="250" y="322" text-anchor="middle" class="lbl">plan in docs/plans/</text>
+        <g class="wf-dot"><circle r="6" fill="var(--ok)"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#wf-p-search"/></animateMotion></circle></g>
+        <g class="wf-dot"><circle r="6" fill="var(--ok)"><animateMotion dur="3.2s" begin="1.6s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#wf-p-search"/></animateMotion></circle></g>
+        <g class="wf-dot"><circle r="6" fill="var(--ask)"><animateMotion dur="3.6s" begin="0.8s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#wf-p-capture"/></animateMotion></circle></g>
+        <g class="wf-dot"><circle r="5" fill="var(--pine)"><animateMotion dur="2.8s" repeatCount="indefinite"><mpath href="#wf-p-plan"/></animateMotion></circle></g>
+        <g class="wf-dot"><circle r="5" fill="var(--pine)"><animateMotion dur="2.8s" begin="1.4s" repeatCount="indefinite"><mpath href="#wf-p-plan"/></animateMotion></circle></g>
+      </svg>
+    </div>
+    <div class="wf-legend">
+      <span style="--c: var(--ok)">vault knowledge into the session</span>
+      <span style="--c: var(--ask)">a new decision into <code>_inbox/</code></span>
+      <span style="--c: var(--pine)">plan and code into the repository</span>
+    </div>
+
+    <h2 id="the-daily-loop">The daily loop</h2>
+    <p>Nothing in the loop runs on its own: you start every skill. Hooks only remind and guard. Select a step, or let the loop play. The full text is in <a href="docs/workflow.html#the-daily-loop">How to work: brain + code</a>.</p>
+    <div class="wf-stage wf-loop">
+      <svg class="wf-ring" viewBox="0 0 300 300" aria-hidden="true" id="wf-ring"></svg>
+      <div>
+        <ol class="wf-steps" id="wf-steps"></ol>
+        <div class="wf-controls">
+          <button class="wf-btn" id="wf-play" type="button" aria-pressed="true">Pause</button>
+          <span id="wf-pos"></span>
+        </div>
+      </div>
+    </div>
+
+    <h2 id="the-life-of-a-note">The life of a note</h2>
+    <p>The agent writes only to <code>_inbox/</code>. Everything after that happens in brain-review, after your yes, and nothing is deleted. Pick a review decision to see where the note goes and how its frontmatter changes.</p>
+    <div class="wf-stage">
+      <div class="wf-actions" role="group" aria-label="brain-review decision">
+        <button class="wf-btn" type="button" data-a="capture">brain-capture</button>
+        <button class="wf-btn" type="button" data-a="keep">Keep</button>
+        <button class="wf-btn" type="button" data-a="merge">Merge</button>
+        <button class="wf-btn" type="button" data-a="reject">Reject</button>
+        <button class="wf-btn" type="button" data-a="supersede">Supersede</button>
+      </div>
+      <div class="wf-life">
+        <div class="wf-cols">
+          <div class="wf-col inbox"><b>_inbox/</b><small>status: inbox · a draft, not a fact</small></div>
+          <div class="wf-col topic"><b>DEV/ · PROJECTS/</b><small>status: active · trusted knowledge</small></div>
+          <div class="wf-col arch"><b>_archive/</b><small>status: archived · out of search, recoverable</small></div>
+        </div>
+        <div class="wf-note" id="wf-old" style="--nc: var(--ok); left: calc((100% + 12px) / 3 + 8px); top: 210px">
+          <div class="fn">queue-sqs.md</div>
+          <div class="fm">type: decision<br>status: <span class="st" id="wf-old-st">active</span><span id="wf-old-sb"></span></div>
+        </div>
+        <div class="wf-note" id="wf-note">
+          <div class="fn">queue-kafka.md</div>
+          <div class="fm">type: decision<br>status: <span class="st" id="wf-note-st">inbox</span><br>summary: "Events go through Kafka"</div>
+        </div>
+      </div>
+      <p class="wf-cap" id="wf-cap"></p>
+    </div>
+
+    <h2 id="hooks-in-one-session">Hooks in one session</h2>
+    <p>Small Python scripts with no dependencies and no network. They ask instead of blocking, and stay silent when they fail. Details are in the <a href="docs/reference/hooks.html">hooks reference</a>.</p>
+    <div class="wf-stage">
+      <div class="wf-track" id="wf-track"><div class="wf-fill" id="wf-fill"></div></div>
+      <div class="wf-hooks" id="wf-hooks"></div>
+    </div>
+
+    <h2 id="from-idea-to-merge">From idea to merge</h2>
+    <p>The repository remembers the code. The plan lives in <code>docs/plans/</code> and is deleted once every step is in a commit; a reviewer other than the author checks the work before it merges.</p>
+    <div class="wf-stage">
+      <div class="wf-chain">
+        <a class="wf-chip" style="--i:0" href="skills/spec.html">spec</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:1" href="skills/audit-to-backlog.html">audit-to-backlog</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:2" href="skills/implement-backlog.html">implement-backlog</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:3" href="skills/code-review.html">code-review</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:4" href="skills/pr-cycle.html">pr-cycle</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:5" href="skills/docs-sync.html">docs-sync</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:6" href="skills/session-retro.html">session-retro</a>
+      </div>
+    </div>
+    <p><strong>Vault or repository?</strong> A decision, lesson or reference that you or another project will look for again goes to the vault. A plan, an ADR or a fact about the code stays in the repository: a plan in the vault drifts away from the code it describes. See <a href="docs/workflow.html#vault-or-repository">Vault or repository?</a></p>
+
+    <nav class="doc-foot" aria-label="Related">
+      <a href="docs/workflow.html">How to work: brain + code</a>
+      <a href="docs/reference/hooks.html">Hooks reference</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="docs/changelog.html">Changelog</a>
+      <a href="docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="assets/site.js"></script>
+<script>
+(function () {
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var NS = "http://www.w3.org/2000/svg";
+
+  var STEPS = [
+    { t: "Session start", who: "SessionStart hook", c: "--pine", s: "--pine-soft",
+      d: "The core rules load. After a compaction, resume or fork the state card from docs/plans/.devos-state.md comes back. On a fresh start: the plugin version and an inbox or garden reminder when one is due." },
+    { t: "Search before you plan", who: "brain-search", c: "--ok", s: "--ok-soft",
+      d: "The agent reads active notes first, cites their paths and says when a hit is still in the inbox. Nothing found is useful too: you are in new territory." },
+    { t: "The plan lives in the repository", who: "docs/plans/<date>-<task>.md", c: "--pine", s: "--pine-soft",
+      d: "Goal, decisions, steps, next action, updated after each step. The fast check runs before each commit; the guard asks before risky commands." },
+    { t: "A decision is made: capture it", who: "brain-capture", c: "--ask", s: "--ask-soft",
+      d: "One note in _inbox/ with status: inbox, its type, project and a one-line summary. Secrets are redacted; on a secret-pattern match nothing is written." },
+    { t: "End of session", who: "session-retro · Stop hook", c: "--ask", s: "--ask-soft",
+      d: "Checks for unpushed work, closes or updates the plan, proposes lessons and rules. After 30+ tool calls the Stop hook offers this once." },
+    { t: "Weekly: review the inbox", who: "brain-review", c: "--ok", s: "--ok-soft",
+      d: "Keep, merge, reject or supersede, only for the notes you name. Approval is the one step that keeps the vault trustworthy, so it stays human." },
+    { t: "Monthly: garden", who: "brain-garden · brain-compile", c: "--ok", s: "--ok-soft",
+      d: "A report of stale notes, broken links, duplicates and rules restated across notes. Changes apply only after you approve; brain-compile folds a topic into one note." }
+  ];
+  var ring = document.getElementById("wf-ring"), list = document.getElementById("wf-steps");
+  var R = 110, CX = 150, CY = 150, segs = [], span = (Math.PI * 2) / STEPS.length, gap = 0.06;
+  function polar(a, r) { return [CX + r * Math.cos(a), CY + r * Math.sin(a)]; }
+  function el(tag, attrs) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  STEPS.forEach(function (st, i) {
+    var a0 = -Math.PI / 2 + i * span + gap / 2, a1 = a0 + span - gap, p0 = polar(a0, R), p1 = polar(a1, R);
+    var seg = el("path", { d: "M" + p0[0] + " " + p0[1] + " A" + R + " " + R + " 0 0 1 " + p1[0] + " " + p1[1], "class": "seg" });
+    seg.style.setProperty("--c", "var(" + st.c + ")"); ring.appendChild(seg); segs.push(seg);
+    var lp = polar((a0 + a1) / 2, R + 26), tx = el("text", { x: lp[0], y: lp[1] + 4, "text-anchor": "middle" });
+    tx.textContent = i + 1; ring.appendChild(tx);
+    var li = document.createElement("li");
+    li.style.setProperty("--c", "var(" + st.c + ")"); li.style.setProperty("--soft", "var(" + st.s + ")");
+    var b = document.createElement("button"); b.type = "button";
+    b.innerHTML = '<span class="n"></span><span><strong></strong><span class="who"></span><span class="d"></span></span>';
+    b.querySelector(".n").textContent = i + 1; b.querySelector("strong").textContent = st.t;
+    b.querySelector(".who").textContent = st.who; b.querySelector(".d").textContent = st.d;
+    b.addEventListener("click", function () { go(i); stop(); });
+    li.appendChild(b); list.appendChild(li);
+  });
+  var c1 = el("text", { x: CX, y: CY - 4, "text-anchor": "middle", "class": "center-t" }); c1.textContent = "the loop"; ring.appendChild(c1);
+  var c2 = el("text", { x: CX, y: CY + 16, "text-anchor": "middle" }); c2.textContent = "session → vault → session"; ring.appendChild(c2);
+  var marker = el("circle", { r: 9, fill: "var(--ink)" }); ring.appendChild(marker);
+  var cur = 0, timer = null, playBtn = document.getElementById("wf-play"), pos = document.getElementById("wf-pos");
+  function go(i) {
+    cur = i;
+    segs.forEach(function (s, k) { s.classList.toggle("on", k === i); });
+    Array.prototype.forEach.call(list.children, function (li, k) { li.classList.toggle("on", k === i); });
+    var p = polar(-Math.PI / 2 + (i + 0.5) * span, R); marker.setAttribute("cx", p[0]); marker.setAttribute("cy", p[1]);
+    pos.textContent = "step " + (i + 1) + " of " + STEPS.length;
+  }
+  function start() { if (timer || reduce) return; timer = setInterval(function () { go((cur + 1) % STEPS.length); }, 3400); playBtn.textContent = "Pause"; playBtn.setAttribute("aria-pressed", "true"); }
+  function stop() { clearInterval(timer); timer = null; playBtn.textContent = "Play"; playBtn.setAttribute("aria-pressed", "false"); }
+  playBtn.addEventListener("click", function () { timer ? stop() : start(); });
+  go(0); if (reduce) stop(); else start();
+
+  var note = document.getElementById("wf-note"), noteSt = document.getElementById("wf-note-st"), cap = document.getElementById("wf-cap");
+  var old = document.getElementById("wf-old"), oldSt = document.getElementById("wf-old-st"), oldSb = document.getElementById("wf-old-sb");
+  var ACTS = {
+    capture: { col: 0, s: "inbox", c: "--ask", old: "active",
+      txt: "The agent writes the decision to _inbox/ with status: inbox. It is a draft: brain-search shows it with a warning that nobody has reviewed it yet." },
+    keep: { col: 1, s: "active", c: "--ok", old: "active",
+      txt: "Keep: the summary is fixed if needed, status becomes active and the note moves to its topic folder. From now on it is trusted knowledge." },
+    merge: { col: 2, s: "archived", c: "--muted", old: "active",
+      txt: "Merge: the new part goes into the active note that already covers it, and the inbox note moves to _archive/ with status: archived." },
+    reject: { col: 2, s: "archived", c: "--muted", old: "active",
+      txt: "Reject: it was only true for that afternoon. The note moves to _archive/; nothing is deleted, so it can be recovered." },
+    supersede: { col: 1, s: "active", c: "--ok", old: "superseded",
+      txt: "Supersede: the new note becomes active, the old one gets status: superseded and superseded_by: \"[[queue-kafka]]\". It stays in its folder as history, and brain-search follows the chain to the current note." }
+  };
+  var btns = document.querySelectorAll(".wf-actions .wf-btn");
+  function act(k) {
+    var a = ACTS[k];
+    note.style.left = "calc(" + a.col + " * (100% + 12px) / 3 + 8px)";
+    note.style.setProperty("--nc", "var(" + a.c + ")"); noteSt.textContent = a.s;
+    var sup = a.old === "superseded";
+    oldSt.textContent = a.old; oldSb.innerHTML = sup ? "<br>superseded_by: \"[[queue-kafka]]\"" : "";
+    old.style.setProperty("--nc", sup ? "var(--muted)" : "var(--ok)"); old.style.opacity = sup ? "0.7" : "1";
+    cap.textContent = a.txt;
+    btns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-a") === k ? "true" : "false"); });
+  }
+  btns.forEach(function (b) { b.addEventListener("click", function () { act(b.getAttribute("data-a")); }); });
+  act("capture");
+
+  var HOOKS = [
+    { at: 4, lbl: "start", ev: "SessionStart", c: "--pine", s: "--pine-soft", name: "core.md · notices.py",
+      p: "The core rules on every start. On a fresh start, at most a few one-line notices: a new version, inbox notes older than 7 days, no garden run for 30 days." },
+    { at: 30, lbl: "git push --force?", ev: "PreToolUse", c: "--ask", s: "--ask-soft", name: "guard.py",
+      p: "Before Bash, Edit and Write: asks before destructive commands, dependency installs and writes to protected files. On git commit it reminds the agent of the fast check." },
+    { at: 55, lbl: "same failure, third time", ev: "PostToolUseFailure", c: "--ask", s: "--ask-soft", name: "repeat-failure.py",
+      p: "The same failed call a third time in one run: one reminder to change the approach instead of retrying." },
+    { at: 72, lbl: "compaction", ev: "SessionStart", c: "--pine", s: "--pine-soft", name: "state-card.py",
+      p: "After a compaction, resume or fork: a card from the active plan and docs/plans/.devos-state.md, so the agent knows where it stopped." },
+    { at: 96, lbl: "end", ev: "Stop", c: "--ok", s: "--ok-soft", name: "capture-nudge.py",
+      p: "After a long session (30+ tool calls) it offers session-retro once, to keep what the session learned." }
+  ];
+  var track = document.getElementById("wf-track"), fill = document.getElementById("wf-fill"), cards = document.getElementById("wf-hooks"), evs = [], cs = [];
+  HOOKS.forEach(function (h) {
+    var e = document.createElement("div"); e.className = "wf-ev"; e.style.left = h.at + "%"; e.style.setProperty("--c", "var(" + h.c + ")");
+    var sp = document.createElement("span"); sp.textContent = h.lbl; e.appendChild(sp); track.appendChild(e); evs.push(e);
+    var c = document.createElement("div"); c.className = "wf-hook"; c.style.setProperty("--c", "var(" + h.c + ")"); c.style.setProperty("--soft", "var(" + h.s + ")");
+    c.innerHTML = '<span class="ev"></span><b></b><span class="p"></span>';
+    c.querySelector(".ev").textContent = h.ev; c.querySelector("b").textContent = h.name; c.querySelector(".p").textContent = h.p;
+    cards.appendChild(c); cs.push(c);
+  });
+  function paint(pct) {
+    fill.style.width = pct + "%";
+    HOOKS.forEach(function (h, i) { var lit = pct >= h.at && pct < h.at + 18; evs[i].classList.toggle("lit", lit); cs[i].classList.toggle("lit", lit); });
+  }
+  if (reduce) { fill.style.width = "100%"; evs.forEach(function (e) { e.classList.add("lit"); }); }
+  else {
+    var t0 = null, DUR = 14000;
+    requestAnimationFrame(function frame(ts) {
+      if (t0 === null) t0 = ts;
+      paint(Math.min(((ts - t0) % DUR) / DUR * 112, 100));
+      requestAnimationFrame(frame);
+    });
+  }
+})();
+</script>
+</body>
+</html>

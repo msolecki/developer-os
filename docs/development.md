@@ -78,6 +78,8 @@ only a branch ruleset that requires review of `.github/` stops a PR that edits t
 - `docs/`, one page per `docs/*.md` at the same path, plus `readme.html`, `changelog.html`,
   `contributing.html` and `security.html` for the root documents;
 - `skills/`, an index and one page per skill; `agents.html` and `output-styles.html`;
+- `workflow.html`, an animated overview of the daily loop, the life of a note and the hooks, restating
+  `docs/workflow.md` and `docs/reference/hooks.md` without a hash (update it by hand when they change);
 - `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons);
 - `assets/og/`, the 1200×630 link-preview cards (`home`, `docs`, `skills`, `agents`), and the favicons;
 - `sitemap.xml`, one `<loc>` per page.

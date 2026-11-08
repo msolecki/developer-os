@@ -4,6 +4,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `site/workflow.html`: an animated overview of how knowledge moves between the session, the vault and
+  the repository, the daily loop, the life of a note and the hooks in one session.
+
 ### Changed
 
 - The Site stage compares the words of every `site/docs/` page with its source, so a refreshed hash

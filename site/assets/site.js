@@ -7,6 +7,7 @@
       ['docs/index.html', 'Documentation index'],
       ['docs/readme.html', 'README'],
       ['docs/workflow.html', 'How to work: brain + code'],
+      ['workflow.html', 'Workflow at a glance'],
     ]],
     ['Product', [
       ['docs/product/overview.html', 'Product overview'],
