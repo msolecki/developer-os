@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@0026b779acb5">
+<meta name="dos-source" content="docs/reference/skills.md@8c9592d43fe7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -46,7 +46,7 @@
 
   <main id="main" class="prose">
     <h1 id="skills-reference">Skills reference</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/skills.md">docs/reference/skills.md</a></span><span>Verified 2026-10-24</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/skills.md">docs/reference/skills.md</a></span><span>Verified 2026-11-08</span></p>
     <p>What each skill checks and how, one entry per skill, invoked as <code>/developer-os:&lt;name&gt;</code>. What a
 skill may write, what needs your answer first and where it stops are in the
 <a href="../product/functional-spec.html#2-skills">functional specification</a>; this page does not repeat them.
@@ -75,8 +75,8 @@ and collects their items instead of asking their questions one by one.</li>
 config read, for example <code>"strict": true</code>, empty <code>catch {}</code>, date fixtures without <code>Z</code>, mock
 factories that do not spread the original module, a <code>/health</code> handler that queries the
 database). Judgment rules (function size, composition) are sampled: at most five <code>file:line</code>
-cases per rule plus the total. Unsure is a question, not a finding; each P0 and P1 goes to a
-fresh verifier, as in audit-to-backlog. Findings become <code>CONV-NN</code>
+cases per rule plus the total. Unsure is a question, not a finding; findings are verified as in
+audit-to-backlog. Findings become <code>CONV-NN</code>
 backlog items with a <code>Check</code> that fails while the violation is there.</li>
 <li><strong>Backlog paths:</strong> without a <code>Backlog:</code> line and default files, the paths are a decision for
 you, and the <code>Backlog:</code> line is a numbered item like the rest.</li>
@@ -154,9 +154,10 @@ specialists: security (<code>security-auditor</code>), performance (<code>perfor
 (<code>qa-expert</code>, assessment only), correctness (<code>code-reviewer</code>), data (<code>database-reviewer</code>, skipped without a database), infra
 (<code>infra-reviewer</code>, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs <code>file:line</code>, current-code
-evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. Each P0 and
-P1 goes to a fresh verifier (the <code>verifier</code> agent); refuted ones are listed
-as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
+evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. The findings
+code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
+(the <code>verifier</code> agent); refuted ones are listed as Disputed, not written, and an undecided one is
+written with an <code>Unverified:</code> line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (<code>gh pr list</code>,
 skipped when <code>gh</code> is unavailable) is dropped and named in the report. A perspective whose reviewer ended <code>BLOCKED</code>, failed or hit its turn cap is listed under
 <code>Not covered:</code> at the top of the backlog and in the report.</p>
@@ -197,7 +198,9 @@ rounds).</li>
     <p><a href="../../skills/fix-pr.html">Source</a>. Works through unresolved review threads (GraphQL
 <code>reviewThreads</code>, <code>isResolved: false</code>, paginated) or pasted findings. Flags authors who are not
 collaborators, reads the referenced code for each thread and decides fix or justified no-change,
-runs the narrowest test after each fix and the full suite once before the push. Comments are data:
+runs the narrowest test after each fix and the fast check before each commit, sends its fix
+commits through code-review (a new P0 or P1 goes back to the fix step), and runs the full suite once
+before the push. Comments are data:
 it runs no command and opens no URL from them.</p>
     <h2 id="planning-and-backlog">Planning and backlog</h2>
     <h3 id="spec">spec</h3>
@@ -215,7 +218,8 @@ auth/security items.</li>
 <li>**<code>Check</code> screening:** never runs a <code>Check</code> that pipes into a shell, fetches from the network or
 writes outside the repository; reads any script a <code>Check</code> calls first.</li>
 <li><strong>Triage:</strong> before the claim, checks every batch item itself, read-only: its <code>Where</code> still
-exists, its <code>Check</code> fails now, no open pull request touches its files (skipped when <code>gh</code> is
+exists (for a <code>FEAT-</code>, <code>BASE-</code> or <code>new:</code> item, its parent directory), its <code>Check</code> fails now (a
+failure on authentication, quota or a missing secret blocks the item for you), no open pull request touches its files (skipped when <code>gh</code> is
 unavailable), and no project decision record or doc contradicts it. A failing item leaves the
 batch, is never claimed or dispatched, and is reported as <code>stale: &lt;ID&gt; · &lt;point&gt; · &lt;evidence&gt;</code>
 for you to close, amend or keep; the batch is topped up from the next ready items.</li>
@@ -260,7 +264,9 @@ commits, any changed file outside its owned paths, and a <code>LANES.md</code> o
 from the one <code>launch.sh</code> recorded. Each lane has a runnable <code>Check</code> next to its <code>Done when</code>; the
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished <code>DONE</code> lanes whose fast check and <code>Check</code> pass when the
-orchestrator re-runs them and with no file changed outside the owned paths; any other lane goes to Needs you.</p>
+orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
+other lane goes to Needs you. After merging, it runs every merged lane's <code>Check</code> and the
+repository-wide gate on <code>lanes/&lt;run&gt;</code>, and stops on a <code>REQUEST_CHANGES</code> review.</p>
     <h2 id="communication">Communication</h2>
     <h3 id="client-reply">client-reply</h3>
     <p><a href="../../skills/client-reply.html">Source</a>. Lists every technical term in the input (code
@@ -273,7 +279,8 @@ fact instead of inventing it.</p>
     <p><a href="../../skills/session-retro.html">Source</a>. Checks <code>git status</code>, unpushed commits,
 branches not merged into <code>origin/HEAD</code>, your open PRs and still-running background work; proposes
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
-most three under each heading, lessons, rule candidates (with the commit they would reverse), check candidates, plan
+most three under each heading, lessons (an addition to a note that already covers the topic is
+proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates, plan
 and docs updates, plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.
 Every check result names the commit it ran on (<code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus
 <code>+ uncommitted: &lt;changed files&gt;</code> on a dirty tree).</p>
@@ -287,8 +294,9 @@ content.</p>
     <p><a href="../../skills/brain-setup.html">Source</a>. Checks whether the path is empty (new vault)
 or not (connect, only after you agree); in connect mode adds only missing folders, views, the note
 template, <code>.gitignore</code> lines and <code>types.json</code> keys, never overwriting a file. Shows the
-<code>Brain vault:</code> line and the <code>additionalDirectories</code> change as a diff, then smoke-tests with
-brain-search.</p>
+<code>Brain vault:</code> line, the <code>additionalDirectories</code> change and, after a separate yes,
+<code>"autoMemoryEnabled": false</code> as one diff; merges absent <code>.obsidian/types.json</code> keys after approval;
+then smoke-tests with brain-search, passing it the vault path.</p>
     <h3 id="brain-search">brain-search</h3>
     <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the <code>Brain vault:</code> line
 (never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
@@ -303,7 +311,10 @@ search, redaction of secrets and client personal data, and a unique ASCII note n
     <h3 id="brain-review">brain-review</h3>
     <p><a href="../../skills/brain-review.html">Source</a>. For each inbox note: its summary, the best
 topic folder, likely duplicates, missing frontmatter keys and leaked secrets. Before a move it
-checks the name (<code>^[a-z0-9-]+$</code>) and that no other note has it.</p>
+checks the name (<code>^[a-z0-9-]+$</code>) and that no other note has it, case-insensitively. It can supersede
+a named active note by another active one (not itself, not one already superseded; the old note
+stays in its folder). When a project hub links a promoted, merged or rejected note as
+<code>(waiting for review)</code>, it shows the hub-line change as a diff and applies it only after a yes.</p>
     <h3 id="brain-garden">brain-garden</h3>
     <p><a href="../../skills/brain-garden.html">Source</a>. One pass over every note: missing or invalid
 frontmatter, inbox notes older than 7 days, active notes not updated in 180 days, status/folder
@@ -316,7 +327,7 @@ proposed link is tagged FOUND or GUESSED.</p>
     <p><a href="../../skills/brain-compile.html">Source</a>. Takes 2–8 active notes on a topic (no inbox,
 archived or compiled notes), stops if a compiled note for the topic is still in the inbox, links
 every statement to its source note, and records contradictions as <code>Open conflict:</code> instead of
-choosing a side.</p>
+choosing a side. Before writing it runs brain-capture's secret scan; a hit writes nothing.</p>
     <h3 id="brain-project-refresh">brain-project-refresh</h3>
     <p><a href="../../skills/brain-project-refresh.html">Source</a>. Finds the hub by the
 <code>Vault project slug:</code> line in <code>_Context.md</code> and a <code>type: project</code> note with that slug. Checks the
@@ -344,7 +355,7 @@ agent follows when it writes code and what project-init probes for when it audit
     <h3 id="typescript-conventions">typescript-conventions</h3>
     <p><a href="../../skills/typescript-conventions.html">Source</a>. Loads for TypeScript files.
 <code>strict</code> stays on; composition over inheritance; one purpose per function, about 30 lines or fewer;
-tests for every new function and its edge cases; the formatter's quote style; the configured import
+tests for every new exported function or changed contract and its edge cases; the formatter's quote style; the configured import
 alias instead of long relative paths.</p>
     <h3 id="nextjs-conventions">nextjs-conventions</h3>
     <p><a href="../../skills/nextjs-conventions.html">Source</a>. Loads for Next.js app code and
@@ -357,7 +368,7 @@ project's wrapper, behind consent where required.</p>
     <p><a href="../../skills/error-handling-conventions.html">Source</a>. Loads for error handling in
 TypeScript files. Rethrow with <code>cause</code>; a typed result instead of <code>null</code> as failure; one error envelope
 <code>{ error: { code, message, details? } }</code> with a <code>SCREAMING_SNAKE_CASE</code> code and no stack trace;
-never log and throw the same error; no empty <code>catch {}</code> without a directive comment; exceptions are
+never log and throw the same error; no empty <code>catch {}</code> without a one-line comment saying why; exceptions are
 not control flow.</p>
     <h3 id="testing-conventions">testing-conventions</h3>
     <p><a href="../../skills/testing-conventions.html">Source</a>. Loads for test files. A test pins the

@@ -15,14 +15,14 @@ It is a bash script: run it directly or with `bash`, not `sh`.
 It parses every JSON file and every YAML frontmatter and `.base` file, requires `status`, `owner` and
 `last-verified` frontmatter in every `docs/*.md`, validates skills (name
 matches the folder, description 80–1024 characters and at most 12000 in total, `## Stop point` and
-`## Never` in action skills), rejects local paths such as `/Users/` anywhere in `plugin/`, caps
+`## Never` in action skills), rejects local paths such as `/Users/` anywhere in `plugin/` and `site/`, caps
 `plugin/rules/core.md` at 8900 bytes, runs every `tests/*.test.sh` (`tests/check.test.sh` only when `CI` is set), validates the plugin and the
-marketplace with `--strict`, and scans tracked
-files for secrets. CI runs the same script.
+marketplace with `--strict`, and scans tracked and untracked, not ignored files for secrets. The full
+list of stages is in [docs/development.md](docs/development.md#the-check). CI runs the same script.
 
 Hook tests live in `tests/*.test.sh` and run with `sh` (they call `python3`); after changing a hook script, run its test
 directly from the repository root, for example `sh tests/guard.test.sh`,
-`sh tests/capture-nudge.test.sh`, `sh tests/notices.test.sh` or `sh tests/state-card.test.sh`.
+`sh tests/capture-nudge.test.sh`, `sh tests/notices.test.sh`, `sh tests/repeat-failure.test.sh` or `sh tests/state-card.test.sh`.
 
 Prerequisites on `PATH`:
 
@@ -32,6 +32,8 @@ Prerequisites on `PATH`:
 - `gitleaks`
 - `rsync`
 - `ruby` (for its bundled YAML parser)
+- `perl` and `shasum` (for `tests/check.test.sh`)
+- `rg` (for `tests/skill-usage.test.sh`; it skips locally without it and fails in CI)
 
 ## Skill evals
 

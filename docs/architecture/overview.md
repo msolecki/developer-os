@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-24
+last-verified: 2026-11-08
 ---
 
 # Architecture overview
@@ -45,12 +45,12 @@ What occupies the context of a session, and when:
 
 | Part | When it loads | Size today | Limit |
 |---|---|---|---|
-| `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit | 8900 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
+| `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | About 8.1 KB | 8900 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
-| Skill names and descriptions | Every session, by Claude Code's skill listing | 11876 characters for 32 skills | 80–1024 each, 12000 total |
+| Skill names and descriptions | Every session, by Claude Code's skill listing | About 11,000 characters for 32 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
-| A skill's body | When the model or the user invokes it | 0.8–11.5 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
-| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 1.9–4.0 KB per file | — |
+| A skill's body | When the model or the user invokes it | 0.8–14.2 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
+| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–4.7 KB per file | — |
 | An output style | When selected; replaces the default style but keeps coding instructions | 0.6–2.0 KB | — |
 
 The fixed cost per session is the core rules plus the listings. Everything else is paid only on
@@ -69,7 +69,7 @@ sequenceDiagram
   participant N as Stop: capture-nudge.py
   CC->>R: session starts / resumes / compacts
   R-->>CC: stdout = core rules
-  CC->>SS: resumes / compacts
+  CC->>SS: resumes / compacts / forks
   SS-->>CC: stdout = state card
   CC->>NO: new session (startup)
   NO-->>CC: nothing or systemMessage (user) + additionalContext (agent)
@@ -92,8 +92,8 @@ sequenceDiagram
 - `guard.py` extracts `tool_input.command` with a regular expression, unescapes JSON, joins line continuations,
   drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
   purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.
-- `capture-nudge.py` reads `session_id` and `transcript_path` from the input, counts
-  `"type":"tool_use"` occurrences in the transcript file, defers while a background task
+- `capture-nudge.py` reads `session_id` and `transcript_path` from the input, counts the
+  `tool_use` blocks of the transcript's assistant lines, defers while a background task
   launched in the session has no `<task-notification>` and a fresh output file under a `tasks/`
   directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session
   marker in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/capture-nudge/` so it fires once. Markers older than
@@ -149,7 +149,7 @@ implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to
 | Flow | Reads | Writes | Leaves the machine? |
 |---|---|---|---|
 | Session start | `rules/core.md`; after compaction, resume or fork, `git` state and `docs/plans/.devos-state.md` of the repository root | — | As context to the model provider |
-| Task state | — | `docs/plans/.devos-state.md` (implement-backlog, pr-cycle, audit-to-backlog) | No |
+| Task state | — | `docs/plans/.devos-state.md` (implement-backlog, pr-cycle, audit-to-backlog, parallel-lanes) | No |
 | Brain search | Vault Markdown (`rg`), skipping `_archive/`, `templates/`, `_views/` | — | Notes read go to the model provider |
 | Capture / compile | Session context; vault for duplicates | One file in `_inbox/` | Only as context |
 | Review / garden | Vault | Named moves and edits; `_reports/garden-log.md` | Only as context |

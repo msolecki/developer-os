@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@3bdda522370a">
+<meta name="dos-source" content="docs/product/decisions.md@e6197cfe431b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -46,7 +46,7 @@
 
   <main id="main" class="prose">
 <h1 id="decisions">Decisions</h1>
-<p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/product/decisions.md">docs/product/decisions.md</a></span><span>Verified 2026-10-16</span></p>
+<p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/product/decisions.md">docs/product/decisions.md</a></span><span>Verified 2026-11-08</span></p>
 <p>One register for the plugin era. Each entry: date, decision, why, and the commit that put it in the code. Alternatives are listed only where the history records them. Never renumber; when a decision is replaced, mark it superseded and add a new entry. Decisions of the CLI era are not carried over; their history is at the git tag <code>archive/cli-v0</code>.</p>
 <h2 id="d1-plugin-only">D1. Plugin only</h2>
 <ul>
@@ -63,6 +63,7 @@
 <li><strong>Amended 2026-10-24:</strong> <code>scripts/install-codex.sh</code> is removed (D21).</li>
 <li><strong>Amended 2026-10-16:</strong> the hook scripts are Python 3 (3.8+, standard library only, no network): <code>state-card.py</code>, <code>guard.py</code> and <code>capture-nudge.py</code> replace the <code>sh</code> scripts and <code>guard.awk</code>. The Claude plugin directory's validator reads the shell scripts a hook runs and refuses any command whose path the shell computes (a variable other than <code>${CLAUDE_PLUGIN_ROOT}</code>, a command substitution, a glob) or any inline program; the hooks need paths outside the plugin (the project's <code>cwd</code>, the transcript, a temporary directory). Scripts in other languages are held for a human reviewer instead of refused. The core rules load through a literal <code>cat</code> hook again, so they never depend on Python; without <code>python3</code> the other three hooks fail open.</li>
 <li><strong>Amended 2026-10-24:</strong> a fourth script, <code>notices.py</code>, on <code>SessionStart</code> <code>startup</code> (D22).</li>
+<li><strong>Amended 2026-11-08:</strong> a fifth script, repeat-failure.py (D26).</li>
 </ul>
 <h2 id="d3-the-vault-is-read-and-written-with-the-agents-own-file-tools">D3. The vault is read and written with the agent's own file tools</h2>
 <ul>
@@ -87,7 +88,7 @@
 <h2 id="d6-hooks-ask-never-deny-and-fail-open">D6. Hooks ask, never deny, and fail open</h2>
 <ul>
 <li><strong>Date:</strong> 2026-10-15 · <strong>Commit:</strong> <code>1c324a89</code></li>
-<li><strong>Decision:</strong> the guard answers <code>ask</code> for its three categories and nothing else; both scripts exit silently on input they cannot parse or on any error.</li>
+<li><strong>Decision:</strong> the guard answers <code>ask</code> for its three categories and nothing else; both scripts exit silently on input they cannot parse or on any error. Every hook script added since (<code>state-card.py</code>, <code>notices.py</code>, <code>repeat-failure.py</code>) follows the same rule.</li>
 <li><strong>Why:</strong> a broken guard must not block a session; an extra confirmation costs one click, while a missed install rewrites a lockfile. Per the README, an ask resolves to a denial in <code>claude -p</code>, the safe default for headless runs.</li>
 <li><strong>Amended 2026-10-30:</strong> a fourth category, commands that destroy uncommitted or untracked work (<code>rm</code> with a recursive and a force flag, <code>git reset --hard</code>, <code>git clean -f</code>, <code>git checkout</code>/<code>git restore</code> of the whole tree, <code>git worktree remove --force</code>). Users without their own deny list had no check on these in auto mode; they are the first reflexes harness-engineering-101 (chapter 13) names.</li>
 <li><strong>Amended 2026-10-30:</strong> a fifth category, an Edit or Write of a secret file or the user-level agent config (<code>.env*</code>, <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.claude.json</code>, <code>~/.claude/settings*.json</code>, <code>~/.claude/hooks</code>, <code>~/.claude/rules</code>). The rule against copying hooks into <code>~/.claude</code> unread was prompt-only.</li>
@@ -275,6 +276,15 @@
 <tr><td>2026-10-26</td><td>brain-setup offers <code>"autoMemoryEnabled": false</code> as a separate yes/no and points to brain-import-memory when memory files exist</td><td><code>brain-setup</code></td><td>D24</td></tr>
 <tr><td>2026-10-30</td><td>An item whose code no longer matches it stops and gets a proposed <code>Amended</code> line instead of being pushed past</td><td><code>implement-backlog</code></td><td>Plan-and-forget: an approved plan goes stale when the code moves (harness-engineering-101, appendix C)</td></tr>
 <tr><td>2026-11-06</td><td>session-retro proposes a vault lesson only when it cost a retry, correction or re-derivation and <code>brain-search</code> finds no existing note; otherwise it proposes updating that note</td><td><code>session-retro</code></td><td>The vault inbox grew from 1 to 82 notes in two weeks (61 brain-capture calls, 0 brain-review), which kept brain-garden in its inbox gate</td></tr>
+<tr><td>2026-11-07</td><td>A reviewer's finding is a hypothesis checked against the code and the canonical helper; run the area's tests before applying a reviewer's fix; update the governing decision record when changing test gates; a new or changed gate counts only after it was seen to fail; a plan is deleted only after its steps landed in committed code; lanes stage explicit paths, re-run <code>git status</code> before the first edit, never <code>git stash</code>, run the repository-wide gate after integrating and never resume an interrupted lane (#113)</td><td><code>plugin/rules/core.md</code></td><td>Nine lessons from the vault that govern every kind of work; the cap rose to 8900 bytes to take them (D10 amended)</td></tr>
+<tr><td>2026-11-07</td><td>Every agent with Bash runs only read-only git (<code>diff</code>, <code>log</code>, <code>show</code>, <code>status</code>, <code>blame</code>, <code>grep</code>, <code>ls-files</code>) and reads another revision with <code>git show</code> or <code>git diff</code> (#117)</td><td><code>code-reviewer</code>, <code>database-reviewer</code>, <code>infra-reviewer</code>, <code>security-auditor</code>, <code>performance-engineer</code>, <code>qa-expert</code>, <code>docs-writer</code>, <code>dependency-upgrader</code></td><td>An infra-reviewer detached the orchestrator's HEAD mid-integration; the guard's ask had been approved (#110)</td></tr>
+<tr><td>2026-11-07</td><td>code-review and code-reviewer rate a domain formula, field type or value format against the project's canonical definition; up to five P2 correctness findings go to the verifier (#118)</td><td><code>code-review</code>, <code>code-reviewer</code>, <code>verifier</code></td><td>Two false P2 findings, unverified, drove fix-pr work that was dropped (#111; D8 amended)</td></tr>
+<tr><td>2026-11-07</td><td>implement-backlog triages every batch item read-only before the claim and reports a failing one as <code>stale:</code>; audit-to-backlog drops a finding the done file or an open PR already covers (#120)</td><td><code>implement-backlog</code>, <code>audit-to-backlog</code></td><td>Batches claimed and dispatched items that were already fixed, moved or in flight (#115)</td></tr>
+<tr><td>2026-11-07</td><td>Each lane has a runnable <code>Check</code> the lane cannot edit; integrate re-runs it and the fast check and sends a red, <code>Manual</code> or changed-prompt lane to Needs you (#121)</td><td><code>parallel-lanes</code></td><td>A lane reported <code>DONE</code> with a green fast check while its own criterion was unmet (#116)</td></tr>
+<tr><td>2026-11-08</td><td>Merged the two full-suite lines; removed the Self-correction and Boundaries sections (kept "I need X, Y, and Z" under Communication); conventions skills named as <code>*-conventions</code>; dropped the duplicate test-runner line</td><td><code>plugin/rules/core.md</code></td><td>Free bytes under the 8900-byte budget (BUD-01): the cut lines restate default model behaviour or the skill listing</td></tr>
+<tr><td>2026-11-08</td><td>The full suite may also run when a skill's gate requires it</td><td><code>plugin/rules/core.md</code></td><td>implement-backlog and deploy-checklist run it without a push (FLOW-14)</td></tr>
+<tr><td>2026-11-08</td><td>Uncommitted subagent changes are the caller's to commit; "Agents produce commits" -&gt; "Lanes produce commits"</td><td><code>plugin/rules/core.md</code></td><td>Agents never commit since #117 (RULE-01)</td></tr>
+<tr><td>2026-11-08</td><td><code>-F &lt;msg-file&gt;</code>; test-config rule moved to Validation; unfinished plan items go to the <code>Backlog:</code> paths (default <code>TODO.md</code>)</td><td><code>plugin/rules/core.md</code></td><td>Wording fixes (RULE-02)</td></tr>
 </tbody>
 </table>
 </div>

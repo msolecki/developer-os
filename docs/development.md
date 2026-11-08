@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-24
+last-verified: 2026-11-08
 ---
 
 # Development guide
@@ -12,7 +12,7 @@ How to change the plugin, check it and ship it. The rules for contributions are 
 ## Setup
 
 Prerequisites on `PATH`: `claude` (Claude Code), `python3` (3.8+, for the hooks and their tests), `jq`, `gitleaks`, `rsync`, `ruby` (for its YAML
-parser), `rg` for the skills' own commands. No install step and no build.
+parser), `perl` and `shasum` (for `tests/check.test.sh`), `rg` for the skills' own commands and `tests/skill-usage.test.sh`. No install step and no build.
 
 Run the plugin from the working tree without installing it:
 
@@ -31,15 +31,17 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 |---|---|
 | JSON | Any `*.json` does not parse (`jq empty`) |
 | Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name; a line inside the frontmatter of an `evals/` file contains `---` (the eval loader ends frontmatter there) |
+| Last-verified (warning) | A `docs/*.md` committed after its `last-verified` date prints a warning; the exit status does not change |
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden`, `brain-import-memory`, `brain-project-refresh` or `brain-review` differs from `brain-search`'s |
-| Docs standard | A `## ` heading or bold field of `templates/project/docs/decisions/0001-template.md`, a bold field of `templates/project/docs/pitfalls.md`, or a `## ` heading of `templates/project/docs/CURRENT-STATE.md` is missing from `## The standard` in `docs-sync` (the plugin does not ship `templates/`, so the skill restates them) |
-| Severity | A skill or agent that writes out the P0–P3 scale (inline `P0 = …` or four `- **P0:**` bullets) words it differently from the others |
+| Docs standard | A `## ` heading or bold field of `templates/project/docs/decisions/0001-template.md`, a bold field of `templates/project/docs/pitfalls.md`, or a `## ` heading of `templates/project/docs/CURRENT-STATE.md` does not appear whole, as a fixed string, on that template file's own line of `## The standard` in `docs-sync` (the plugin does not ship `templates/`, so the skill restates them) |
+| Severity | A skill, an agent or `docs/glossary.md` that writes out the P0–P3 scale (inline `P0 = …` or four `- **P0:**` bullets) words it differently from the others |
 | Local paths | A file under `plugin/` or `site/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
-| Evals | An `evals/<case>/` directory lacks a `case.yaml` whose `name` is the folder, a `prompt.md`, the `scaffold_script` it names, or `graders/*.md`; a grader's `type` is not `llm`, `regex`, `file_exists` or `tool_used`; every grader of a case is `llm`; a case has no row in the Cases table of `evals/README.md`, or a row names no case |
+| Evals | An `evals/<case>/` directory lacks a `case.yaml` whose `name` is the folder, a `prompt.md`, the `scaffold_script` it names, or `graders/*.md`; a grader's `type` is not `llm`, `regex`, `file_exists` or `tool_used`; every grader of a case is `llm`; a case has no row in the Cases table of `evals/README.md`, or a row names no case; a case has no positive deterministic grader (one that fails a run that does nothing: not `not_contains`, `exists: false`, `min: 0`, `tool: Skill` or a regex over a scaffolded file), except `injection-fix-pr` and `injection-pr-cycle` |
+| Imports | A `plugin/hooks/*.py` import is outside the standard-library allowlist in `scripts/check.sh`, or a hook names `urllib`, `socket`, `http.client`, `requests`, `httpx`, `importlib` or `__import__` (D2) |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
@@ -48,7 +50,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Core-rules size | `plugin/rules/core.md` exceeds 8900 bytes, or `CAP` in `state-card.py` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
-| Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once |
+| Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
@@ -101,7 +103,7 @@ as `development.html` and `contributing.html` do. CI rejects a pull request that
 gitleaks allow marker, so a page that quotes it writes its colon as `&#58;`.
 
 `.github/workflows/pages.yml` publishes `site/` to GitHub Pages on a push to `main` that changes
-it, or by hand (dispatch it from `main` only, or it publishes unreleased docs). The repository's Pages source must be "GitHub Actions".
+it, or by hand; its job runs only on `main`, so a dispatch from another branch publishes nothing. The repository's Pages source must be "GitHub Actions".
 
 ## Script tests
 
@@ -112,7 +114,7 @@ safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds c
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code, the JSON output and the message;
 `tests/notices.test.sh` runs `notices.py` with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's `CLAUDE.md` is ignored and that no note name is printed;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
-stage's message; it runs the whole check about forty times (around two minutes), so `scripts/check.sh` runs it
+stage's message; it runs the whole check once per case (several minutes), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
 `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
@@ -148,7 +150,7 @@ is dropped as stale by implement-backlog's triage, so its case never claims or d
    `CHANGELOG.md`, and [product/functional-spec.md](product/functional-spec.md). Counts written as digits are
    checked; fix any the check reports.
 
-Changing `plugin/rules/core.md`: it sits just under the 8900-byte cap (`wc -c < plugin/rules/core.md`).
+Changing `plugin/rules/core.md`: keep it under the 8900-byte cap (`wc -c < plugin/rules/core.md`).
 Every added line must replace or shorten another, unless a D10 amendment raises the cap; run `instruction-review --prune` on it inside this repository.
 
 ## Branches and releases

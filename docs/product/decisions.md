@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-07
+last-verified: 2026-11-08
 ---
 
 # Decisions
@@ -39,6 +39,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   reviewer instead of refused. The core rules load through a literal `cat` hook again, so they never
   depend on Python; without `python3` the other three hooks fail open.
 - **Amended 2026-10-24:** a fourth script, `notices.py`, on `SessionStart` `startup` (D22).
+- **Amended 2026-11-08:** a fifth script, repeat-failure.py (D26).
 
 ## D3. The vault is read and written with the agent's own file tools
 
@@ -72,7 +73,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 
 - **Date:** 2026-10-15 · **Commit:** `1c324a89`
 - **Decision:** the guard answers `ask` for its three categories and nothing else; both scripts exit
-  silently on input they cannot parse or on any error.
+  silently on input they cannot parse or on any error. Every hook script added since (`state-card.py`,
+  `notices.py`, `repeat-failure.py`) follows the same rule.
 - **Why:** a broken guard must not block a session; an extra confirmation costs one click, while a
   missed install rewrites a lockfile. Per the README, an ask resolves to a denial in `claude -p`, the safe
   default for headless runs.
@@ -424,3 +426,12 @@ here before reversing a rule.
 | 2026-10-26 | brain-setup offers `"autoMemoryEnabled": false` as a separate yes/no and points to brain-import-memory when memory files exist | `brain-setup` | D24 |
 | 2026-10-30 | An item whose code no longer matches it stops and gets a proposed `Amended` line instead of being pushed past | `implement-backlog` | Plan-and-forget: an approved plan goes stale when the code moves (harness-engineering-101, appendix C) |
 | 2026-11-06 | session-retro proposes a vault lesson only when it cost a retry, correction or re-derivation and `brain-search` finds no existing note; otherwise it proposes updating that note | `session-retro` | The vault inbox grew from 1 to 82 notes in two weeks (61 brain-capture calls, 0 brain-review), which kept brain-garden in its inbox gate |
+| 2026-11-07 | A reviewer's finding is a hypothesis checked against the code and the canonical helper; run the area's tests before applying a reviewer's fix; update the governing decision record when changing test gates; a new or changed gate counts only after it was seen to fail; a plan is deleted only after its steps landed in committed code; lanes stage explicit paths, re-run `git status` before the first edit, never `git stash`, run the repository-wide gate after integrating and never resume an interrupted lane (#113) | `plugin/rules/core.md` | Nine lessons from the vault that govern every kind of work; the cap rose to 8900 bytes to take them (D10 amended) |
+| 2026-11-07 | Every agent with Bash runs only read-only git (`diff`, `log`, `show`, `status`, `blame`, `grep`, `ls-files`) and reads another revision with `git show` or `git diff` (#117) | `code-reviewer`, `database-reviewer`, `infra-reviewer`, `security-auditor`, `performance-engineer`, `qa-expert`, `docs-writer`, `dependency-upgrader` | An infra-reviewer detached the orchestrator's HEAD mid-integration; the guard's ask had been approved (#110) |
+| 2026-11-07 | code-review and code-reviewer rate a domain formula, field type or value format against the project's canonical definition; up to five P2 correctness findings go to the verifier (#118) | `code-review`, `code-reviewer`, `verifier` | Two false P2 findings, unverified, drove fix-pr work that was dropped (#111; D8 amended) |
+| 2026-11-07 | implement-backlog triages every batch item read-only before the claim and reports a failing one as `stale:`; audit-to-backlog drops a finding the done file or an open PR already covers (#120) | `implement-backlog`, `audit-to-backlog` | Batches claimed and dispatched items that were already fixed, moved or in flight (#115) |
+| 2026-11-07 | Each lane has a runnable `Check` the lane cannot edit; integrate re-runs it and the fast check and sends a red, `Manual` or changed-prompt lane to Needs you (#121) | `parallel-lanes` | A lane reported `DONE` with a green fast check while its own criterion was unmet (#116) |
+| 2026-11-08 | Merged the two full-suite lines; removed the Self-correction and Boundaries sections (kept "I need X, Y, and Z" under Communication); conventions skills named as `*-conventions`; dropped the duplicate test-runner line | `plugin/rules/core.md` | Free bytes under the 8900-byte budget (BUD-01): the cut lines restate default model behaviour or the skill listing |
+| 2026-11-08 | The full suite may also run when a skill's gate requires it | `plugin/rules/core.md` | implement-backlog and deploy-checklist run it without a push (FLOW-14) |
+| 2026-11-08 | Uncommitted subagent changes are the caller's to commit; "Agents produce commits" -> "Lanes produce commits" | `plugin/rules/core.md` | Agents never commit since #117 (RULE-01) |
+| 2026-11-08 | `-F <msg-file>`; test-config rule moved to Validation; unfinished plan items go to the `Backlog:` paths (default `TODO.md`) | `plugin/rules/core.md` | Wording fixes (RULE-02) |
