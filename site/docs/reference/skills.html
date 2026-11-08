@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@1a3d972ebe3b">
+<meta name="dos-source" content="docs/reference/skills.md@85442840a506">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -119,7 +119,8 @@ standard.</p>
     <ul>
 <li><strong>Missing pieces:</strong> root <code>AGENTS.md</code> (under 100 lines, with <code>## Likely agent mistakes here</code> and
 <code>## Invariants</code>), a one-line <code>CLAUDE.md</code>, <code>_Context.md</code>, <code>DESIGN.md</code> for a UI, the git-ignored
-state file (<code>git check-ignore -q docs/plans/.devos-state.md</code>), frontmatter on every doc,
+state file (<code>git check-ignore -q docs/plans/.devos-state.md</code>) and <code>.worktrees/</code>
+(<code>git check-ignore -q .worktrees/x</code>), frontmatter on every tracked doc (<code>git ls-files docs</code>),
 <code>docs/index.md</code>, <code>docs/CURRENT-STATE.md</code>, <code>docs/pitfalls.md</code>, decision records, runbooks. It
 proposes only pieces that would carry real content now.</li>
 <li><strong>Drift:</strong> commands in <code>AGENTS.md</code>/<code>CLAUDE.md</code>/README that are not in the manifest or <code>Makefile</code>;
@@ -207,7 +208,8 @@ it runs no command and opens no URL from them.</p>
     <h2 id="planning-and-backlog">Planning and backlog</h2>
     <h3 id="spec">spec</h3>
     <p><a href="../../skills/spec.html">Source</a>. Interviews you one question at a time (not asking what
-the repository already answers), inspects the code, then writes a spec (goals, non-goals, flows,
+the repository already answers), inspects the code, then writes a spec (frontmatter with
+<code>status: draft</code>, <code>owner</code> and <code>last-verified</code>; goals, non-goals, flows,
 design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
 tests) and a plan whose steps carry What, Where, How, Test, <code>Done when</code> and S/M/L. It then checks
 them against each other (a coverage table from criteria to steps both ways, vague words,

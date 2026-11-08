@@ -82,7 +82,8 @@ standard.
 
 - **Missing pieces:** root `AGENTS.md` (under 100 lines, with `## Likely agent mistakes here` and
   `## Invariants`), a one-line `CLAUDE.md`, `_Context.md`, `DESIGN.md` for a UI, the git-ignored
-  state file (`git check-ignore -q docs/plans/.devos-state.md`), frontmatter on every doc,
+  state file (`git check-ignore -q docs/plans/.devos-state.md`) and `.worktrees/`
+  (`git check-ignore -q .worktrees/x`), frontmatter on every tracked doc (`git ls-files docs`),
   `docs/index.md`, `docs/CURRENT-STATE.md`, `docs/pitfalls.md`, decision records, runbooks. It
   proposes only pieces that would carry real content now.
 - **Drift:** commands in `AGENTS.md`/`CLAUDE.md`/README that are not in the manifest or `Makefile`;
@@ -181,7 +182,8 @@ it runs no command and opens no URL from them.
 ### spec
 
 [Source](../../plugin/skills/spec/SKILL.md). Interviews you one question at a time (not asking what
-the repository already answers), inspects the code, then writes a spec (goals, non-goals, flows,
+the repository already answers), inspects the code, then writes a spec (frontmatter with
+`status: draft`, `owner` and `last-verified`; goals, non-goals, flows,
 design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
 tests) and a plan whose steps carry What, Where, How, Test, `Done when` and S/M/L. It then checks
 them against each other (a coverage table from criteria to steps both ways, vague words,
