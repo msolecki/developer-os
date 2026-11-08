@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""SessionStart hook (startup): shows the user up to three one-line notices.
+"""SessionStart hook (startup): shows the user up to four one-line notices.
 
 - The plugin version is new or changed: the version and a link to the changelog page. Claude Code has no
   install or update hook, so a version marker in the plugin data directory stands in for one.
+- A first install (no version marker yet): a line that vault upkeep does not run on its own, or, without a
+  vault, a line that suggests brain-setup.
 - Inbox notes in the vault are older than 7 days: suggest brain-review, at most once every 7 days.
 - No brain-garden run in 30 days: suggest brain-garden, at most once every 30 days.
 

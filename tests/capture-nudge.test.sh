@@ -165,7 +165,7 @@ check "Monitor started over 30 minutes ago does not block" "$code" fire
 touch -t 202001010000 "$tmp/data/capture-nudge/old"
 run "$(input s9 "$tmp/long.jsonl")"
 [ -e "$tmp/data/capture-nudge/old" ] && r=yes || r=no
-check "markers older than 7 days removed" "$r" no
+check "markers 8 days old or older removed" "$r" no
 
 # A marker dir that is a link (planted by another local user) is refused: no marker, no cleanup through it.
 # The foreign-owner half of the check needs a second uid (root to set up), so only the link is tested.
