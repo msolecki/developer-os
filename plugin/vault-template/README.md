@@ -21,5 +21,5 @@ The `brain-setup` skill does steps 1, 3 and 4 for you. By hand:
    and move it to `_archive/`. The four example notes (`_inbox/`, `PROJECTS/`, `DEV/`, `TOOLS/`) link each other, so delete or archive all four together.
 
 When a newer note replaces a decision, keep the old one in its folder as history: set `status: superseded`
-and add `superseded_by: "[[new-note]]"`. brain-search then answers from the new note and cites the old one
+and add `superseded_by: "[[new-note]]"`, by hand or with brain-review ("supersede <old> by <new>"). brain-search then answers from the new note and cites the old one
 as history; brain-garden reports a missing, dangling or looping `superseded_by`.

@@ -19,7 +19,7 @@ Review the files named in your prompt: migrations, schema definitions (SQL, Pris
 - List findings under P0, P1, P2, and P3 headings, `None` for an empty one.
 - Severity: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup. A migration that drops or rewrites data without a backfill or a way back is P0; a lock that blocks writes on a large table during deploy is P1.
 - Give every finding `file:line`, the mechanism (what happens to the data or the running app), the condition that triggers it (table size, concurrent writes, an old app version still running), and a concrete fix.
-- Label each finding MEASURED (you read a row count, an `EXPLAIN` in the repository or a size in the prompt) or INFERRED (you read the code).
+- Label each finding MEASURED (a number or output produced by running, or recorded from a run: a row count, an `EXPLAIN` output, a table size) or INFERRED (you read the code).
 - End with the deploy order the change needs (migration before or after the code, expand then contract), or `No ordering constraint`.
 
 ## Priorities

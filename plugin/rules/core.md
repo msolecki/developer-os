@@ -8,15 +8,15 @@
 
 ### Validation — two tiers
 
-- Before each commit, run the fast check: lint, types, and the tests of the changed area. Before a push or PR, run the full suite. The project declares both in its agent instructions (`CLAUDE.md`/`AGENTS.md`); otherwise derive them from its package manifest or README/CONTRIBUTING/Makefile. If neither exists, say so and ask before committing.
-- Never start the full suite mid-task on your own; it belongs to the push/PR gate.
+- Before each commit, run the fast check: lint, types, and the tests of the changed area. Run the full suite before a push or PR, or when a skill's gate requires it; never mid-task on your own. The project declares both in its agent instructions (`CLAUDE.md`/`AGENTS.md`); otherwise derive them from its package manifest or README/CONTRIBUTING/Makefile. If neither exists, say so and ask before committing.
+- Before changing test config, coverage or CI gates, update the governing decision record in the same change.
 
 ### Subagents — verify their work
 
 - Treat any authentication, 2FA, or security change from a subagent as unauthorized until reviewed. A subagent can add an environment-flag bypass that disables a second factor.
-- After a subagent finishes, compare the working tree with the commit using `git status` and `git diff`. A subagent that fixes only the local tree without committing makes local tests green and every other checkout red.
+- After a subagent finishes, compare the working tree with the commit using `git status` and `git diff`; uncommitted subagent changes are yours to commit.
 - A reviewer's finding is a hypothesis: read the code and the project's canonical helper or schema before fixing; a framework claim needs the framework's docs or source.
-- Run the area's tests before applying a reviewer's fix; a red pinned test means it reverses a decision, so surface it. Before changing test config, coverage or CI gates, update the governing decision record in the same change.
+- Run the area's tests before applying a reviewer's fix; a red pinned test means it reverses a decision, so surface it.
 
 ### External repositories (clients and OSS) — first-session procedure
 
@@ -28,7 +28,7 @@
 
 - Stop when the fast check passes and you can give the closing status block (see Communication). A session that must end earlier stops at its last green commit, with the rest recorded in the plan.
 - When a decision is open, ask with options A/B/C instead of assuming.
-- Before changing over 50 lines of code, write a plan: one per task, in the project's git-ignored planning location (default `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage. The active plan is the most recently updated plan there whose task is not done; specs go to `docs/specs/` or the project's spec location. After a context reset, resume with "continue from <plan path>". When the task is done, check that every step landed in committed code, then delete the plan; move unfinished items to `TODO.md` or the backlog. A project may override this in its `AGENTS.md`.
+- Before changing over 50 lines of code, write a plan: one per task, in the project's git-ignored planning location (default `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage. The active plan is the most recently updated plan there whose task is not done; specs go to `docs/specs/` or the project's spec location. After a context reset, resume with "continue from <plan path>". When the task is done, check that every step landed in committed code, then delete the plan; move unfinished items to the backlog (`Backlog:` paths, default `TODO.md`). A project may override this in its `AGENTS.md`.
 - Every plan step states What (deliverable), Where (files), How (approach), and **Test** (verification). The system stays deployable after every step. Use S/M/L complexity instead of time estimates.
 - A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
 - An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, and expected output format. Exclude debugging history, rejected approaches, and full conversation dumps.
@@ -43,16 +43,16 @@
 ### Parallel agents — one checkout each
 
 - Run every parallel agent in its own git worktree (`git worktree add`, or the project's worktree script). Two sessions in one checkout corrupt each other's staging area, and a push from one restarts CI on the other's older state.
-- Stage explicit paths, never `git add -A` or `git add .`; if a checkout is shared anyway, commit with `git commit -F <msg> -- <paths>`. Re-run `git status` right before the first edit.
+- Stage explicit paths, never `git add -A` or `git add .`; if a checkout is shared anyway, commit with `git commit -F <msg-file> -- <paths>`. Re-run `git status` right before the first edit.
 - No `git stash` in a lane: worktrees share one stash; compare with `git show HEAD:<path>` instead.
-- One orchestrator owns push and integrate. Agents produce commits inside their worktree and stop there; they do not push, merge, or rebase shared branches.
+- One orchestrator owns push and integrate. Lanes produce commits inside their worktree and stop there; they do not push, merge, or rebase shared branches.
 - Before dispatching parallel agents, state which worktree each one gets. "Both in the main repository" is not a plan, it is the failure above.
 - When the project provisions per-worktree resources (ports, a compose project name, an environment file), use those instead of the default ports, and release them with the project's cleanup command when the branch is done.
 - After integrating lanes, run the repository-wide gate on the result. Never resume an interrupted lane; start a fresh, smaller one.
 
 ### Conventions skills
 
-Stack- and file-specific conventions are skills: `typescript-conventions`, `nextjs-conventions`, `error-handling-conventions`, `monitoring-conventions`, `comments-conventions`, `testing-conventions`, and `defensive-coding-conventions` (defect classes that ship past review). Do not copy them into these rules. A new lesson goes to the project's own instructions when it is stack- or file-specific, to the knowledge base (the `brain-capture` skill) when other projects can use it, and to these core rules only when it governs every kind of work.
+Stack- and file-specific conventions are the `*-conventions` skills. Do not copy them into these rules. A new lesson goes to the project's own instructions when it is stack- or file-specific, to the knowledge base (the `brain-capture` skill) when other projects can use it, and to these core rules only when it governs every kind of work.
 
 ## Communication
 
@@ -63,23 +63,11 @@ Stack- and file-specific conventions are skills: `typescript-conventions`, `next
 - Structure problem-solving responses as Problem → Cause → Solution → Test.
 - End a task with a status block, labels as written: **Done** (what changed, with evidence), **Not done** (what remains and why), **Needs you** (decisions or actions only the user can take). Write "none" for an empty part.
 - When the user says "ASAP" or "quickly," use at most three sentences, only critical actions, and a one-line status block instead of the structures above.
-
-### Self-correction signals
-
-- If the user asks "what do you mean?", the explanation was too abstract; simplify it.
-- If the user says "I know that," raise the level and move forward.
-- If the user's tone shows frustration, change the approach and ask for feedback.
-
-### Boundaries
-
-- For high-stakes domains outside your competence (medical, legal, or tax), refer the user to a qualified professional.
 - When required data is missing, say "I need X, Y, and Z" instead of guessing.
-- For unethical or illegal requests, refuse and explain why.
 
 ## Stack preferences
 
 - Use the package manager the repository's lockfile declares; never mix managers in one repository.
 - Follow the project's existing UI, backend, and database stack; introduce a new framework or service only with an explicit decision.
-- Use the project's existing test runner.
 
 Override this section with your own defaults in your user-level `CLAUDE.md`.
