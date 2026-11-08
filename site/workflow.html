@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en" data-root="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workflow at a glance · developer-os</title>
+<meta name="description" content="How knowledge moves between an agent session, an Obsidian vault and the repository with developer-os: the daily loop, the life of a note and the hooks in one session.">
+<link rel="canonical" href="https://msolecki.github.io/developer-os/workflow.html">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="developer-os">
+<meta property="og:title" content="Workflow at a glance · developer-os">
+<meta property="og:description" content="How knowledge moves between an agent session, an Obsidian vault and the repository with developer-os.">
+<meta property="og:url" content="https://msolecki.github.io/developer-os/workflow.html">
+<meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/docs.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="developer-os documentation">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="docs/index.html">Docs</a>
+      <a href="skills/index.html">Skills</a>
+      <a href="agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="workflow-at-a-glance">Workflow at a glance</h1>
+    <p class="lede">An agent session forgets. The vault remembers. You decide what stays. developer-os connects every session to two durable places: an Obsidian vault for knowledge that outlives the project, and the repository for the plan and the code. New knowledge enters through <code>_inbox/</code> and becomes trusted only after you approve it.</p>
+
+    <div class="wf-stage wf-scroll">
+      <svg class="wf-svg" viewBox="0 0 960 360" role="img" aria-label="Knowledge flows between the agent session, the Obsidian vault and the repository">
+        <defs>
+          <path id="wf-p-search" d="M300 120 C 420 40, 540 40, 660 120"/>
+          <path id="wf-p-capture" d="M660 175 C 540 255, 420 255, 300 175"/>
+          <path id="wf-p-plan" d="M200 215 C 220 300, 360 320, 405 305"/>
+        </defs>
+        <use href="#wf-p-search" class="wf-path"/>
+        <use href="#wf-p-capture" class="wf-path"/>
+        <use href="#wf-p-plan" class="wf-path"/>
+        <circle cx="200" cy="148" r="92" fill="var(--ask-soft)" stroke="var(--ask)" stroke-width="2"/>
+        <text x="200" y="142" text-anchor="middle" class="node-t">Agent session</text>
+        <text x="200" y="164" text-anchor="middle" class="node-s">context ends with it</text>
+        <rect x="660" y="56" width="250" height="184" rx="12" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="2"/>
+        <text x="785" y="92" text-anchor="middle" class="node-t">Obsidian vault</text>
+        <text x="785" y="114" text-anchor="middle" class="node-s">durable knowledge in Markdown</text>
+        <text x="690" y="148" class="lbl">_inbox/  ← new notes</text>
+        <text x="690" y="170" class="lbl">PROJECTS/ DEV/ TOOLS/</text>
+        <text x="690" y="192" class="lbl">INFRA/ QA/  ← active</text>
+        <text x="690" y="214" class="lbl">_archive/  ← nothing deleted</text>
+        <rect x="405" y="270" width="150" height="70" rx="10" fill="var(--pine-soft)" stroke="var(--pine)" stroke-width="2"/>
+        <text x="480" y="300" text-anchor="middle" class="node-t" style="font-size:18px">Repository</text>
+        <text x="480" y="320" text-anchor="middle" class="node-s">plan · code · ADRs</text>
+        <text x="480" y="44" text-anchor="middle" class="lbl">brain-search: read before planning</text>
+        <text x="480" y="252" text-anchor="middle" class="lbl">brain-capture: decision → _inbox/</text>
+        <text x="250" y="322" text-anchor="middle" class="lbl">plan in docs/plans/</text>
+        <g class="wf-dot"><circle r="6" fill="var(--ok)"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#wf-p-search"/></animateMotion></circle></g>
+        <g class="wf-dot"><circle r="6" fill="var(--ok)"><animateMotion dur="3.2s" begin="1.6s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#wf-p-search"/></animateMotion></circle></g>
+        <g class="wf-dot"><circle r="6" fill="var(--ask)"><animateMotion dur="3.6s" begin="0.8s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#wf-p-capture"/></animateMotion></circle></g>
+        <g class="wf-dot"><circle r="5" fill="var(--pine)"><animateMotion dur="2.8s" repeatCount="indefinite"><mpath href="#wf-p-plan"/></animateMotion></circle></g>
+        <g class="wf-dot"><circle r="5" fill="var(--pine)"><animateMotion dur="2.8s" begin="1.4s" repeatCount="indefinite"><mpath href="#wf-p-plan"/></animateMotion></circle></g>
+      </svg>
+    </div>
+    <div class="wf-legend">
+      <span style="--c: var(--ok)">vault knowledge into the session</span>
+      <span style="--c: var(--ask)">a new decision into <code>_inbox/</code></span>
+      <span style="--c: var(--pine)">plan and code into the repository</span>
+    </div>
+
+    <h2 id="the-daily-loop">The daily loop</h2>
+    <p>Nothing in the loop runs on its own: you start every skill. Hooks only remind and guard. Select a step, or let the loop play. The full text is in <a href="docs/workflow.html#the-daily-loop">How to work: brain + code</a>.</p>
+    <div class="wf-stage wf-loop">
+      <svg class="wf-ring" viewBox="0 0 300 300" aria-hidden="true" id="wf-ring"></svg>
+      <div>
+        <ol class="wf-steps" id="wf-steps"></ol>
+        <div class="wf-controls">
+          <button class="wf-btn" id="wf-play" type="button" aria-pressed="true">Pause</button>
+          <span id="wf-pos"></span>
+        </div>
+      </div>
+    </div>
+
+    <h2 id="the-life-of-a-note">The life of a note</h2>
+    <p>The agent writes only to <code>_inbox/</code>. Everything after that happens in brain-review, after your yes, and nothing is deleted. Pick a review decision to see where the note goes and how its frontmatter changes.</p>
+    <div class="wf-stage">
+      <div class="wf-actions" role="group" aria-label="brain-review decision">
+        <button class="wf-btn" type="button" data-a="capture">brain-capture</button>
+        <button class="wf-btn" type="button" data-a="keep">Keep</button>
+        <button class="wf-btn" type="button" data-a="merge">Merge</button>
+        <button class="wf-btn" type="button" data-a="reject">Reject</button>
+        <button class="wf-btn" type="button" data-a="supersede">Supersede</button>
+      </div>
+      <div class="wf-life">
+        <div class="wf-cols">
+          <div class="wf-col inbox"><b>_inbox/</b><small>status: inbox · a draft, not a fact</small></div>
+          <div class="wf-col topic"><b>DEV/ · PROJECTS/</b><small>status: active · trusted knowledge</small></div>
+          <div class="wf-col arch"><b>_archive/</b><small>status: archived · out of search, recoverable</small></div>
+        </div>
+        <div class="wf-note" id="wf-old" style="--nc: var(--ok); left: calc((100% + 12px) / 3 + 8px); top: 210px">
+          <div class="fn">queue-sqs.md</div>
+          <div class="fm">type: decision<br>status: <span class="st" id="wf-old-st">active</span><span id="wf-old-sb"></span></div>
+        </div>
+        <div class="wf-note" id="wf-note">
+          <div class="fn">queue-kafka.md</div>
+          <div class="fm">type: decision<br>status: <span class="st" id="wf-note-st">inbox</span><br>summary: "Events go through Kafka"</div>
+        </div>
+      </div>
+      <p class="wf-cap" id="wf-cap"></p>
+    </div>
+
+    <h2 id="hooks-in-one-session">Hooks in one session</h2>
+    <p>Small Python scripts with no dependencies and no network. They ask instead of blocking, and stay silent when they fail. Details are in the <a href="docs/reference/hooks.html">hooks reference</a>.</p>
+    <div class="wf-stage">
+      <div class="wf-track" id="wf-track"><div class="wf-fill" id="wf-fill"></div></div>
+      <div class="wf-hooks" id="wf-hooks"></div>
+      <div class="wf-controls"><button class="wf-btn" id="wf-hooks-play" type="button">Pause</button></div>
+    </div>
+
+    <h2 id="from-idea-to-merge">From idea to merge</h2>
+    <p>The repository remembers the code. The plan lives in <code>docs/plans/</code> and is deleted once every step is in a commit; a reviewer other than the author checks the work before it merges.</p>
+    <div class="wf-stage">
+      <div class="wf-chain">
+        <a class="wf-chip" style="--i:0" href="skills/spec.html">spec</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:1" href="skills/audit-to-backlog.html">audit-to-backlog</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:2" href="skills/implement-backlog.html">implement-backlog</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:3" href="skills/code-review.html">code-review</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:4" href="skills/pr-cycle.html">pr-cycle</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:5" href="skills/docs-sync.html">docs-sync</a><span class="wf-arrow">→</span>
+        <a class="wf-chip" style="--i:6" href="skills/session-retro.html">session-retro</a>
+      </div>
+    </div>
+    <p><strong>Vault or repository?</strong> A decision, lesson or reference that you or another project will look for again goes to the vault. A plan, an ADR or a fact about the code stays in the repository: a plan in the vault drifts away from the code it describes. See <a href="docs/workflow.html#vault-or-repository">Vault or repository?</a></p>
+
+    <nav class="doc-foot" aria-label="Related">
+      <a href="docs/workflow.html">How to work: brain + code</a>
+      <a href="docs/reference/hooks.html">Hooks reference</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="docs/changelog.html">Changelog</a>
+      <a href="docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="assets/site.js"></script>
+<script src="assets/wf.js"></script>
+</body>
+</html>

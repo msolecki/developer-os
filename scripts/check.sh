@@ -262,6 +262,11 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
     esac
     [ "$n" = "$want" ] || fail counts "${hit%:*}" "says $n $kind, the repository has $want"
   done
+# The landing page names the current release ("at release X"); a release that does not update it leaves it stale.
+version=$(jq -r .version plugin/.claude-plugin/plugin.json)
+named=$(grep -o 'at release [0-9][0-9A-Za-z.+-]*[0-9A-Za-z]' site/index.html | head -n 1 | sed 's/^at release //') || true
+[ -n "$named" ] || fail counts site/index.html "names no release (\"at release <version>\"); the FAQ states it"
+[ "$named" = "$version" ] || fail counts site/index.html "says release $named, plugin.json has $version"
 
 # Claude Code caps hook output at 10,000 characters; the core rules and the state card land in the same context, so
 # together they must fit.

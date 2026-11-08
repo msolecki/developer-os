@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-24
+last-verified: 2026-11-08
 ---
 
 # developer-os — documentation index
@@ -16,6 +16,7 @@ document and the source disagree, the source wins and the document is a defect.
 | Task | Read first |
 |---|---|
 | Understand what developer-os is, for whom, and what it deliberately does not do | [product/overview.md](product/overview.md) |
+| Try the plugin for the first time | [getting-started.md](getting-started.md) |
 | Know what each skill, agent, hook and output style does, and what it never does without approval | [product/functional-spec.md](product/functional-spec.md) |
 | Know why something is the way it is | [product/decisions.md](product/decisions.md) |
 | Understand how the plugin loads into a session and where data flows | [architecture/overview.md](architecture/overview.md) |

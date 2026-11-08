@@ -89,7 +89,7 @@
       <figure class="sysmap" aria-labelledby="sysmap-title">
         <figcaption class="sysmap-head"><b id="sysmap-title">How a session runs with developer-os</b><span>each step links to its reference</span></figcaption>
         <ol class="lanes">
-          <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>under 8 KB; a state card after compaction, resume or fork; version and upkeep notices on a new session</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
+          <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>at most 8900 bytes; a state card after compaction, resume or fork; version and upkeep notices on a new session</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
           <li class="lane"><span class="when">before a task</span><span class="what">Search the vault, read the plan<small>answers cite a note path for every claim</small></span><a class="badge info" href="skills/brain-search.html">skill</a></li>
           <li class="lane"><span class="when">during work</span><span class="what">Specs, reviews, audits, PR cycles<small>evidence on every finding; a fresh agent reviews</small></span><a class="badge info" href="skills/index.html">skills</a></li>
           <li class="lane is-ask"><span class="when">risky command</span><span class="what">Installs, force pushes, hook bypasses, <code>rm -rf</code><small>the guard asks; it never blocks on its own</small></span><span class="badge ask">asks you</span></li>
@@ -104,6 +104,44 @@
     <div class="wrap">
       <h2>Three layers, one plugin.</h2>
       <p class="section-copy">Agent sessions forget everything between runs, and an agent's defaults are not a careful engineer's habits. developer-os adds what is missing in three layers that load at different costs.</p>
+      <div class="wf-stage wf-scroll" style="margin-top:2rem">
+        <svg class="wf-svg" viewBox="0 0 960 360" role="img" aria-label="Knowledge flows between the agent session, the Obsidian vault and the repository">
+          <defs>
+            <path id="wf-p-search" d="M300 120 C 420 40, 540 40, 660 120"/>
+            <path id="wf-p-capture" d="M660 175 C 540 255, 420 255, 300 175"/>
+            <path id="wf-p-plan" d="M200 215 C 220 300, 360 320, 405 305"/>
+          </defs>
+          <use href="#wf-p-search" class="wf-path"/>
+          <use href="#wf-p-capture" class="wf-path"/>
+          <use href="#wf-p-plan" class="wf-path"/>
+          <circle cx="200" cy="148" r="92" fill="var(--ask-soft)" stroke="var(--ask)" stroke-width="2"/>
+          <text x="200" y="142" text-anchor="middle" class="node-t">Agent session</text>
+          <text x="200" y="164" text-anchor="middle" class="node-s">context ends with it</text>
+          <rect x="660" y="56" width="250" height="184" rx="12" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="2"/>
+          <text x="785" y="92" text-anchor="middle" class="node-t">Obsidian vault</text>
+          <text x="785" y="114" text-anchor="middle" class="node-s">durable knowledge in Markdown</text>
+          <text x="690" y="148" class="lbl">_inbox/  ← new notes</text>
+          <text x="690" y="170" class="lbl">PROJECTS/ DEV/ TOOLS/</text>
+          <text x="690" y="192" class="lbl">INFRA/ QA/  ← active</text>
+          <text x="690" y="214" class="lbl">_archive/  ← nothing deleted</text>
+          <rect x="405" y="270" width="150" height="70" rx="10" fill="var(--pine-soft)" stroke="var(--pine)" stroke-width="2"/>
+          <text x="480" y="300" text-anchor="middle" class="node-t" style="font-size:18px">Repository</text>
+          <text x="480" y="320" text-anchor="middle" class="node-s">plan · code · ADRs</text>
+          <text x="480" y="44" text-anchor="middle" class="lbl">brain-search: read before planning</text>
+          <text x="480" y="252" text-anchor="middle" class="lbl">brain-capture: decision → _inbox/</text>
+          <text x="250" y="322" text-anchor="middle" class="lbl">plan in docs/plans/</text>
+          <g class="wf-dot"><circle r="6" fill="var(--ok)"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#wf-p-search"/></animateMotion></circle></g>
+          <g class="wf-dot"><circle r="6" fill="var(--ok)"><animateMotion dur="3.2s" begin="1.6s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#wf-p-search"/></animateMotion></circle></g>
+          <g class="wf-dot"><circle r="6" fill="var(--ask)"><animateMotion dur="3.6s" begin="0.8s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#wf-p-capture"/></animateMotion></circle></g>
+          <g class="wf-dot"><circle r="5" fill="var(--pine)"><animateMotion dur="2.8s" repeatCount="indefinite"><mpath href="#wf-p-plan"/></animateMotion></circle></g>
+          <g class="wf-dot"><circle r="5" fill="var(--pine)"><animateMotion dur="2.8s" begin="1.4s" repeatCount="indefinite"><mpath href="#wf-p-plan"/></animateMotion></circle></g>
+        </svg>
+      </div>
+      <div class="wf-legend">
+        <span style="--c: var(--ok)">vault knowledge into the session</span>
+        <span style="--c: var(--ask)">a new decision into <code>_inbox/</code></span>
+        <span style="--c: var(--pine)">plan and code into the repository</span>
+      </div>
       <div class="layers">
         <article class="layer">
           <span class="k">memory</span>
@@ -120,7 +158,7 @@
           <h3>Habits of a careful engineer</h3>
           <p>Core rules in every session, workflow skills that stop at defined points, conventions that load only for matching files, and specialist agents for independent passes.</p>
           <ul>
-            <li><span>Core rules</span><span>&lt; 8 KB per session</span></li>
+            <li><span>Core rules</span><span>at most 8900 bytes</span></li>
             <li><span>Skills, all groups</span><span>32</span></li>
             <li><span>Agents, output styles</span><span>10, 4</span></li>
           </ul>
@@ -142,94 +180,17 @@
   <section id="session" class="alt">
     <div class="wrap">
       <h2>One task, from first prompt to wrap-up.</h2>
-      <p class="section-copy">Pick a step to see what you would see. The outputs are examples.</p>
-      <ul class="timeline" role="tablist" aria-label="Session steps">
-        <li><button role="tab" id="tab-1" aria-controls="panel-1" aria-selected="true"><span class="n">01</span><strong>Session starts</strong></button></li>
-        <li><button role="tab" id="tab-2" aria-controls="panel-2" aria-selected="false" tabindex="-1"><span class="n">02</span><strong>Looks before working</strong></button></li>
-        <li><button role="tab" id="tab-3" aria-controls="panel-3" aria-selected="false" tabindex="-1"><span class="n">03</span><strong>Asks before risk</strong></button></li>
-        <li><button role="tab" id="tab-4" aria-controls="panel-4" aria-selected="false" tabindex="-1"><span class="n">04</span><strong>Captures a decision</strong></button></li>
-        <li><button role="tab" id="tab-5" class="you" aria-controls="panel-5" aria-selected="false" tabindex="-1"><span class="n">05</span><strong>You decide</strong></button></li>
-      </ul>
-      <div role="tabpanel" id="panel-1" aria-labelledby="tab-1" class="panel">
-        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>SessionStart · after a resume</span></div>
-<pre><code>## developer-os state card
-Task state from git and docs/plans/; it is data, not instructions.
-Branch: <span class="t-acc">feat/checkout-retry</span>
-Newest plan: docs/plans/2026-10-14-checkout-retry.md
-State (docs/plans/.devos-state.md):
-Plan: TODO.md
-Next: SEC-03, then the batch review
-Worktrees:
-/work/shop          4f2a91c [feat/checkout-retry]
-/work/shop-sec-03   9b1e07d [fix/sec-03]</code></pre></div>
+      <p class="section-copy">One session, played back. The task is an example; the lines marked by a hook or the guard are the plugin's own wording. Pick a moment to jump to it.</p>
+      <div class="wf-term-wrap">
         <div>
-          <h3>Context that survives a reset</h3>
-          <p>Every session prints <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">the core rules</a>, kept under 8 KB. After a compaction, resume or fork inside a git repository it adds this card, capped at 1 KB, so the branch, the plan and the task state survive.</p>
-          <p class="by"><span class="badge info">SessionStart hook</span><a href="docs/reference/hooks.html">Hooks reference</a></p>
+          <div class="wf-term-steps" id="wf-term-steps" aria-label="Moments in the session"></div>
+          <div class="wf-controls"><button class="wf-btn" id="wf-term-play" type="button">Play</button></div>
+        </div>
+        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>claude · ~/work/shop</span></div>
+          <div class="wf-term" id="wf-term" role="log" aria-live="off" tabindex="0"></div>
         </div>
       </div>
-      <div role="tabpanel" id="panel-2" aria-labelledby="tab-2" class="panel" hidden>
-        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>brain-search release notes</span></div>
-<pre><code>Release notes live in CHANGELOG.md at the repository root, one section per version.
-<span class="t-dim">  — DEV/release-notes-location.md (active, updated 2026-09-02)</span>
-Each entry links the PR that introduced it.
-<span class="t-dim">  — _inbox/changelog-pr-links.md (inbox, unreviewed)</span></code></pre></div>
-        <div>
-          <h3>Answers with sources, not guesses</h3>
-          <p>Before a large task it searches the vault, reads the top notes, attaches a path to every claim and marks inbox notes as unreviewed. If nothing matches, it says so instead of filling the gap.</p>
-          <p class="by"><span class="badge info">skill</span><a href="skills/brain-search.html">brain-search</a></p>
-        </div>
-      </div>
-      <div role="tabpanel" id="panel-3" aria-labelledby="tab-3" class="panel" hidden>
-        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>PreToolUse · Bash</span></div>
-<pre><code>$ pnpm add zod
-
-<span class="t-mark">Permission requested by the developer-os hook:</span>
-Dependency install rewrites dependencies and the lockfile.</code></pre></div>
-        <div>
-          <h3>A prompt, not a wall</h3>
-          <p>The guard hands the decision to you before a dependency install with a package argument, a <code>git push --force</code>, or a bypass of git hooks with <code>--no-verify</code>, <code>HUSKY=0</code> or <code>core.hooksPath</code>. On input it cannot parse it stays silent.</p>
-          <p class="by"><span class="badge ask">asks you</span><a href="docs/reference/hooks.html">PreToolUse hook</a></p>
-        </div>
-      </div>
-      <div role="tabpanel" id="panel-4" aria-labelledby="tab-4" class="panel" hidden>
-        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>_inbox/release-notes-location.md</span></div>
-<pre><code>---
-type: decision
-status: <span class="t-mark">inbox</span>
-created: 2026-10-14
-updated: 2026-10-14
-project: my-app
-tags: [release, changelog]
-summary: "Release notes live in CHANGELOG.md at the repository root."
----
-
-## Context
-## Decision
-## Why
-## Links</code></pre></div>
-        <div>
-          <h3>Captured while the reasons are fresh</h3>
-          <p>One topic per note, with context, decision and why. Secrets are redacted before writing, and the agent writes only into <code>_inbox/</code>: a draft, not yet a fact.</p>
-          <p class="by"><span class="badge info">skill</span><a href="skills/brain-capture.html">brain-capture</a></p>
-        </div>
-      </div>
-      <div role="tabpanel" id="panel-5" aria-labelledby="tab-5" class="panel" hidden>
-        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>session-retro</span></div>
-<pre><code><span class="t-ok">Done:</span> checkout retry with backoff; fast check green (lint, types, 14 tests)
-<span class="t-mark">Not done:</span> the e2e retry test, blocked on a staging key
-<span class="t-acc">Needs you:</span> approve the push of feat/checkout-retry
-
-1. Capture "retry budget is 3 attempts" to the vault
-2. Delete the finished plan, move the e2e test to TODO.md
-
-Which items should I apply?</code></pre></div>
-        <div>
-          <h3>Nothing changes until you name it</h3>
-          <p>After a long session the Stop hook suggests this wrap-up once. Nothing is committed, pushed, captured or deleted until you name the item; brain-review later promotes inbox notes you approve.</p>
-          <p class="by"><span class="badge ok">you approve</span><a href="skills/session-retro.html">session-retro</a><a href="skills/brain-review.html">brain-review</a></p>
-        </div>
-      </div>
+      <p class="small">Each hook's contract is in the <a href="docs/reference/hooks.html">hooks reference</a>; the skills in the session are <a href="skills/brain-search.html">brain-search</a>, <a href="skills/brain-capture.html">brain-capture</a> and <a href="skills/session-retro.html">session-retro</a>.</p>
     </div>
   </section>
 
@@ -266,7 +227,7 @@ Which items should I apply?</code></pre></div>
     <div class="wrap two">
       <div>
         <h2>Engineering rules in every session.</h2>
-        <p class="section-copy">An agent commits without the right checks, claims "fixed" without evidence and reviews its own code. The core rules load at session start and stay under 8 KB, so they do not crowd out your own context.</p>
+        <p class="section-copy">An agent commits without the right checks, claims "fixed" without evidence and reviews its own code. The core rules load at session start and are capped at 8900 bytes, so they do not crowd out your own context.</p>
         <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">Read core.md</a>. Disagree with a rule? Override it in your own <code>~/.claude/CLAUDE.md</code>, which loads alongside it.</p>
       </div>
       <ul class="checklist">
@@ -282,114 +243,59 @@ Which items should I apply?</code></pre></div>
     </div>
   </section>
 
-  <section id="say">
+  <section id="inside">
     <div class="wrap">
-      <h2>Ask the way you would ask a colleague.</h2>
-      <p class="section-copy">Skills load only when a task calls for them. Name one, or describe the situation; their descriptions carry the phrasing people actually use.</p>
+      <h2>What ships in the plugin.</h2>
+      <p class="section-copy">Skills load only when a task calls for them: name one, or describe the situation the way you would to a colleague. Each skill page says when it runs, what it writes, where it stops and what it never does.</p>
       <ul class="say">
         <li><a href="skills/brain-search.html"><q>What did we decide about webhooks?</q><span class="skill">brain-search</span></a></li>
         <li><a href="skills/brain-capture.html"><q>Remember this.</q><span class="skill">brain-capture</span></a></li>
         <li><a href="skills/code-review.html"><q>Review my changes.</q><span class="skill">code-review</span></a></li>
         <li><a href="skills/audit-to-backlog.html"><q>Audit this repo and give me a backlog.</q><span class="skill">audit-to-backlog</span></a></li>
         <li><a href="skills/fix-pr.html"><q>Fix the review comments on the PR.</q><span class="skill">fix-pr</span></a></li>
-        <li><a href="skills/bug-triage.html"><q>We have a bug in production.</q><span class="skill">bug-triage</span></a></li>
-        <li><a href="skills/deploy-checklist.html"><q>We are deploying to production.</q><span class="skill">deploy-checklist</span></a></li>
-        <li><a href="skills/plan-status.html"><q>Where do we stand?</q><span class="skill">plan-status</span></a></li>
-        <li><a href="skills/client-reply.html"><q>Answer the client.</q><span class="skill">client-reply</span></a></li>
         <li><a href="skills/session-retro.html"><q>Let's wrap up.</q><span class="skill">session-retro</span></a></li>
       </ul>
+      <div class="wf-ships">
+        <div>
+          <h3>Memory</h3>
+          <p class="wf-chips"><a href="skills/brain-setup.html">brain-setup</a><a href="skills/brain-search.html">brain-search</a><a href="skills/brain-capture.html">brain-capture</a><a href="skills/brain-review.html">brain-review</a><a href="skills/brain-garden.html">brain-garden</a><a href="skills/brain-compile.html">brain-compile</a><a href="skills/brain-project-refresh.html">brain-project-refresh</a><a href="skills/brain-import-memory.html">brain-import-memory</a></p>
+        </div>
+        <div>
+          <h3>Engineering</h3>
+          <p class="wf-chips"><a href="skills/spec.html">spec</a><a href="skills/code-review.html">code-review</a><a href="skills/audit-to-backlog.html">audit-to-backlog</a><a href="skills/implement-backlog.html">implement-backlog</a><a href="skills/parallel-lanes.html">parallel-lanes</a><a href="skills/pr-cycle.html">pr-cycle</a><a href="skills/fix-pr.html">fix-pr</a><a href="skills/bug-triage.html">bug-triage</a><a href="skills/deploy-checklist.html">deploy-checklist</a></p>
+        </div>
+        <div>
+          <h3>Project hygiene and sessions</h3>
+          <p class="wf-chips"><a href="skills/docs-sync.html">docs-sync</a><a href="skills/project-init.html">project-init</a><a href="skills/project-baseline.html">project-baseline</a><a href="skills/instruction-review.html">instruction-review</a><a href="skills/plan-status.html">plan-status</a><a href="skills/session-retro.html">session-retro</a><a href="skills/skill-usage.html">skill-usage</a><a href="skills/client-reply.html">client-reply</a></p>
+        </div>
+        <div>
+          <h3>Agents for independent passes</h3>
+          <p class="wf-chips"><a href="agents.html#code-reviewer">code-reviewer</a><a href="agents.html#security-auditor">security-auditor</a><a href="agents.html#database-reviewer">database-reviewer</a><a href="agents.html#infra-reviewer">infra-reviewer</a><a href="agents.html#performance-engineer">performance-engineer</a><a href="agents.html#qa-expert">qa-expert</a><a href="agents.html#verifier">verifier</a><a href="agents.html#research-analyst">research-analyst</a><a href="agents.html#dependency-upgrader">dependency-upgrader</a><a href="agents.html#docs-writer">docs-writer</a></p>
+          <p class="small">Agents that did not write the code review it. Every report opens with DONE, REVIEW, BLOCKED or CONTINUING; the verifier answers CONFIRMED, REFUTED or UNDECIDED with file and line evidence.</p>
+        </div>
+      </div>
+      <p>Plus conventions skills for TypeScript, Next.js, tests, error handling, monitoring, comments and defensive coding, which load only when the work matches, and four <a href="output-styles.html">output styles</a>. <a href="skills/index.html">Browse all skills</a> · <a href="agents.html">All agents</a></p>
     </div>
   </section>
 
-  <section id="library" class="alt">
-    <div class="wrap">
-      <h2>The skill library.</h2>
-      <p class="section-copy">Grouped by the job in front of you. Each page states when the skill runs, what it does, what it writes, where it stops and what it never does.</p>
-      <div class="lib-group">
-        <h3>Memory</h3>
-        <p>Read and write the vault with the agent's own file tools.</p>
-        <ul class="lib">
-          <li><a href="skills/brain-setup.html"><b>brain-setup</b><span>Create a vault from the template or connect yours, with config edits shown as a diff.</span></a></li>
-          <li><a href="skills/brain-search.html"><b>brain-search</b><span>Answer from your notes only, citing each one.</span></a></li>
-          <li><a href="skills/brain-capture.html"><b>brain-capture</b><span>Save a decision, lesson or reference to the inbox, secrets redacted.</span></a></li>
-          <li><a href="skills/brain-review.html"><b>brain-review</b><span>Walk the inbox: promote, merge, reject or supersede the notes you name.</span></a></li>
-          <li><a href="skills/brain-garden.html"><b>brain-garden</b><span>Vault health report: stale notes, broken links, duplicates, shared rules, orphans.</span></a></li>
-          <li><a href="skills/brain-compile.html"><b>brain-compile</b><span>Synthesize several notes on one topic into one compiled draft.</span></a></li>
-          <li><a href="skills/brain-project-refresh.html"><b>brain-project-refresh</b><span>Bring the project hub note up to date with the code, on approval.</span></a></li>
-          <li><a href="skills/brain-import-memory.html"><b>brain-import-memory</b><span>Move a project's Claude Code auto memory into the vault, item by item.</span></a></li>
-        </ul>
-      </div>
-      <div class="lib-group">
-        <h3>Engineering</h3>
-        <p>Specs, reviews, audits, backlogs and pull requests, with evidence and approval gates.</p>
-        <ul class="lib">
-          <li><a href="skills/spec.html"><b>spec</b><span>Interview, inspect the repo, write a spec and plan, hand off to a fresh session.</span></a></li>
-          <li><a href="skills/code-review.html"><b>code-review</b><span>P0–P3 findings and a merge verdict for a diff, commit or PR.</span></a></li>
-          <li><a href="skills/audit-to-backlog.html"><b>audit-to-backlog</b><span>Parallel specialist reviews with file-and-line evidence, as a backlog.</span></a></li>
-          <li><a href="skills/implement-backlog.html"><b>implement-backlog</b><span>Backlog items in small, validated, reviewed batches.</span></a></li>
-          <li><a href="skills/parallel-lanes.html"><b>parallel-lanes</b><span>Independent tasks as headless lanes, one worktree each, integrated locally.</span></a></li>
-          <li><a href="skills/pr-cycle.html"><b>pr-cycle</b><span>Merge the base in, review, fix, gate and update a PR to a merge verdict.</span></a></li>
-          <li><a href="skills/fix-pr.html"><b>fix-pr</b><span>Address every unresolved review thread, approving each edit and push.</span></a></li>
-          <li><a href="skills/bug-triage.html"><b>bug-triage</b><span>Severity, reproduction, ranked hypotheses and root cause.</span></a></li>
-          <li><a href="skills/deploy-checklist.html"><b>deploy-checklist</b><span>A GO/NO-GO checklist with post-deploy checks and rollback.</span></a></li>
-        </ul>
-      </div>
-      <div class="lib-group">
-        <h3>Project hygiene, session and communication</h3>
-        <p>Keep docs, instructions and plans honest; end sessions cleanly; talk to clients plainly.</p>
-        <ul class="lib">
-          <li><a href="skills/docs-sync.html"><b>docs-sync</b><span>Docs against code: scaffold, refresh the current state, report drift.</span></a></li>
-          <li><a href="skills/project-init.html"><b>project-init</b><span>Adopt developer-os in a repository in one pass.</span></a></li>
-          <li><a href="skills/project-baseline.html"><b>project-baseline</b><span>Missing engineering practices, proposed as backlog items.</span></a></li>
-          <li><a href="skills/instruction-review.html"><b>instruction-review</b><span>A minimal, evidence-backed diff to CLAUDE.md or AGENTS.md.</span></a></li>
-          <li><a href="skills/plan-status.html"><b>plan-status</b><span>Measured open, done and blocked counts, and open A/B/C decisions.</span></a></li>
-          <li><a href="skills/session-retro.html"><b>session-retro</b><span>State check, cleanup, status block and lessons worth keeping.</span></a></li>
-          <li><a href="skills/skill-usage.html"><b>skill-usage</b><span>How often each skill fired locally, with keep or remove verdicts.</span></a></li>
-          <li><a href="skills/client-reply.html"><b>client-reply</b><span>A plain-language reply to a client. Drafts only, never sends.</span></a></li>
-        </ul>
-      </div>
-      <p>Plus conventions skills for TypeScript, Next.js, tests, error handling, monitoring, comments and defensive coding, which load only when the work matches. <a href="skills/index.html">Browse all skills</a></p>
-    </div>
-  </section>
 
-  <section id="agents">
-    <div class="wrap">
-      <h2>Independent passes by agents that did not write the code.</h2>
-      <p class="section-copy">Skills dispatch these agents, and you can call them yourself. Every report starts with one final status, DONE, REVIEW, BLOCKED or CONTINUING, so the orchestrating skill knows what to do next.</p>
-      <ul class="doc-grid">
-        <li><a href="agents.html#code-reviewer"><b>code-reviewer</b><span>Correctness, security, data safety and maintainability, rated P0–P3 with a merge verdict.</span></a></li>
-        <li><a href="agents.html#security-auditor"><b>security-auditor</b><span>Exploitable defects: auth, injection, secrets, SSRF, insecure defaults.</span></a></li>
-        <li><a href="agents.html#performance-engineer"><b>performance-engineer</b><span>Measured defects: N+1 queries, blocking I/O, serial awaits, bundle bloat.</span></a></li>
-        <li><a href="agents.html#qa-expert"><b>qa-expert</b><span>Test quality and coverage gaps, and the missing tests when asked.</span></a></li>
-        <li><a href="agents.html#research-analyst"><b>research-analyst</b><span>Sourced answers on libraries, API contracts, vendor limits and migrations.</span></a></li>
-        <li><a href="agents.html#verifier"><b>verifier</b><span>Read-only check of one P0, P1 or P2 correctness finding: CONFIRMED or REFUTED with evidence.</span></a></li>
-        <li><a href="output-styles.html"><b>Output styles</b><span>architect, debug, direct-objective and tdd-enforcer, selected with <code>/output-style</code>.</span></a></li>
-      </ul>
-    </div>
-  </section>
 
   <section id="cadence" class="alt">
-    <div class="wrap two">
+    <div class="wrap">
       <div>
         <h2>A rhythm, not another tool to babysit.</h2>
         <p class="section-copy">The plugin connects moments where you already make decisions. The full loop, with what goes where, is in <a href="docs/workflow.html#the-daily-loop">How to work: brain + code</a>.</p>
         <h3 style="margin-top:2rem">The vault is plain Markdown you own</h3>
         <p class="small">Folders by topic (<code>_inbox/</code>, <code>PROJECTS/</code>, <code>DEV/</code>, <code>TOOLS/</code>, <code>INFRA/</code>, <code>QA/</code>, <code>_archive/</code>, <code>_reports/</code>, <code>templates/</code>), one frontmatter shape for every note, and Bases views for the inbox, stale notes and notes by project. brain-setup connects your existing vault by adding only what is missing; in <code>.obsidian/types.json</code> it adds absent keys after your approval and never changes an existing value. <a href="docs/workflow.html#vault-layout">Vault layout</a></p>
       </div>
-      <div class="table-wrap">
-        <table class="cadence">
-          <thead><tr><th scope="col">When</th><th scope="col">What happens</th><th scope="col">Skill</th></tr></thead>
-          <tbody>
-            <tr><td>Start a task</td><td>Search first; finding nothing tells you that you are in new territory.</td><td><code>brain-search</code></td></tr>
-            <tr><td>During work</td><td>The plan lives in the repository, git-ignored, updated after each step; fast check before each commit.</td><td><code>docs/plans/</code></td></tr>
-            <tr><td>A decision</td><td>Capture it while the rejected options are still on screen.</td><td><code>brain-capture</code></td></tr>
-            <tr><td>End of session</td><td>Unpushed work, running tasks, the status block, up to three things worth keeping.</td><td><code>session-retro</code></td></tr>
-            <tr><td>Day or week</td><td>Keep, merge or reject inbox notes; nothing is deleted.</td><td><code>brain-review</code></td></tr>
-            <tr><td>Monthly</td><td>Stale notes, broken links, duplicates, fixes only after approval.</td><td><code>brain-garden</code></td></tr>
-          </tbody>
-        </table>
+      <div class="wf-loop">
+        <svg class="wf-ring" viewBox="0 0 300 300" aria-hidden="true" id="wf-ring"></svg>
+        <div>
+          <ol class="wf-steps" id="wf-steps"></ol>
+          <div class="wf-controls"><button class="wf-btn" id="wf-play" type="button" aria-pressed="true">Pause</button><span id="wf-pos"></span></div>
+        </div>
       </div>
-      <p class="small">You start each of these; none runs on its own. A one-line notice at the start of a new session reminds you when inbox notes are older than a week or brain-garden has not run for a month. <a href="docs/workflow.html#the-daily-loop">The daily loop</a></p>
+      <p class="small">You start each of these; none runs on its own. A one-line notice at the start of a new session reminds you when inbox notes are older than a week or brain-garden has not run for a month. <a href="workflow.html">See the life of a note and the hooks, animated</a></p>
     </div>
   </section>
 
@@ -445,7 +351,7 @@ Which items should I apply?</code></pre></div>
         </ol>
         <p>For each project, copy <a href="https://github.com/msolecki/developer-os/tree/main/templates/project">templates/project/</a> into its root; the install keeps a copy on disk, and <code>-n</code> skips files the project already has:</p>
 <pre><code>cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/</code></pre>
-        <p><a href="docs/workflow.html#setup-in-5-minutes">Full setup guide</a></p>
+        <p><a href="docs/getting-started.html">Your first 30 minutes</a>: a guided path from install to your first review. <a href="docs/workflow.html#setup-in-5-minutes">Full setup guide</a></p>
       </div>
       <div>
         <h3>Requirements</h3>
@@ -492,7 +398,7 @@ Which items should I apply?</code></pre></div>
         </details>
         <details>
           <summary>Is it stable?</summary>
-          <p>It is at release 0.2.6: installs follow <code>main</code>, which moves only on a tagged release. The <a href="docs/changelog.html">changelog</a> lists every change.</p>
+          <p>It is at release 0.2.8: installs follow <code>main</code>, which moves only on a tagged release. The <a href="docs/changelog.html">changelog</a> lists every change.</p>
         </details>
         <details>
           <summary>Which language does it use?</summary>
@@ -507,6 +413,8 @@ Which items should I apply?</code></pre></div>
       <h2>Go deeper.</h2>
       <p class="section-copy">Everything on this site restates the repository's documents. A check fails when a doc, skill, agent or output-style page falls behind its source; this landing page and the skills index are kept current by hand.</p>
       <ul class="doc-grid">
+        <li><a href="docs/getting-started.html"><b>Your first 30 minutes</b><span>A guided path from install to your first search, capture, review and code review.</span></a></li>
+        <li><a href="workflow.html"><b>Workflow at a glance</b><span>The session, vault and repository loop, the life of a note and the hooks, animated.</span></a></li>
         <li><a href="docs/workflow.html"><b>How to work: brain + code</b><span>The daily loop, the vault layout, where knowledge belongs, privacy.</span></a></li>
         <li><a href="docs/product/overview.html"><b>Product overview</b><span>The problem, the principles, the scope and what is out of scope on purpose.</span></a></li>
         <li><a href="docs/product/functional-spec.html"><b>Functional specification</b><span>Each skill, agent, hook and output style's contract, and the approval model.</span></a></li>
@@ -533,5 +441,6 @@ Which items should I apply?</code></pre></div>
   </div>
 </footer>
 <script src="assets/site.js"></script>
+<script src="assets/wf.js"></script>
 </body>
 </html>
