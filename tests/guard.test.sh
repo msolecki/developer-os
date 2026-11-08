@@ -418,5 +418,42 @@ check ask "$(fx 'sudo rm -rf x')" "deletes"
 check ask "$(fx 'cd x && sudo -u y rm -rf z')" "deletes"
 check ask "$(fa $r 'builtin exec rm x')" "read-only"
 
+# 2026-11-08 audit: SEC-01 backslash-prefixed commands
+check ask "$(fx '\\rm -rf x')" "deletes"
+check ask "$(fx '\\npm i zod')" "Dependency install"
+check ask "$(fx '\\npm i x')" "Dependency install"
+check ask "$(fa $r '\\touch f')" "read-only"
+check ask "$(fa $r '\\tee f')" "read-only"
+check ask "$(fx 'ls\nrm -rf x')" "deletes"
+# SEC-02: a .env symlink, a protected path behind a link, a NUL byte
+lnk=$(mktemp -d) && touch "$lnk/secrets.txt" && ln -s secrets.txt "$lnk/.env" && ln -s "$lnk/secrets.txt" "$lnk/plain"
+check ask "$(fe Write "$lnk/.env")" "secrets"
+check pass "$(fe Write "$lnk/plain")"
+check ask '{"tool_name":"Write","tool_input":{"file_path":"/x/a\u0000b","content":"x"}}' "secrets"
+rm -rf "$lnk"
+# SEC-03: perl -M/-I take a value; -pi is still in place
+check pass "$(fa $r 'perl -MList::Util=sum -e 1')"
+check pass "$(fa $r 'perl -MFile::Find -Ilib -e 1')"
+check ask "$(fa $r 'perl -pi -e s/a/b/ f')" "read-only"
+check ask "$(fa $r 'perl -i.bak -pe s/a/b/ f')" "read-only"
+# SEC-04: an abbreviated long option
+check ask "$(fx 'git reset --ha')" "deletes"
+check ask "$(fx 'git clean --forc')" "deletes"
+check ask "$(fx 'git switch --disc main')" "deletes"
+check ask "$(fx 'git restore --staged --work .')" "deletes"
+check ask "$(fx 'rm --rec --for x')" "deletes"
+check pass "$(fx 'git clean --forc --dry')"
+# SEC-05: git fetch into a local branch
+check ask "$(fa $r 'git fetch origin main:main')" "read-only"
+check ask "$(fa $r 'git fetch origin +main:refs/heads/x')" "read-only"
+check pass "$(fa $r 'git fetch origin main')"
+check pass "$(fa $r 'git fetch origin main:refs/remotes/origin/main')"
+check pass "$(fa $r 'git fetch https://x/y.git main')"
+# SEC-06: many -c words stay linear
+c=$(python3 -c "print(' '.join(['-c']*2000))")
+t0=$(python3 -c 'import time;print(time.time())')
+check pass "$(fx "$c")"
+python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: 2000 -c words took over 1 s"; }
+
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail
