@@ -37,16 +37,16 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 
 | Case | Checks | Mutation |
 |---|---|---|
-| `brain-capture-decision` | one new note in `vault/_inbox/` with `status: inbox` and the four headings | detected −0.50 (3 runs) |
-| `brain-capture-redacts` | the fake key never reaches a write; `[REDACTED]` does | detected −0.25 (3 runs) |
+| `brain-capture-decision` | one new note in `vault/_inbox/` with `status: inbox`, `type: decision` and the four headings, graded on the Write call, not the trace | not re-measured after the 2026-11-08 grader change |
+| `brain-capture-redacts` | the fake key never reaches a write; `[REDACTED]` does, in the written inbox note | not re-measured after the 2026-11-08 grader change |
 | `brain-capture-refuses-log` | a "today I did X" log creates no note and is pointed at the repository | detected −1.00 |
-| `brain-search-active-first` | the active note is cited before the inbox note; the archived note never | survived (3 runs): the mutation kept step 4's archived-note rule |
+| `brain-search-active-first` | the active note is cited before both inbox notes (one on the same dedupe subtopic, planted by the scaffold); the archived note never | not re-measured after the 2026-11-08 grader change |
 | `brain-search-superseded-chain` | a superseded note's replacement is cited as current, the old note as history with its reason | survived: not attributed at 1 run |
 | `brain-search-superseded-dangling` | a `superseded_by` naming no note is incomplete history; no note is named current | detected −0.50 (3 runs) |
 | `brain-search-superseded-cycle` | two notes superseding each other are a cycle; neither is named current | detected −0.50 |
 | `brain-search-no-match` | "No note in the vault covers…" and no answer from general knowledge | detected −0.50 |
 | `brain-review-no-promotion` | inbox notes are summarized, nothing is moved or edited before approval | detected −0.12 |
-| `brain-garden-no-apply` | the report finds the planted defects (stale, old inbox, broken and archived links, missing summary, duplicate, a rule stated by three notes), gives the `totals:` header and changes nothing; the judge checks that a quoted recent date is not old and that links to `rsync-flags.md` (written `[[Rsync-Flags]]`) and `Git-Hooks.MD` are not broken, and that a `[[link]]` inside inline code is not reported | detected −0.14 |
+| `brain-garden-no-apply` | the report finds the planted defects (stale, old inbox, broken and archived links, missing summary, duplicate, a rule stated by three notes), gives the `totals:` header and changes nothing; the judge checks that a quoted recent date is not old and that links to `rsync-flags.md` (written `[[Rsync-Flags]]`) and `Git-Hooks.MD` are not broken, and that a `[[link]]` inside inline code is not reported; the archived link is not called broken | not re-measured after the 2026-11-08 grader change |
 | `brain-project-refresh-no-apply` | the refresh finds the planted drift in `PROJECTS/demo-shop.md` (Heroku against the README's Fly.io, `docs/adr/` moved to `docs/decisions/`, the unlinked `demo-shop-cart-rounding` note, the dead `demo-shop-launch-plan` link), asks which edits to apply and changes nothing | not run yet |
 | `brain-import-memory-no-apply` | four auto-memory files are labelled covered (the vault's `webhook-event-id-dedupe`), new (the prune-tags lesson), preference and skip; nothing is written and the memory files stay | not run yet |
 | `brain-garden-superseded` | a dangling `superseded_by`, a cycle and a superseded note without the field are reported; superseded notes are not orphans | detected −0.11 |
