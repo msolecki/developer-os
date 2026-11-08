@@ -60,7 +60,7 @@ Not applicable: monitoring-conventions (no infrastructure code)   Not run: deplo
 Baseline: missing 4   Docs: missing 3, drift 5   Instructions: 2 proposals   Conventions: 6 findings
 Needs your decision: test runner — package.json has both jest and vitest
 
-1. [baseline] BASE-01 · P1 · Secret scanning in CI
+1. [baseline] BASE-01 · P2 · Secret scanning in CI
 2. [docs] drift — AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
 3. [instructions] AGENTS.md: replace line 22 "Use pnpm." with "Use pnpm (pnpm-lock.yaml)."
 4. [conventions] CONV-01 · P2 · Empty catch in src/webhooks/deliver.ts:40
