@@ -50,7 +50,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Core-rules size | `plugin/rules/core.md` exceeds 8900 bytes, or `CAP` in `state-card.py` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
-| Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
+| Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page under `site/docs/` whose words differ from its source's (D28); a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
@@ -94,7 +94,9 @@ Each page that restates a source carries `<meta name="dos-source" content="<sour
 first 12 hex digits of the source's SHA-256 with any `last-verified:` line removed, so re-verifying a
 doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style,
 the Site stage names the page to refresh: update its text, then its hash
-(`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). A new doc or skill needs a new
+(`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). A page under `site/docs/` must
+carry its source's words in order, so a new hash on an unedited page still fails; skill, agent and
+output-style pages are summaries, which code-review checks instead (D28). A new doc or skill needs a new
 page, and a new doc an entry in `NAV`. The landing page and the skills index restate many sources
 and carry no hash; update them by hand when the hooks, rules or skills they describe change.
 `CHANGELOG.md` changes on most pull requests, so its page usually does too.

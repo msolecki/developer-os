@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@0f8a811748b6">
+<meta name="dos-source" content="docs/reference/hooks.md@d5150c325d81">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -173,7 +173,7 @@ Worktrees:
     are dropped, a mention such as <code>git commit -m "pnpm add zod"</code> also asks; this is deliberate. The
     destructive and read-only-agent categories match only a command in command position (see below), so a
     mention in an argument, such as <code>grep -rn "rm -rf" plugin</code>, <code>git commit -m "… git reset --hard"</code> or
-    <code>grep -rn "git add" docs</code>, passes; <code>sh -c "git reset --hard"</code>, <code>eval "…"</code> and <code>bash -lc '…'</code> and <code>su -c "…"</code> still ask,
+    <code>grep -rn "git add" docs</code>, passes; <code>sh -c "git reset --hard"</code>, <code>su -c "…"</code>, <code>eval "…"</code> and <code>bash -lc '…'</code> still ask,
     because the word after a shell's <code>-c</code> is in command position. A command run on another host or in a
     container (<code>ssh host rm -rf x</code>, <code>docker exec c rm -rf /</code>, <code>kubectl exec p -- rm -rf /</code>) is out of scope:
     it cannot destroy local uncommitted work.</p>

@@ -157,6 +157,13 @@ rehash() {
 echo 'A new term.' >> "$r/docs/glossary.md"
 run "a doc changed without its site page" fail "site: site/docs/glossary.html: docs/glossary.md changed since the page was written"
 
+echo 'A new term.' >> "$r/docs/glossary.md"
+rehash docs/glossary.md site/docs/glossary.html
+run "a fresh hash on a page that lacks the source change" fail "site: site/docs/glossary.html: text differs from docs/glossary.md"
+
+edit site/docs/glossary.html 's/Fresh verifier/Stale verifier/'
+run "a page whose text drifts from its unchanged source" fail "text differs from docs/glossary.md"
+
 edit docs/glossary.md 's/^last-verified: .*/last-verified: 2030-01-01/'
 run "a re-verified doc keeps its site page current" pass
 
@@ -201,6 +208,8 @@ Only 3 cases of failure.
 
 [a](#café-naïve-résumé) [b](#setup-1) [c](#see-the-guide-now)
 EOF
+edit site/docs/changelog.html 's|^  </main>|<p>[0.0.1] Ships 99 skills.</p></main>|'
+edit site/docs/development.html 's|^  </main>|<p>Only 3 cases of failure.</p><h2>Café naïve résumé</h2><h2>Setup</h2><h2>See the guide now</h2><p>a b c</p></main>|'
 rehash CHANGELOG.md site/docs/changelog.html
 rehash docs/development.md site/docs/development.html
 run "a count in a released CHANGELOG section, 'N cases of' prose, diacritic, repeated and linked headings pass" pass

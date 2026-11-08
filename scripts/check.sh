@@ -352,6 +352,32 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
       (errs << "site: #{p}: #{t} names no id in #{dest}"; next) unless ids[dest].include?(frag)
     end
   end
+  # A page under site/docs/ renders its source word for word, so a fresh hash on an unedited page still fails here.
+  # Compared: the alphanumeric words, outside frontmatter, mermaid blocks, raw HTML lines, list markers and link targets
+  # in the source, and outside nav, svg, script, style and the doc-meta line in the page. A named entity missing
+  # from ent becomes a space, so a page using one fails loudly: add it to ent or write the character.
+  ent = { "amp" => "&", "lt" => "<", "gt" => ">", "quot" => "\"", "apos" => "\x27", "nbsp" => " " }
+  md_words = ->(f) {
+    t = File.read(f).sub(/\A---\n.*?\n---\n/m, "").gsub(/^```mermaid\n.*?^```\n/m, "")
+    t.gsub(/^\s*(?:```|~~~)\S*\s*$/, "").gsub(/^<\/?(?:a|img|p|div|picture|source|br)\b[^\n]*$/i, "").gsub(/!?\[([^\]]*)\]\([^)]*\)/, "\\1")
+      .gsub(/^\s*(?:\d+\.|[-*+])\s/, " ").gsub(/^(#+\s+)\d+\.\s/, "\\1").scan(/[[:alnum:]]+/)
+  }
+  html_words = ->(f) {
+    t = File.read(f)
+    t = (t[%r{<main.*?</main>}m] || t).gsub(%r{<(svg|script|style|nav)\b.*?</\1>}m, " ").gsub(%r{<p class="doc-meta">.*?</p>}m, " ")
+    t.gsub(/<[^>]+>/, " ").gsub(/&(#?\w+);/) {
+      e = $1
+      ent[e] || (e.start_with?("#") ? (([e[1] =~ /x/i ? e[2..].hex : e[1..].to_i].pack("U").scrub(" ")) rescue " ") : " ")
+    }
+      .gsub(/^\s*(?:\d+\.|[-*+])\s/, " ").scan(/[[:alnum:]]+/)
+  }
+  want.each do |src, p|
+    next unless p.start_with?("site/docs/") && File.file?(src) && File.file?(p)
+    a = md_words[src]; b = html_words[p]
+    next if a == b
+    i = (0...[a.size, b.size].min).find { |k| a[k] != b[k] } || [a.size, b.size].min
+    errs << "site: #{p}: text differs from #{src} at word #{i + 1}: source \"#{a[i, 8].join(" ")}\", page \"#{b[i, 8].join(" ")}\"; carry the source change into the page"
+  end
   want.each do |src, p|
     pages = named[src] || []
     errs << "site: #{p}: missing, or has no dos-source meta for #{src}" unless pages.include?(p)

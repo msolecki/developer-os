@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@d2b1c8ddae75">
+<meta name="dos-source" content="docs/reference/skills.md@f0f1a210701b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -173,7 +173,8 @@ or a value format is rated against the project's canonical helper, schema or bus
 <li><strong>What it checks:</strong> auth, middleware, migrations, tenant boundaries and destructive paths; tenant
 scoping, soft-delete filters, query ownership, breaking API changes, missing tests, error
 handling, Server Component defaults, loading and error states, accessibility; a weakened
-<code>Done when</code> without an <code>Amended</code> line (P1); a doc the diff makes false (P2, no verdict change).</li>
+<code>Done when</code> without an <code>Amended</code> line (P1); a doc, or a site page restating a doc or skill, the
+diff makes false (P2, no verdict change).</li>
 <li><strong>Specialists:</strong> a diff that touches a migration, a schema or the query layer also goes to
 <code>database-reviewer</code>, one that touches IaC or a CI workflow to <code>infra-reviewer</code> (never on an
 untrusted head); their findings merge into the review.</li>

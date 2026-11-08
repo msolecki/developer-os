@@ -142,7 +142,8 @@ skipped when `gh` is unavailable) is dropped and named in the report. A perspect
 - **What it checks:** auth, middleware, migrations, tenant boundaries and destructive paths; tenant
   scoping, soft-delete filters, query ownership, breaking API changes, missing tests, error
   handling, Server Component defaults, loading and error states, accessibility; a weakened
-  `Done when` without an `Amended` line (P1); a doc the diff makes false (P2, no verdict change).
+  `Done when` without an `Amended` line (P1); a doc, or a site page restating a doc or skill, the
+  diff makes false (P2, no verdict change).
 - **Specialists:** a diff that touches a migration, a schema or the query layer also goes to
   `database-reviewer`, one that touches IaC or a CI workflow to `infra-reviewer` (never on an
   untrusted head); their findings merge into the review.
