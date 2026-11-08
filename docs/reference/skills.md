@@ -298,6 +298,11 @@ and docs updates (open items of a finished plan become `PLAN-` backlog items, P2
 session line), plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
 Every check result names the commit it ran on (`<command>: <result> at <short SHA>`, plus
 `+ uncommitted: <changed files>` on a dirty tree).
+With a window argument (`14d`, a date or `all`) it also runs `harvest.py` beside the skill, which reads
+past session transcripts (Python 3 standard library only, no file names printed) and lists rejected tool
+calls, user interruptions, agent retractions and tool errors repeated at least twice; from them it
+proposes at most five lessons, routed to the vault, the project's docs or a hook or check proposal,
+never to `CLAUDE.md` or `AGENTS.md` unless the user approves that file by name, behind the same question.
 
 ### skill-usage
 

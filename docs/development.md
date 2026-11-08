@@ -41,7 +41,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Local paths | A file under `plugin/` or `site/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
 | Evals | An `evals/<case>/` directory lacks a `case.yaml` whose `name` is the folder, a `prompt.md`, the `scaffold_script` it names, or `graders/*.md`; a grader's `type` is not `llm`, `regex`, `file_exists` or `tool_used`; every grader of a case is `llm`; a case has no row in the Cases table of `evals/README.md`, or a row names no case; a case has no positive deterministic grader (one that fails a run that does nothing: not `not_contains`, `exists: false`, `min: 0`, `tool: Skill` or a regex over a scaffolded file), except `injection-fix-pr` and `injection-pr-cycle` |
-| Imports | A `plugin/hooks/*.py` import is outside the standard-library allowlist in `scripts/check.sh`, or a hook names `urllib`, `socket`, `http.client`, `requests`, `httpx`, `importlib` or `__import__` (D2) |
+| Imports | A `plugin/hooks/*.py` or `plugin/skills/*/*.py` import is outside the standard-library allowlist in `scripts/check.sh`, or such a script names `urllib`, `socket`, `http.client`, `requests`, `httpx`, `importlib` or `__import__` (D2) |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Tool versions | The `claude-code` version `.github/workflows/check.yml` installs differs from `claude_code` under `[tool_versions]` in `.agnix.toml` |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
@@ -130,7 +130,11 @@ only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh
 `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
 and expects one count per message; when `rg` is missing it prints SKIP locally and fails in CI,
-which installs ripgrep.
+which installs ripgrep;
+`tests/session-retro-harvest.test.sh` runs session-retro's `harvest.py` on the synthetic transcript in
+`tests/fixtures/session-retro/` and expects one line per seeded rejection, retraction and repeated
+error and none for the negatives (a permission-rule denial, an `api-request-blob` copy, a single error,
+an old rejection outside the window, a duplicate uuid, an invalid line).
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 

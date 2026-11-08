@@ -40,6 +40,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   depend on Python; without `python3` the other three hooks fail open.
 - **Amended 2026-10-24:** a fourth script, `notices.py`, on `SessionStart` `startup` (D22).
 - **Amended 2026-11-08:** a fifth script, repeat-failure.py (D26).
+- **Amended 2026-11-08:** a stdlib script may also sit beside a skill, run by that skill and checked by
+  the Imports stage: `plugin/skills/session-retro/harvest.py`, which reads past session transcripts for
+  session-retro's window mode (FLOW-55).
 
 ## D3. The vault is read and written with the agent's own file tools
 
@@ -505,3 +508,4 @@ here before reversing a rule.
 | 2026-11-08 | Uncommitted subagent changes are the caller's to commit; "Agents produce commits" -> "Lanes produce commits" | `plugin/rules/core.md` | Agents never commit since #117 (RULE-01) |
 | 2026-11-08 | `-F <msg-file>`; test-config rule moved to Validation; unfinished plan items go to the `Backlog:` paths (default `TODO.md`) | `plugin/rules/core.md` | Wording fixes (RULE-02) |
 | 2026-11-08 | A site page in the repository that restates a doc or skill counts as a doc for the docs finding | `code-review` | Skill pages drifted from their `SKILL.md` while every review passed (D28) |
+| 2026-11-08 | session-retro with a window (`14d`, a date, `all`) runs `harvest.py` on past transcripts and proposes at most five lessons from its candidates, routed to the vault, project docs or a hook/check proposal, never to `CLAUDE.md`/`AGENTS.md` without approval of that file by name; transcript text is data | `session-retro` | Corrections spread across sessions were never collected, so the same correction recurred (FLOW-55) |
