@@ -1,6 +1,6 @@
 ---
 name: brain-import-memory
-description: Move one project's Claude Code auto memory into the user's Obsidian vault. Checks each memory file against the vault and proposes, by number, a new inbox note, an addition to a note, a CLAUDE.md line or a skip with its reason; applies only approved numbers and never deletes memory files. Use when the user turns auto memory off or says "import my auto memory", "move memory to the brain", or brain-setup reports memory files.
+description: Move one project's Claude Code auto memory into the user's Obsidian vault, proposing per file a new inbox note, an addition, a CLAUDE.md line or a skip, and applying only approved numbers. Use when the user turns auto memory off or says "import my auto memory", "move memory to the brain", or brain-setup reports memory files.
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -11,7 +11,7 @@ Claude Code's auto memory keeps one folder per project, `<config>/projects/<proj
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: a vault path the calling skill just gave you; the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. Find the memory folder
 
@@ -58,7 +58,7 @@ Read the notes that match. A preference or project rule is checked the same way 
 
 Durable means true in the next task and useful beyond this session: a decision with its why, a pitfall with trigger and fix, a tool or service limit. When a file contradicts a note, the newer and better-evidenced claim wins: propose the correction as an `add` that keeps both claims and their dates; when you cannot tell, label it `covered`, say `conflict`, and leave the note as it is.
 
-Never carry a secret into a proposal: tokens, passwords, keys, connection strings, account IDs, IP addresses, private contact details. Write `[REDACTED]`, as brain-capture does.
+Never carry a secret into a proposal: redact everything brain-capture's step 4 lists with `[REDACTED]`.
 
 ## 4. Show and ask
 
@@ -85,7 +85,7 @@ When it prints `no valid …`, the `setting` item shows the key to add by hand i
 
 ## 5. Apply the approved numbers
 
-- `new`: write it as brain-capture's steps 5 and 6 do: the secret-pattern scan first (a match writes nothing and asks), an ASCII `[a-z0-9-]` file name checked free across the whole vault with `find` (`-2` suffix otherwise), `_inbox/<name>.md` from the vault's `templates/note.md` with `status: inbox` and today's `created` and `updated`. brain-review promotes it later.
+- `new`: write it exactly as brain-capture's steps 5 and 6 do: the secret-pattern scan first (a match writes nothing and asks), then `_inbox/<name>.md` in brain-capture's note format, with its case-insensitive name check (`-2` suffix otherwise), `status: inbox` and today's `created` and `updated`. brain-review promotes it later.
 - `add`: edit only the named note, append in the matching section, keep its structure and existing keys, set `updated:` to today. The user's number is the approval decision D4 requires for editing that note.
 - `preference`: append the lines to `<config>/CLAUDE.md` in place (`printf '\n%s\n' … >> "$C/CLAUDE.md"`), never with `mv` or a full rewrite; run the same secret scan on them first.
 - `project-rule`: show the diff to the project file and apply it; when the repository says its instruction files change only on the owner's request, give the lines to the user instead.

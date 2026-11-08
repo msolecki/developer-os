@@ -1,6 +1,6 @@
 ---
 name: brain-garden
-description: Produce a health report for the user's Obsidian knowledge vault — stale notes, old inbox notes, broken or archived wiki links, missing or invalid frontmatter, likely duplicates, rules restated across several notes, and orphan notes — with proposed fixes, changing nothing without approval. Use when the user asks to garden, lint, audit, or check the health of the brain/vault, for example "check the health of the brain", "clean up the vault", "find broken links in the brain".
+description: Produce a stale, broken-link, frontmatter, duplicate and orphan report for the user's Obsidian knowledge vault, with proposed fixes, changing nothing without approval. Use when the user asks to garden, lint, audit, or check the health of the brain/vault, for example "check the health of the brain", "clean up the vault", "find broken links in the brain".
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -11,7 +11,7 @@ Report and propose; apply only the fixes the user names.
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: a vault path the calling skill just gave you; the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. Run the checks
 
@@ -147,7 +147,7 @@ Apply which fixes?
 
 Apply only the fixes the user names. When editing a note, keep every frontmatter key you do not change and set `updated` to today. Move retired notes to `_archive/` with `status: archived`; never delete a note. For a merge, ask which note survives and show the merged text first. Run brain-compile for a shared rule only when the user names that rule; "apply all" does not cover it. The hubs are repointed on a later run, once the compiled note is active. Apply a GUESSED link only when the user names it; "apply all" covers FOUND links only.
 
-After the fixes, or if the user applies none, ask once whether to append the header numbers to `_reports/garden-log.md` as one line (`2026-10-15 notes 42, orphans 3 (7%), inbox 5`). Append only on a yes; create the file if it is missing. Never rewrite earlier lines.
+After the fixes, or if the user applies none, ask once whether to append the header numbers to `_reports/garden-log.md` as one line (`2026-10-15 notes 42, orphans 3 (7%), inbox 5`). Append only on a yes; create `_reports/` and the file if they are missing. Never rewrite earlier lines.
 
 ## Stop point
 

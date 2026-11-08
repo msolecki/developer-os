@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-project-refresh/SKILL.md@1bfb7fd20906">
+<meta name="dos-source" content="plugin/skills/brain-project-refresh/SKILL.md@efe9634bfd3e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -67,10 +67,10 @@
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
-      <li><strong>Finds the vault</strong> from the <code>Brain vault:</code> line, in the same order as the other brain skills.</li>
-      <li><strong>Finds the hub:</strong> the <code>type: project</code> note with the slug from <code>_Context.md</code>, never a slug guessed from the directory name. Without a hub it offers a draft in <code>_inbox/</code>; with several it asks which one.</li>
+      <li><strong>Finds the vault</strong> from a path the calling skill just gave or the <code>Brain vault:</code> line, in the same order as the other brain skills.</li>
+      <li><strong>Finds the hub:</strong> the <code>type: project</code> note with the slug from <code>_Context.md</code>, never a slug guessed from the directory name. A hub still in <code>_inbox/</code> is refreshed in place, and you promote it with brain-review. Without a hub but with other notes of the slug, it offers a draft in <code>_inbox/</code> that links them, under a name it first checks is free across the vault in any letter case; with no note of the slug at all it stops. With several hubs it asks which one.</li>
       <li><strong>Collects evidence</strong> from the README, the docs map, <code>CURRENT-STATE.md</code>, the decision records and the last 30 commits, and from the vault's notes with the same slug.</li>
-      <li><strong>Compares:</strong> claims in the hub the repository contradicts, repository paths that no longer exist, project notes the hub does not link, links to notes that do not exist, and a summary or status that no longer fits. A drifted code fact usually becomes a link to the repository doc, because the hub keeps only what outlives the repository.</li>
+      <li><strong>Compares:</strong> claims in the hub the repository contradicts, repository paths that no longer exist, project notes the hub does not link (an inbox note goes in with a <code>(waiting for review)</code> marker that brain-review drops on promotion), links to notes that do not exist, and a summary or status that no longer fits. A drifted code fact usually becomes a link to the repository doc, because the hub keeps only what outlives the repository.</li>
       <li><strong>Shows the diff and asks,</strong> then applies only the numbers you name and sets <code>updated</code> to today.</li>
     </ol>
 
@@ -88,7 +88,7 @@ Apply which? A: all (recommended)  B: list numbers  C: none</code></pre>
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>The edits you named are applied and reported, or at the question when you pick none. With no vault, no slug or no project notes, it stops having written nothing.</p>
+      <p>The edits you named are applied and reported, or at the question when you pick none. With no vault, no slug, or neither a hub nor any note with the slug, it stops having written nothing.</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>
