@@ -263,7 +263,8 @@ detached `claude -p` in its own worktree and session, so it outlives the turn; t
 from the base commit recorded in `LANES.md`, which `launch.sh` checks. Each lane runs with a
 recorded `--session-id`, a `--max-turns` cap, and `--disallowedTools` for edits to the manifest,
 `Makefile`, hook directories and `.claude/` unless it owns them; its prompt allows only the lane's
-paths and commits in the worktree, and its report starts with a final status. The status table reads
+paths and commits in the worktree, and its report starts with a final status and lists what is not
+started, what is not verified and If-X-then-Y contingencies. The status table reads
 the PIDs, the `EXIT=` line in each log, the time since the worktree last changed, the report's first
 line, the lane's commits, any changed file outside its owned paths, and a `LANES.md` or prompt whose
 hash differs from the one `launch.sh` recorded. A finished lane with no report or a `CONTINUING` one

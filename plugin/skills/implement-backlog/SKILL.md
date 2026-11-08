@@ -58,7 +58,10 @@ Keep the task state in `docs/plans/.devos-state.md` (git-ignored, even when plan
 Plan: docs/plans/2026-10-15-checkout-retry.md
 Item: CART-12 (in progress)
 Agents: .worktrees/cart-13 → CART-13, .worktrees/cart-14 → CART-14
-Unverified: <claims without evidence yet>
+Status: clean | watch <risk> | blocked <on what>
+Not started: <what looks begun and is not: no branch, no edit, no commit>
+Not verified: <checks not run; never fold them into a pass>
+If: <X> then <Y> (a failure the next session will hit)
 Next: <one line>
 ```
 

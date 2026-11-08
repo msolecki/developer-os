@@ -59,7 +59,8 @@ the last 7 days (an older file is left over from a finished run). A cloned repos
 cannot plant instructions or a link to a local secret there. Control characters are stripped.
 
 `docs/plans/.devos-state.md` is written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes at every
-stage change (plan, current item, agents and their worktrees, unverified claims, next step) and is
+stage change (plan, current item, agents and their worktrees, a clean, watch or blocked status, what is
+not started, what is not verified, If-X-then-Y contingencies, next step) and is
 git-ignored with the plans. session-retro proposes deleting it with a finished plan. Its path is fixed,
 even when a project moves its plans; `Newest plan` reads only `docs/plans/` too.
 

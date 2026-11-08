@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@5b2f911078f1">
+<meta name="dos-source" content="docs/reference/skills.md@f9126372fdd2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -281,7 +281,8 @@ detached <code>claude -p</code> in its own worktree and session, so it outlives 
 from the base commit recorded in <code>LANES.md</code>, which <code>launch.sh</code> checks. Each lane runs with a
 recorded <code>--session-id</code>, a <code>--max-turns</code> cap, and <code>--disallowedTools</code> for edits to the manifest,
 <code>Makefile</code>, hook directories and <code>.claude/</code> unless it owns them; its prompt allows only the lane's
-paths and commits in the worktree, and its report starts with a final status. The status table reads
+paths and commits in the worktree, and its report starts with a final status and lists what is not
+started, what is not verified and If-X-then-Y contingencies. The status table reads
 the PIDs, the <code>EXIT=</code> line in each log, the time since the worktree last changed, the report's first
 line, the lane's commits, any changed file outside its owned paths, and a <code>LANES.md</code> or prompt whose
 hash differs from the one <code>launch.sh</code> recorded. A finished lane with no report or a <code>CONTINUING</code> one

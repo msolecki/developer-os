@@ -53,7 +53,7 @@ Before writing the backlog, verify the findings `developer-os:code-review` Verif
 
 Keep CONFIRMED findings. Keep an UNDECIDED or unverified finding with an `Unverified: <reason>` line. Leave REFUTED findings out of the backlog and list them, with the verifier's evidence, under Disputed in the report.
 
-While reviewers run, keep `Backlog:` (the backlog path), `Agents:` (perspective → reviewer) and `Next:` in `docs/plans/.devos-state.md`, overwritten at every stage change, so the `SessionStart` hook can show them after a compaction.
+While reviewers run, keep `Backlog:` (the backlog path), `Agents:` (perspective → reviewer), `Status: clean|watch|blocked`, `Not verified:` (perspectives not yet back), `If: <X> then <Y>` and `Next:` in `docs/plans/.devos-state.md`, overwritten at every stage change, so the `SessionStart` hook can show them after a compaction.
 
 ## Merge the backlog
 

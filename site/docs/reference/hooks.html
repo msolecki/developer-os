@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@6bf5392d8246">
+<meta name="dos-source" content="docs/reference/hooks.md@3c523a95d255">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -94,7 +94,8 @@ Worktrees:
     the last 7 days (an older file is left over from a finished run). A cloned repository therefore
     cannot plant instructions or a link to a local secret there. Control characters are stripped.</p>
     <p><code>docs/plans/.devos-state.md</code> is written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes at every
-    stage change (plan, current item, agents and their worktrees, unverified claims, next step) and is
+    stage change (plan, current item, agents and their worktrees, a clean, watch or blocked status, what is
+    not started, what is not verified, If-X-then-Y contingencies, next step) and is
     git-ignored with the plans. session-retro proposes deleting it with a finished plan. Its path is fixed,
     even when a project moves its plans; <code>Newest plan</code> reads only <code>docs/plans/</code> too.</p>
     <p><strong>Failure:</strong> every error exits 0; malformed input, another <code>source</code>, a <code>cwd</code> that does not exist or a directory
