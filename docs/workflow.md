@@ -20,7 +20,8 @@ tells you when to use them and where each piece of knowledge belongs.
   `AGENTS.md` says otherwise.
 - **You decide what becomes knowledge.** The agent creates notes only in `_inbox/`; it edits or moves
   any other note only after you approve (brain-review, brain-garden, brain-project-refresh for the
-  project hub, brain-import-memory and session-retro for an addition to a note). Nothing is trusted until you
+  project hub, brain-import-memory and session-retro for an addition to a note). A hub line that links a
+  reviewed inbox note is changed only after brain-review shows the diff and you say yes. Nothing is trusted until you
   review it and set `status: active`. An unreviewed agent note is a draft, not a fact.
 
 ## Setup in 5 minutes
@@ -222,7 +223,8 @@ what to keep. For each note:
   `status: archived`.
 - **Supersede**: if it replaces an active decision, keep it, then set the old note to
   `status: superseded` with `superseded_by: "[[new-note]]"` and today's `updated`; the old note stays
-  in its folder as history. brain-review does this only for the notes you name ("supersede
+  in its folder as history. Both notes must be active, different, and the old one not already
+  superseded. brain-review does this only for the notes you name ("supersede
   DEV/queue-sqs.md by queue-kafka").
 
 The policy is archive, never delete: a merged or rejected note stays in `_archive/`, out of search

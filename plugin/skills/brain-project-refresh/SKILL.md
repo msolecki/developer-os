@@ -43,7 +43,7 @@ Report one numbered line per proposed edit, each with its evidence:
 
 1. **Drifted claim:** a sentence in the hub that the repository contradicts (what the project is, its stack, where plans or decisions live). Evidence: the hub line and the repository `path:line` or commit. Propose a corrected sentence, or replacing the fact with a link to the repository doc.
 2. **Moved pointer:** a repository path the hub names that no longer exists (`git ls-files`). Propose its new path, or removing it.
-3. **Missing link:** an `active` or `superseded` note with the slug that the hub does not link. Propose a `[[note]]` line under `## Links`. Inbox notes go in as `[[note]] (waiting for review)`, as in the vault template; brain-review drops the marker when it promotes the note.
+3. **Missing link:** an `active` or `superseded` note with the slug that the hub does not link. Propose a `[[note]]` line under `## Links`. Inbox notes go in as `[[note]] (waiting for review)`, as in the vault template; brain-review proposes dropping the marker, or retargeting or removing the line, once it promotes, merges or rejects the note.
 4. **Dead link:** a `[[link]]` in the hub to a note that does not exist. Archived targets are fine.
 5. **Summary or status:** a `summary` that no longer describes the project, or `status: active` on a project whose repository says it is archived or retired.
 

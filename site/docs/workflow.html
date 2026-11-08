@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@1c67afaa0aff">
+<meta name="dos-source" content="docs/workflow.md@fd9be4f234f4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -60,7 +60,8 @@ describe, in the repository. Plans are gitignored and deleted when done unless t
 <code>AGENTS.md</code> says otherwise.</li>
 <li><strong>You decide what becomes knowledge.</strong> The agent creates notes only in <code>_inbox/</code>; it edits or moves
 any other note only after you approve (brain-review, brain-garden, brain-project-refresh for the
-project hub, brain-import-memory and session-retro for an addition to a note). Nothing is trusted until you
+project hub, brain-import-memory and session-retro for an addition to a note). A hub line that links a
+reviewed inbox note is changed only after brain-review shows the diff and you say yes. Nothing is trusted until you
 review it and set <code>status: active</code>. An unreviewed agent note is a draft, not a fact.</li>
 </ul>
     <h2 id="setup-in-5-minutes">Setup in 5 minutes</h2>
@@ -233,7 +234,8 @@ to <code>_archive/</code> with <code>status: archived</code>.</li>
 <code>status: archived</code>.</li>
 <li><strong>Supersede</strong>: if it replaces an active decision, keep it, then set the old note to
 <code>status: superseded</code> with <code>superseded_by: "[[new-note]]"</code> and today's <code>updated</code>; the old note stays
-in its folder as history. brain-review does this only for the notes you name (&ldquo;supersede
+in its folder as history. Both notes must be active, different, and the old one not already
+superseded. brain-review does this only for the notes you name (&ldquo;supersede
 DEV/queue-sqs.md by queue-kafka&rdquo;).</li>
 </ul>
     <p>The policy is archive, never delete: a merged or rejected note stays in <code>_archive/</code>, out of search

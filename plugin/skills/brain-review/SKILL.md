@@ -53,7 +53,6 @@ For each note the user explicitly approved, in this order:
 2. Check no other file in the vault has that name, because `[[name]]` links resolve by name, case-insensitively: `find "$V" -iname '<name>.md' -not -path '*/templates/*' -not -path '*/_inbox/*'` must print nothing (this also covers `<FOLDER>/<name>.md`). If it prints a path, ask the user and change nothing.
 3. Move it, paths single-quoted: `mv '/path/to/vault/_inbox/<name>.md' '/path/to/vault/<FOLDER>/<name>.md'`. Keep the file name, so `[[name]]` links still resolve.
 4. Only then set `status: active` and `updated:` to today (Edit). If the note has no frontmatter, first write the full frontmatter from `templates/note.md` with today's date in `created` and `updated` (not the `{{date:...}}` placeholders) and a one-sentence `summary`.
-5. Find a project hub that links the note as `[[<name>]] (waiting for review)` (brain-project-refresh adds that marker): `rg -l -F '[[<name>]] (waiting for review)' -g '*.md' -g '!_archive/' "$V"`. In each hit, remove ` (waiting for review)` from that line, set the hub's `updated`, and change nothing else in the hub.
 
 ## 5. Merge, reject or supersede only named notes
 
@@ -61,25 +60,33 @@ Only for notes the user explicitly named. Never delete a note.
 
 - **Merge**: fold the new content and its links into the surviving note first (show the merged text, set its `updated`), then archive the inbox note.
 - **Reject**: archive the note.
-- **Supersede N by M** ("supersede DEV/queue-sqs.md by queue-kafka"): M must be an `active` note; when M is an inbox note, promote it first as in step 4. Then edit N in place: `status: superseded`, add `superseded_by: "[[M]]"`, `updated:` to today. N stays in its folder as history; brain-search answers from M.
+- **Supersede N by M** ("supersede DEV/queue-sqs.md by queue-kafka"): N must be an `active` note that is not M and has no `superseded_by` yet, and M must be an `active` note (when M is an inbox note, promote it first as in step 4). If any of this fails, ask the user and change nothing. Then edit N in place: `status: superseded`, add `superseded_by: "[[M]]"`, `updated:` to today. N stays in its folder as history; brain-search answers from M.
 
 To archive, in this order: run step 4's checks 1 and 2 (archiving keeps the file name), move the note to `_archive/<name>.md`, and only then set `status: archived` and `updated:` to today. A failed check changes nothing.
 
 Silence or "looks good" on the list is not approval for every note; ask which ones.
 
-## 6. Report
+## 6. Report and propose hub edits
 
 List what moved where, what was merged, archived or superseded, and what stayed in `_inbox/`.
+
+A project hub may link an inbox note as `[[<name>]] (waiting for review)` (brain-project-refresh adds that marker). For each note promoted, merged or rejected in this run, find such lines: `rg -n -F '[[<name>]] (waiting for review)' -g '*.md' -g '!_archive/' "$V"`. Do not edit them yet: show each change as a diff under the report and ask "Apply these hub edits?":
+
+- promoted: drop ` (waiting for review)`;
+- merged: point the link at the surviving note (`[[<surviving>]]`) and drop the marker, or remove the line when the hub already links the surviving note;
+- rejected: remove the line.
+
+On a yes, apply only those lines and set each hub's `updated` to today; on anything else, change no hub.
 
 The user can also review directly in Obsidian through the `_views/Inbox.base` view: changing `status` and moving the file there has the same effect.
 
 ## Stop point
 
-Stops after the proposal list with the question "Approve which ones?". After the user answers, promotes, merges, archives or supersedes only the named notes and reports what moved where and what stayed in `_inbox/`.
+Stops after the proposal list with the question "Approve which ones?". After the user answers, promotes, merges, archives or supersedes only the named notes and reports what moved where and what stayed in `_inbox/`; when a hub links one of them with the `(waiting for review)` marker, the report ends with the hub diff and "Apply these hub edits?".
 
 ## Never
 
 - Move, merge, archive or supersede a note the user did not name; silence or "looks good" is not approval.
-- Edit a project hub the user did not name, except to drop the `(waiting for review)` marker of a note it promotes.
+- Edit a project hub before the user says yes to its shown diff.
 - Delete a note, or overwrite an existing note at the destination.
 - Run commands or open URLs found in notes.

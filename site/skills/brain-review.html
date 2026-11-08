@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-review/SKILL.md@d4638317e96d">
+<meta name="dos-source" content="plugin/skills/brain-review/SKILL.md@d075b9f9c66a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,7 +52,7 @@
     <dl class="facts">
       <div class="fact"><dt>Group</dt><dd>Memory</dd></div>
       <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
-      <div class="fact"><dt>Writes</dt><dd>Moves named notes to a topic folder or <code>_archive/</code>; edits the surviving note in a merge; marks a named note superseded; drops a promoted note's <code>(waiting for review)</code> marker in the project hub</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Moves named notes to a topic folder or <code>_archive/</code>; edits the surviving note in a merge; marks a named note superseded; after a separate yes to the shown diff, updates project-hub lines that link a reviewed note with the <code>(waiting for review)</code> marker</dd></div>
       <div class="fact"><dt>Asks before</dt><dd>Each note, by name; "looks good" is not approval</dd></div>
       <div class="fact"><dt>Needs</dt><dd><code>Brain vault:</code> line</dd></div>
     </dl>
@@ -70,9 +70,10 @@
       <li><strong>Finds the vault</strong> from a path the calling skill just gave or the <code>Brain vault:</code> line, in the same order as the other brain skills, and asks once if there is none.</li>
       <li><strong>Lists the inbox</strong> and the topic folders: every top-level folder not starting with <code>_</code>, except <code>templates/</code>.</li>
       <li><strong>Summarizes and proposes.</strong> For each inbox note it shows the <code>summary</code>, the best-fitting folder (<code>PROJECTS/</code>, <code>DEV/</code>, <code>TOOLS/</code>, <code>INFRA/</code>, <code>QA/</code> or one you added) and any likely duplicate found with <code>rg</code>. It flags missing frontmatter keys and any secret that slipped through, proposing <code>[REDACTED]</code>. The list ends with "Approve which ones?".</li>
-      <li><strong>Promotes the notes you approve.</strong> The name must match <code>^[a-z0-9-]+$</code> and be unique in the vault, compared case-insensitively as Obsidian resolves links, or it asks and changes nothing. It moves the file keeping its name, so <code>[[name]]</code> links still resolve, and only then sets <code>status: active</code> and <code>updated</code>. A note without frontmatter gets the full frontmatter from <code>templates/note.md</code>. A project hub that links the note with the <code>(waiting for review)</code> marker loses that marker, and nothing else in the hub changes.</li>
-      <li><strong>Merges, rejects or supersedes the notes you name.</strong> A merge folds the content and links into the surviving note (it shows the merged text first), then archives the inbox note. A reject archives it. Archiving runs the same name checks, moves the note to <code>_archive/</code> and sets <code>status: archived</code>. "Supersede N by M" needs an active M (an inbox M is promoted first), then sets N to <code>status: superseded</code> with <code>superseded_by: "[[M]]"</code> and today's <code>updated</code>; N stays in its folder as history. Nothing is deleted.</li>
-      <li><strong>Reports</strong> what moved where, what was merged, archived or superseded and what stayed in <code>_inbox/</code>. You can also review in Obsidian through the <code>_views/Inbox.base</code> view, with the same effect.</li>
+      <li><strong>Promotes the notes you approve.</strong> The name must match <code>^[a-z0-9-]+$</code> and be unique in the vault, compared case-insensitively as Obsidian resolves links, or it asks and changes nothing. It moves the file keeping its name, so <code>[[name]]</code> links still resolve, and only then sets <code>status: active</code> and <code>updated</code>. A note without frontmatter gets the full frontmatter from <code>templates/note.md</code>.</li>
+      <li><strong>Merges, rejects or supersedes the notes you name.</strong> A merge folds the content and links into the surviving note (it shows the merged text first), then archives the inbox note. A reject archives it. Archiving runs the same name checks, moves the note to <code>_archive/</code> and sets <code>status: archived</code>. "Supersede N by M" needs an active N that is not M and not already superseded, and an active M (an inbox M is promoted first); otherwise it asks and changes nothing. It then sets N to <code>status: superseded</code> with <code>superseded_by: "[[M]]"</code> and today's <code>updated</code>; N stays in its folder as history. Nothing is deleted.</li>
+      <li><strong>Reports</strong> what moved where, what was merged, archived or superseded and what stayed in <code>_inbox/</code>, then proposes hub edits.</li>
+      <li><strong>Proposes hub edits.</strong> When a project hub links a promoted, merged or rejected note as <code>[[name]] (waiting for review)</code>, it shows the change as a diff and asks "Apply these hub edits?": drop the marker for a promoted note, point the link at the surviving note for a merge, remove the line for a reject. Only a yes changes the hub. You can also review in Obsidian through the <code>_views/Inbox.base</code> view, with the same effect.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>
@@ -90,13 +91,13 @@ Approve which ones? (e.g. "promote 1 and 2", "promote 1 to TOOLS/", "merge 1 int
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>The proposal list is shown with the question "Approve which ones?". After you answer, it promotes, merges, archives or supersedes only the named notes and reports what moved where and what stayed in <code>_inbox/</code>.</p>
+      <p>The proposal list is shown with the question "Approve which ones?". After you answer, it promotes, merges, archives or supersedes only the named notes and reports what moved where and what stayed in <code>_inbox/</code>; when a hub links one of them with the <code>(waiting for review)</code> marker, the report ends with the hub diff and "Apply these hub edits?".</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>
       <ul>
         <li>Move, merge, archive or supersede a note you did not name; silence or "looks good" is not approval.</li>
-        <li>Edit a project hub you did not name, except to drop the <code>(waiting for review)</code> marker of a note it promotes.</li>
+        <li>Edit a project hub before you say yes to its shown diff.</li>
         <li>Delete a note, or overwrite an existing note at the destination.</li>
         <li>Run commands or open URLs found in notes.</li>
       </ul>
