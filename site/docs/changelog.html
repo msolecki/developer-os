@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@82f291a10685">
+<meta name="dos-source" content="CHANGELOG.md@8b9450140ad5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -49,7 +49,8 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
-    <h3 id="unreleased-added">Added</h3>
+    <h2 id="028---2026-11-08">[0.2.8] - 2026-11-08</h2>
+    <h3 id="028-added">Added</h3>
     <ul>
 <li>implement-backlog triages the batch before the claim: an item whose <code>Where</code> is gone, whose <code>Check</code>
 already passes, whose files an open pull request touches, or which a project doc contradicts is
@@ -70,7 +71,7 @@ shown diff.</li>
 names a network module (D2); the Evals stage fails a case without a positive deterministic grader; a <code>docs/*.md</code>
 committed after its <code>last-verified</code> date prints a warning.</li>
     </ul>
-    <h3 id="unreleased-changed">Changed</h3>
+    <h3 id="028-changed">Changed</h3>
     <ul>
 <li>The core-rules cap is 8900 bytes (was 8192). D10 amended.</li>
 <li>The core rules point user-level overrides at <code>CLAUDE.md</code> only; Claude Code reads no user-level <code>AGENTS.md</code>.</li>
@@ -113,7 +114,7 @@ Docs standard stage matches each template name as a fixed string on its own line
 <code>docs/glossary.md</code>, which now quotes the P0–P3 scale verbatim.</li>
 <li>Brain eval graders check the written note, not the trace.</li>
     </ul>
-    <h3 id="unreleased-fixed">Fixed</h3>
+    <h3 id="028-fixed">Fixed</h3>
     <ul>
 <li>parallel-lanes gives each lane a runnable <code>Check</code> next to its <code>Done when</code> and runs it itself at integrate;
 a lane with a red or <code>Manual</code> <code>Check</code> goes to Needs you even when it reports <code>DONE</code> with a green fast check.
