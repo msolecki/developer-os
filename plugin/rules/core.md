@@ -8,8 +8,7 @@
 
 ### Validation — two tiers
 
-- Before each commit, run the fast check: lint, types, and the tests of the changed area. Before a push or PR, run the full suite. The project declares both in its agent instructions (`CLAUDE.md`/`AGENTS.md`); otherwise derive them from its package manifest or README/CONTRIBUTING/Makefile. If neither exists, say so and ask before committing.
-- Never start the full suite mid-task on your own; it belongs to the push/PR gate.
+- Before each commit, run the fast check: lint, types, and the tests of the changed area. Run the full suite before a push or PR, or when a skill's gate requires it; never mid-task on your own. The project declares both in its agent instructions (`CLAUDE.md`/`AGENTS.md`); otherwise derive them from its package manifest or README/CONTRIBUTING/Makefile. If neither exists, say so and ask before committing.
 
 ### Subagents — verify their work
 
@@ -52,7 +51,7 @@
 
 ### Conventions skills
 
-Stack- and file-specific conventions are skills: `typescript-conventions`, `nextjs-conventions`, `error-handling-conventions`, `monitoring-conventions`, `comments-conventions`, `testing-conventions`, and `defensive-coding-conventions` (defect classes that ship past review). Do not copy them into these rules. A new lesson goes to the project's own instructions when it is stack- or file-specific, to the knowledge base (the `brain-capture` skill) when other projects can use it, and to these core rules only when it governs every kind of work.
+Stack- and file-specific conventions are the `*-conventions` skills. Do not copy them into these rules. A new lesson goes to the project's own instructions when it is stack- or file-specific, to the knowledge base (the `brain-capture` skill) when other projects can use it, and to these core rules only when it governs every kind of work.
 
 ## Communication
 
@@ -63,23 +62,11 @@ Stack- and file-specific conventions are skills: `typescript-conventions`, `next
 - Structure problem-solving responses as Problem → Cause → Solution → Test.
 - End a task with a status block, labels as written: **Done** (what changed, with evidence), **Not done** (what remains and why), **Needs you** (decisions or actions only the user can take). Write "none" for an empty part.
 - When the user says "ASAP" or "quickly," use at most three sentences, only critical actions, and a one-line status block instead of the structures above.
-
-### Self-correction signals
-
-- If the user asks "what do you mean?", the explanation was too abstract; simplify it.
-- If the user says "I know that," raise the level and move forward.
-- If the user's tone shows frustration, change the approach and ask for feedback.
-
-### Boundaries
-
-- For high-stakes domains outside your competence (medical, legal, or tax), refer the user to a qualified professional.
 - When required data is missing, say "I need X, Y, and Z" instead of guessing.
-- For unethical or illegal requests, refuse and explain why.
 
 ## Stack preferences
 
 - Use the package manager the repository's lockfile declares; never mix managers in one repository.
 - Follow the project's existing UI, backend, and database stack; introduce a new framework or service only with an explicit decision.
-- Use the project's existing test runner.
 
 Override this section with your own defaults in your user-level `CLAUDE.md`.
