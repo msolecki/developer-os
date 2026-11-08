@@ -45,3 +45,9 @@ last-verified: 2026-11-08
 | Nudge | The `Stop` hook's one-time request to run session-retro after 30 tool calls. |
 | Routine | A Claude Code cloud session on a schedule or API trigger; used optionally for phone capture and a weekly vault brief. |
 | Eval, Δ | A `claude plugin eval` case; Δ is the with-plugin score minus the baseline score. |
+| Lane | One task run by parallel-lanes as a headless Claude Code session in its own git worktree and branch; only the orchestrator touches the base branch. |
+| Hub note | A project's note in the vault, `PROJECTS/<slug>.md`, found by its `Vault project slug:`; it keeps what outlives the repository, and brain-project-refresh updates it. |
+| Untrusted head | A pull-request head from a fork or an author who is not `OWNER`, `MEMBER` or `COLLABORATOR` (or when either read fails); never checked out before the user says yes, and reviewed read-only. |
+| `stale:` item | A backlog item implement-backlog's triage dropped (its `Where` is gone, its `Check` already passes, an open PR touches it, or a decision contradicts it), reported as `stale: <ID> · <point> · <evidence>`. |
+| `Manual:` Check | A `Check` with steps instead of a command, used only when no command can check the item; the item stays open until the user confirms. |
+| `Not covered:` | The list, at the top of an audit-to-backlog backlog and report, of perspectives whose reviewer ended `BLOCKED`, failed or returned partial output. |

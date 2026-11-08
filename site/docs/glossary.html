@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/glossary.md@1421398c0f77">
+<meta name="dos-source" content="docs/glossary.md@07b53d5c25ce">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -88,6 +88,12 @@
           <tr><td>Nudge</td><td>The <code>Stop</code> hook's one-time request to run session-retro after 30 tool calls.</td></tr>
           <tr><td>Routine</td><td>A Claude Code cloud session on a schedule or API trigger; used optionally for phone capture and a weekly vault brief.</td></tr>
           <tr><td>Eval, Δ</td><td>A <code>claude plugin eval</code> case; Δ is the with-plugin score minus the baseline score.</td></tr>
+          <tr><td>Lane</td><td>One task run by parallel-lanes as a headless Claude Code session in its own git worktree and branch; only the orchestrator touches the base branch.</td></tr>
+          <tr><td>Hub note</td><td>A project's note in the vault, <code>PROJECTS/&lt;slug&gt;.md</code>, found by its <code>Vault project slug:</code>; it keeps what outlives the repository, and brain-project-refresh updates it.</td></tr>
+          <tr><td>Untrusted head</td><td>A pull-request head from a fork or an author who is not <code>OWNER</code>, <code>MEMBER</code> or <code>COLLABORATOR</code> (or when either read fails); never checked out before the user says yes, and reviewed read-only.</td></tr>
+          <tr><td><code>stale:</code> item</td><td>A backlog item implement-backlog's triage dropped (its <code>Where</code> is gone, its <code>Check</code> already passes, an open PR touches it, or a decision contradicts it), reported as <code>stale: &lt;ID&gt; · &lt;point&gt; · &lt;evidence&gt;</code>.</td></tr>
+          <tr><td><code>Manual:</code> Check</td><td>A <code>Check</code> with steps instead of a command, used only when no command can check the item; the item stays open until the user confirms.</td></tr>
+          <tr><td><code>Not covered:</code></td><td>The list, at the top of an audit-to-backlog backlog and report, of perspectives whose reviewer ended <code>BLOCKED</code>, failed or returned partial output.</td></tr>
         </tbody>
       </table>
     </div>
