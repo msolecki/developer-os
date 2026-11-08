@@ -136,6 +136,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `archive` asks, as does `format-patch` without one or `--stdout`; git plumbing that writes refs or the
   index (`symbolic-ref`, `read-tree`, `update-index`) stays a documented known miss, an unlikely
   reviewer mistake (SEC-15).
+- **Amended 2026-11-08:** the install category adds a closed table matched in command position,
+  `pip`/`pip3 install`, `uv add`, `uv pip install`, `poetry add`, `cargo add`/`install`, `go
+  get`/`install`, `composer require`, `bundle add`, `gem install`, each with a package argument, and
+  `npx -y`/`--yes`, which runs freshly fetched code; core.md's install rule was text only in Python,
+  Rust, Go and PHP repositories (SEC-14).
 
 ## D7. One wrap-up nudge per long session
 

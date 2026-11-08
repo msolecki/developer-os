@@ -501,6 +501,16 @@ done
 check ask "$(fa developer-os:dependency-upgrader 'git checkout main')" "read-only"
 check ask "$(fa developer-os:dependency-upgrader 'sed -i s/a/b/ package.json')" "read-only"
 check pass "$(fa developer-os:dependency-upgrader 'npm ls zod')"
+# SEC-14: other package managers and npx -y
+for c in 'pip install requests' 'pip3 install -U requests' 'uv add x' 'uv pip install x' 'poetry add x' 'cargo add x' \
+  'cargo install ripgrep' 'go get example.com/x' 'go install example.com/x@latest' 'composer require a/b' 'bundle add x' \
+  'gem install x' 'npx -y foo' 'npx --yes foo' '/usr/bin/pip install x' 'sudo pip install x'; do
+  check ask "$(fx "$c")" "Dependency install"
+done
+for c in 'pip install -r requirements.txt' 'pip install' 'uv sync' 'poetry install' 'cargo build' 'go build ./...' 'go get' \
+  'composer install' 'bundle install' 'npx foo' 'pip show requests' 'echo pip install x' 'grep -rn \"cargo add\" docs'; do
+  check pass "$(fx "$c")"
+done
 
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

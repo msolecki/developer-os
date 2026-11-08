@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@ddd6c1263d93">
+<meta name="dos-source" content="docs/product/decisions.md@0188fd79cea9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -102,6 +102,7 @@
 <li><strong>Amended 2026-11-08:</strong> the destroy category also asks before <code>git checkout -f</code>, <code>git switch -f</code> or <code>--discard-changes</code> and <code>find … -delete</code> (#108). The protected files match through symlink hops and without case, so a link to a <code>.env</code> asks and so does a differently cased name (#123).</li>
 <li><strong>Amended 2026-11-08:</strong> a quoted commit message (<code>-m</code>, <code>-F</code>, <code>--message</code>, <code>--file</code>) is no longer scanned, and <code>commit -n</code> counts only with <code>commit</code> as git's subcommand, reversing "still ask on a mention" for commit messages: in <code>claude -p</code> an ask is a denial, and <code>git commit -m "fix npm install bug"</code> blocked headless lanes (FLOW-39).</li>
 <li><strong>Amended 2026-11-08:</strong> dependency-upgrader joins the read-only agents: it has Bash and its prompt forbids edits and HEAD moves, yet <code>git checkout main</code> from it passed (AGT-10). In the read-only agents, <code>submodule status</code>/<code>summary</code> and <code>bisect log</code>/<code>visualize</code>/<code>view</code> pass as reads (FLOW-40), and <code>--output</code>, <code>--output-directory</code> or <code>-o</code> outside scratch on <code>diff</code>, <code>log</code>, <code>show</code>, <code>format-patch</code> or <code>archive</code> asks, as does <code>format-patch</code> without one or <code>--stdout</code>; git plumbing that writes refs or the index (<code>symbolic-ref</code>, <code>read-tree</code>, <code>update-index</code>) stays a documented known miss, an unlikely reviewer mistake (SEC-15).</li>
+<li><strong>Amended 2026-11-08:</strong> the install category adds a closed table matched in command position, <code>pip</code>/<code>pip3 install</code>, <code>uv add</code>, <code>uv pip install</code>, <code>poetry add</code>, <code>cargo add</code>/<code>install</code>, <code>go get</code>/<code>install</code>, <code>composer require</code>, <code>bundle add</code>, <code>gem install</code>, each with a package argument, and <code>npx -y</code>/<code>--yes</code>, which runs freshly fetched code; core.md's install rule was text only in Python, Rust, Go and PHP repositories (SEC-14).</li>
 </ul>
 <h2 id="d7-one-wrap-up-nudge-per-long-session">D7. One wrap-up nudge per long session</h2>
 <ul>

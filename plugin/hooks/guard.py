@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """PreToolUse guard for Bash, Edit and Write.
 
-Answers "ask" (never "deny") before a dependency install, update or removal with a package argument,
+Answers "ask" (never "deny") before a dependency install, update or removal with a package argument
+(npm, pnpm, yarn, bun; in command position also the PKG table, pip to gem, and `npx -y`),
 a force push (--force, -f, a +refspec or remote.<name>.push=+; a --force-with-lease alone passes),
 `git commit -n`, or any --no-verify, HUSKY=0, LEFTHOOK=0, SKIP= or core.hooksPath in any form, and before a
 command that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag,
@@ -199,6 +200,26 @@ def destroys(words):
     return any(re.search(r"(^|/)find$", words[i]) for i in pos) and "-delete" in words
 
 
+# Other package managers: (manager, its subcommand words); a non-dash word after them is a package.
+PKG = [("pip", ("install",)), ("pip3", ("install",)), ("uv", ("add",)), ("uv", ("pip", "install")),
+       ("poetry", ("add",)), ("cargo", ("add",)), ("cargo", ("install",)), ("go", ("get",)),
+       ("go", ("install",)), ("composer", ("require",)), ("bundle", ("add",)), ("gem", ("install",))]
+# Option values that name a requirements or constraints file, not a package.
+PKG_VALUE = {"-r", "--requirement", "-c", "--constraint"}
+
+
+def installs(words):
+    """A PKG manager with its subcommand and a package, or `npx -y`/`--yes` with one, in command position."""
+    for i in starts(words):
+        name, rest = words[i].rsplit("/", 1)[-1], words[i + 1:]
+        ops = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in PKG_VALUE)]
+        if name == "npx" and ops and any(x in ("-y", "--yes") for x in rest):
+            return True
+        if any(name == m and tuple(ops[:len(s)]) == s and len(ops) > len(s) for m, s in PKG):
+            return True
+    return False
+
+
 def scan(line):
     """Word scanner: install, push, noverify or destroy for the first hit, None otherwise."""
     for seg in re.split(r"[;&|()`]", line):
@@ -207,6 +228,8 @@ def scan(line):
         rm = rec = rmf = ended = False
         if destroys(words):
             return "destroy"
+        if installs(words):
+            return "install"
         pos = starts(words)
         for i, x in enumerate(words):
             if rm and x == "--":

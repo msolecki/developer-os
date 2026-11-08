@@ -3,7 +3,7 @@
 ## Security and change constraints
 
 - Change authentication or middleware only when the user asks for it explicitly; those paths gate access for every user.
-- Ask before running a dependency install (`npm install`, `pnpm add`, and the like): it rewrites dependencies and the lockfile.
+- Ask before running a dependency install (`npm install`, `pip install`, `cargo add`, `npx -y`, and the like): it rewrites dependencies and the lockfile.
 - Do not delete or skip tests to make a build pass; a green build without its tests proves nothing.
 
 ### Validation — two tiers
