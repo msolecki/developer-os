@@ -194,7 +194,7 @@ steps into `FEAT-` backlog items.
 - **`Check` screening:** never runs a `Check` that pipes into a shell, fetches from the network or
   writes outside the repository; reads any script a `Check` calls first.
 - **Triage:** before the claim, checks every batch item itself, read-only: its `Where` still
-  exists (for a `FEAT-`, `BASE-` or `new:` item, its parent directory), its `Check` fails now (a
+  exists (for a `FEAT-` or `BASE-` item, its parent directory), its `Check` fails now (a
   failure on authentication, quota or a missing secret blocks the item for you), no open pull request touches its files (skipped when `gh` is
   unavailable), and no project decision record or doc contradicts it. A failing item leaves the
   batch, is never claimed or dispatched, and is reported as `stale: <ID> · <point> · <evidence>`

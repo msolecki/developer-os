@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/configuration.md@0a917a3230d6">
+<meta name="dos-source" content="docs/reference/configuration.md@d784f314c1a9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -75,14 +75,14 @@
         <thead><tr><th scope="col">Setting</th><th scope="col">Where</th><th scope="col">Read by</th><th scope="col">Default without it</th></tr></thead>
         <tbody>
           <tr><td><code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code></td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>audit-to-backlog, implement-backlog, plan-status, project-baseline, project-init, docs-sync, spec, session-retro, the <code>SessionStart</code> hook (skips them as plans)</td><td><code>TODO.md</code>, <code>TODO-done.md</code>; audit-to-backlog and project-baseline ask before creating them and write the line</td></tr>
-          <tr><td>Planning location</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>Core rules, plan-status, spec, session-retro</td><td><code>docs/plans/&lt;YYYY-MM-DD-task&gt;.md</code>, git-ignored</td></tr>
+          <tr><td>Planning location</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>Core rules, plan-status, spec, session-retro, parallel-lanes</td><td><code>docs/plans/&lt;YYYY-MM-DD-task&gt;.md</code>, git-ignored</td></tr>
           <tr><td>Specification location</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>spec</td><td>spec proposes <code>docs/specs/</code> and asks</td></tr>
           <tr><td>Fast check and full suite commands</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist, parallel-lanes</td><td>Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing</td></tr>
-          <tr><td><code>Vault project slug:</code></td><td><code>_Context.md</code></td><td>brain-search, brain-capture, brain-project-refresh and brain-import-memory, which read <code>_Context.md</code> at the repository root when the line is not in context</td><td>Empty <code>project:</code>; brain-project-refresh asks for the slug once, brain-import-memory proposes notes with an empty <code>project:</code> and asks</td></tr>
+          <tr><td><code>Vault project slug:</code></td><td><code>_Context.md</code></td><td>brain-search, brain-capture, brain-project-refresh and brain-import-memory, which read <code>_Context.md</code> at the repository root when the line is not in context; docs-sync, which scaffolds the line in <code>_Context.md</code></td><td>Empty <code>project:</code>; brain-project-refresh asks for the slug once, brain-import-memory proposes notes with an empty <code>project:</code> and asks</td></tr>
           <tr><td>Docs root</td><td><code>AGENTS.md</code></td><td>docs-sync</td><td><code>docs/</code></td></tr>
           <tr><td>Task state</td><td><code>docs/plans/.devos-state.md</code> (fixed, even when the planning location is overridden)</td><td>The <code>SessionStart</code> hook after compaction, resume and fork</td><td>Written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes; none</td></tr>
           <tr><td><code>TODO.md</code> item format</td><td>The backlog todo file</td><td>audit-to-backlog, project-baseline, implement-backlog, plan-status, spec (<code>FEAT-</code> items), project-init (<code>CONV-</code> items), session-retro (open items of a finished plan)</td><td><code>templates/project/TODO.md</code> shows it</td></tr>
-          <tr><td><code>DESIGN.md</code></td><td>Repository root, for projects with a UI</td><td>Agents doing UI work (the template <code>AGENTS.md</code> line), project-baseline, docs-sync</td><td>project-baseline proposes it as a backlog item</td></tr>
+          <tr><td><code>DESIGN.md</code></td><td>Repository root, for projects with a UI</td><td>Agents doing UI work (the template <code>AGENTS.md</code> line), project-baseline, docs-sync, code-review (a line the diff makes false), nextjs-conventions (the token source of truth)</td><td>project-baseline proposes it as a backlog item</td></tr>
         </tbody>
       </table>
     </div>
