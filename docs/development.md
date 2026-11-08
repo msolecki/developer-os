@@ -32,7 +32,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | JSON | Any `*.json` does not parse (`jq empty`) |
 | Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name; a line inside the frontmatter of an `evals/` file contains `---` (the eval loader ends frontmatter there) |
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
-| Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
+| Skill descriptions | A description is outside 80–1024 characters, or the descriptions of skills without `disable-model-invocation: true` together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
 | Last-verified (warning) | A `docs/*.md` committed after its `last-verified` date prints a warning; the exit status does not change |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden`, `brain-import-memory`, `brain-project-refresh` or `brain-review` differs from `brain-search`'s |
@@ -43,6 +43,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Evals | An `evals/<case>/` directory lacks a `case.yaml` whose `name` is the folder, a `prompt.md`, the `scaffold_script` it names, or `graders/*.md`; a grader's `type` is not `llm`, `regex`, `file_exists` or `tool_used`; every grader of a case is `llm`; a case has no row in the Cases table of `evals/README.md`, or a row names no case; a case has no positive deterministic grader (one that fails a run that does nothing: not `not_contains`, `exists: false`, `min: 0`, `tool: Skill` or a regex over a scaffolded file), except `injection-fix-pr` and `injection-pr-cycle` |
 | Imports | A `plugin/hooks/*.py` import is outside the standard-library allowlist in `scripts/check.sh`, or a hook names `urllib`, `socket`, `http.client`, `requests`, `httpx`, `importlib` or `__import__` (D2) |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
+| Tool versions | The `claude-code` version `.github/workflows/check.yml` installs differs from `claude_code` under `[tool_versions]` in `.agnix.toml` |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
 | Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff (in a pull request, since the merge base with `origin/$GITHUB_BASE_REF`) still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
@@ -53,6 +54,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page under `site/docs/` whose words differ from its source's (D28); a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
+| agnix | `agnix --target claude-code --strict --config .agnix.toml .` reports an error or warning; the stage runs when `agnix` is on `PATH`, prints `SKIP agnix` otherwise, and fails when it is missing in CI |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
 
 The file set is tracked plus untracked-not-ignored files, so a new doc is checked before it is
@@ -61,7 +63,8 @@ committed.
 ## CI
 
 `.github/workflows/check.yml` runs `scripts/check.sh` on pushes to `development` and `main` and on
-every pull request. Before the check it runs agnix (`agent-sh/agnix` v0.57.0, the release binary pinned by its
+every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
+Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.57.0, the release binary pinned by its
 SHA-256, `--strict`, target `claude-code`), a static lint of skills, hooks and manifests configured in
 `.agnix.toml`; every rule disabled there carries its reason. It pins `actions/checkout` to a commit SHA, does not persist credentials, has
 read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`) and a gitleaks
@@ -69,6 +72,9 @@ release verified by SHA-256, and, on a pull request, `gitleaks git` over the PR'
 removed inside one PR still fails. The same step fails a PR that changes `.gitleaks.toml` or
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
 only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
+`.github/dependabot.yml` proposes weekly updates of the SHA-pinned actions, each release at least 7 days old.
+Dependabot does not read the agnix, gitleaks and claude-code versions in the run steps: bump them by hand, and
+the claude-code one together with `claude_code` in `.agnix.toml` (the Tool versions stage).
 
 ## The site
 

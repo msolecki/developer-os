@@ -93,6 +93,11 @@ printf '%s\n' '#!/bin/sh' 'case "$*" in *--strict*) printf "Found 1 warning:\n  
 chmod +x "$tmp/bin/claude"
 runpath="$tmp/bin:$PATH"
 run "a validate warning fails through the --strict exit status" fail "claude plugin validate --strict failed"
+rm "$tmp/bin/claude"
+printf '%s\n' '#!/bin/sh' 'echo "CC-SK-001 error"; exit 1' > "$tmp/bin/agnix"
+chmod +x "$tmp/bin/agnix"
+run "an agnix finding fails the check" fail "agnix: .: agnix --strict failed above"
+rm "$tmp/bin/agnix"
 runpath=
 
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'
@@ -106,6 +111,16 @@ for f in "$r"/plugin/skills/*/SKILL.md; do
   perl -pi -e 's/^(description: .*)$/$1 . " pad" x 25/e' "$f"
 done
 run "skill descriptions over 12000 characters in total" fail "limit 12000"
+
+# The same padding, with the brain skills hidden from the model: their descriptions leave the listing and the total,
+# so the check passes the Skill descriptions stage and fails only later, at the Site stage, on the edited skills.
+for f in "$r"/plugin/skills/*/SKILL.md; do
+  perl -pi -e 's/^(description: .*)$/$1 . " pad" x 25/e' "$f"
+done
+for f in "$r"/plugin/skills/brain-*/SKILL.md; do
+  perl -pi -e 's/^(description: .*)$/$1\ndisable-model-invocation: true/' "$f"
+done
+run "descriptions of skills with disable-model-invocation do not count toward 12000" fail "changed since the page was written"
 
 mkdir "$r/plugin/skills/zzz-new"
 # a short description, so the skill-descriptions budget does not fail first
@@ -246,6 +261,9 @@ run "a hook importing a network module" fail "imports: plugin/hooks: import outs
 
 printf 'x = __import__("socket")\n' >> "$r/plugin/hooks/notices.py"
 run "a hook loading a module dynamically" fail "imports: plugin/hooks: network module or dynamic import"
+
+edit .agnix.toml 's/^claude_code = .*/claude_code = "9.9.9"/'
+run "the agnix Claude Code version differs from CI's" fail "versions: .agnix.toml: claude_code 9.9.9 differs"
 
 # An ignored doc (docs/superpowers/ is in .gitignore) has no site page; reset keeps ignored files, so remove it.
 mkdir -p "$r/docs/superpowers/plans"

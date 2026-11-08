@@ -20,7 +20,8 @@ done
 # Frontmatter (plugin, templates, evals, docs) must parse. Skills, agents and output styles need name (matching the folder or file) and description;
 # docs/*.md need status (current, draft or deprecated), owner and a last-verified date; other files only need parseable frontmatter.
 # Skills also carry the portable Agent Skills fields license and compatibility, and a name matching ^[a-z0-9-]{1,64}$.
-# Skill descriptions are 80-1024 characters and together at most 12000: every description loads into every session.
+# Skill descriptions are 80-1024 characters, and the model-visible ones together at most 12000: they load into every
+# session's skill listing. A skill with disable-model-invocation: true is not in the listing, so it does not count.
 # Every skill has a non-empty ## Stop point and a ## Never section with at least one `- ` rule, except the read-only ones: *-conventions,
 # brain-search, code-review, plan-status and skill-usage (they write nothing inside the repository, send nothing and change no git state).
 files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
@@ -59,7 +60,7 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
     %w[license compatibility].each { |k| bad.("#{k} is empty") if y[k].to_s.strip.empty? }
     n = y["description"].to_s.size
     bad.("description is #{n} characters, allowed 80-1024") unless (80..1024).cover?(n)
-    total += n
+    total += n unless y["disable-model-invocation"] == true
     next if read_only.include?(want) || want.end_with?("-conventions")
     body = lines[close..].join("\n")
     ["## Stop point", "## Never"].each do |h|
@@ -184,6 +185,11 @@ targets=$(grep -o '\${CLAUDE_PLUGIN_ROOT}/[^"\\[:space:]]*' plugin/hooks/hooks.j
 for p in $targets; do
   [ -e "plugin/$p" ] || fail hooks plugin/hooks/hooks.json "missing target plugin/$p"
 done
+
+# The Claude Code version CI installs is the one agnix lints against in .agnix.toml; nothing else ties the two.
+ci=$(sed -n 's/.*@anthropic-ai\/claude-code@\([0-9.]*\).*/\1/p' .github/workflows/check.yml)
+lint=$(sed -n 's/^claude_code = "\(.*\)"$/\1/p' .agnix.toml)
+[ -n "$ci" ] && [ "$ci" = "$lint" ] || fail versions .agnix.toml "claude_code ${lint:-unset} differs from claude-code ${ci:-unset} in .github/workflows/check.yml"
 
 # Every agent ends its report contract with the four final statuses that orchestrating skills read.
 for f in plugin/agents/*.md; do
@@ -401,6 +407,15 @@ done
 for d in . plugin; do
   out=$(claude plugin validate "$d" --strict 2>&1) || { echo "$out" >&2; fail validate "$d" "claude plugin validate --strict failed above"; }
 done
+
+# Static lint of skills, hooks and manifests (.agnix.toml). CI sets up the pinned release; locally it runs when on PATH.
+if command -v agnix >/dev/null 2>&1; then
+  agnix --target claude-code --strict --config .agnix.toml . >&2 || fail agnix . "agnix --strict failed above"
+elif [ -n "${CI:-}" ]; then
+  fail agnix . "agnix not found; CI must set it up"
+else
+  echo "SKIP agnix: not found; CI runs it" >&2
+fi
 
 # Scan only what git tracks (or stages), not ignored local files.
 tmp=$(mktemp -d)
