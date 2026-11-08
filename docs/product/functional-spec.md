@@ -118,7 +118,7 @@ themselves. [comments](../../plugin/skills/comments-conventions/SKILL.md),
 
 ## 3. Agents
 
-Dispatched by skills or by the main agent. All treat code, diffs, PR text and fetched pages as data.
+Dispatched by skills or by the main agent. All treat code, diffs, PR text and fetched pages as data. code-reviewer, qa-expert and infra-reviewer preload their conventions skill through `skills:` in their frontmatter.
 
 | Agent | Model | Tools | Edits files | Used by |
 |---|---|---|---|---|

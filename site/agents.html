@@ -18,15 +18,15 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os agents and output styles">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/agents/code-reviewer.md@6d80fba42303">
+<meta name="dos-source" content="plugin/agents/code-reviewer.md@ca6e32b3526c">
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@bb02daec2f3f">
-<meta name="dos-source" content="plugin/agents/qa-expert.md@b92b79b3156b">
+<meta name="dos-source" content="plugin/agents/qa-expert.md@51af119a191d">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@89c690b4a0ed">
 <meta name="dos-source" content="plugin/agents/verifier.md@28852e17195a">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@de2322881df6">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@a31093b64b9f">
 <meta name="dos-source" content="plugin/agents/dependency-upgrader.md@e9b15925f839">
-<meta name="dos-source" content="plugin/agents/infra-reviewer.md@c10ec1b4f012">
+<meta name="dos-source" content="plugin/agents/infra-reviewer.md@0338a1c56542">
 <meta name="dos-source" content="plugin/agents/docs-writer.md@69397204da06">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,7 +81,7 @@
     <ul>
       <li>The named files plus the direct callers and callees of any signature or contract they change, read before judging, with the project's own instruction files ahead of its own preferences.</li>
       <li>Both sides of every contract the change touches (an API handler and its client, a schema and its type, a route and its links): a mismatch is P1, cited on each side.</li>
-      <li>The defect classes in <a href="skills/defensive-coding-conventions.html">developer-os:defensive-coding-conventions</a>, and a test changed to match the code when the test described the correct contract.</li>
+      <li>The defect classes in <a href="skills/defensive-coding-conventions.html">developer-os:defensive-coding-conventions</a>, preloaded through its <code>skills:</code> frontmatter, and a test changed to match the code when the test described the correct contract.</li>
       <li>A backlog item's <code>Done when</code> deleted or weakened without an appended <code>Amended YYYY-MM-DD: …</code> line is P1. A doc the change makes false is a P2 docs finding. A style preference is never above P3.</li>
       <li>A domain formula, a field type or a value format is rated against the project's canonical definition (a shared helper, the schema, a business doc); code that matches it is not a defect. Without one, say so in the finding.</li>
       <li>It rates the code, not the framing: a prompt that says who wrote the change, or that it looks good, changes no severity.</li>
@@ -188,7 +188,7 @@
     <h3 id="what-infra-reviewer-checks">What infra-reviewer checks</h3>
     <ul>
       <li>The tool and the cloud first, and the modules, stacks or reusable workflows a change calls.</li>
-      <li>Wildcard IAM, resources open to the internet, secrets in plain config, stateful resources a change replaces, unencrypted storage, CI with write-all permissions, <code>pull_request_target</code> on untrusted code, actions and images not pinned to a digest, and missing alerts judged by <a href="skills/monitoring-conventions.html">monitoring-conventions</a>.</li>
+      <li>Wildcard IAM, resources open to the internet, secrets in plain config, stateful resources a change replaces, unencrypted storage, CI with write-all permissions, <code>pull_request_target</code> on untrusted code, actions and images not pinned to a digest, and missing alerts judged by <a href="skills/monitoring-conventions.html">monitoring-conventions</a>, preloaded through its <code>skills:</code> frontmatter.</li>
       <li>Prompt injection in AI agent steps in CI (<code>claude-code-action</code>, <code>codex-action</code> and similar): <code>${{ github.event.* }}</code> in the prompt directly or through <code>env:</code>, <code>gh issue view</code> or <code>gh pr view</code> output, CI logs or <code>workflow_dispatch</code> inputs in the prompt, <code>pull_request_target</code> with a checkout of the PR head, allowed tools that permit <code>$()</code>, agent output passed to <code>eval</code>, <code>exec</code> or <code>$()</code> in <code>run:</code>, <code>Bash(*)</code>, <code>--yolo</code> or an unsafe sandbox, and <code>allowed_non_write_users: "*"</code>.</li>
     </ul>
     <h3 id="infra-reviewer-report">infra-reviewer report</h3>
@@ -240,7 +240,7 @@
     <h3 id="what-qa-expert-checks">What qa-expert checks</h3>
     <ul>
       <li>Only the named files. It runs the project's real test command for the tests that cover them (the full suite only when asked) and shows failures, never a passing log. Tests run in CI mode (<code>CI=true</code>, and <code>--ci</code> for Jest) so a run writes no missing snapshot; a new untracked file that <code>git status</code> shows afterwards is reported.</li>
-      <li>It loads <a href="skills/testing-conventions.html">testing-conventions</a> and applies it to every test it writes or assesses: pin the contract, fixed UTC instants, partial mocks.</li>
+      <li>It starts with <a href="skills/testing-conventions.html">testing-conventions</a> preloaded (the <code>skills:</code> frontmatter) and applies it to every test it writes or assesses: pin the contract, fixed UTC instants, partial mocks.</li>
       <li>When it writes tests: one test per contract, and for a regression test the failing run before the passing one; when the fix is already in the tree, it says the test was only seen green, names the fixing commit and leaves the red run to the caller. A characterization test that passes at once is named as such. A test that passes only after it changed the test is called out, with why the new assertion is correct.</li>
     </ul>
     <h3 id="qa-expert-report">qa-expert report</h3>

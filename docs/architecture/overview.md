@@ -136,8 +136,8 @@ flowchart LR
   brain-setup -. offers .-> brain-import-memory
   bug-triage -. offers .-> brain-capture
   deploy-checklist -. offers .-> brain-capture
-  code-reviewer -. checks .-> defensive-coding-conventions
-  qa-expert -. loads .-> testing-conventions
+  code-reviewer -. preloads .-> defensive-coding-conventions
+  qa-expert -. preloads .-> testing-conventions
 ```
 
 Every dispatched agent answers with a final status (`DONE`, `REVIEW`, `BLOCKED`, `CONTINUING`) that

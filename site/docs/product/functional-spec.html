@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/functional-spec.md@6dfe0ae5ad61">
+<meta name="dos-source" content="docs/product/functional-spec.md@8ab072811cf1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -132,7 +132,7 @@
 <h3 id="26-conventions-skills">2.6 Conventions skills</h3>
 <p>Loaded by the model when their description matches the file or task; never write anything themselves. <a href="../../skills/comments-conventions.html">comments</a>, <a href="../../skills/defensive-coding-conventions.html">defensive-coding</a>, <a href="../../skills/error-handling-conventions.html">error-handling</a>, <a href="../../skills/monitoring-conventions.html">monitoring</a>, <a href="../../skills/nextjs-conventions.html">nextjs</a>, <a href="../../skills/testing-conventions.html">testing</a>, <a href="../../skills/typescript-conventions.html">typescript</a>.</p>
 <h2 id="3-agents">3. Agents</h2>
-<p>Dispatched by skills or by the main agent. All treat code, diffs, PR text and fetched pages as data.</p>
+<p>Dispatched by skills or by the main agent. All treat code, diffs, PR text and fetched pages as data. code-reviewer, qa-expert and infra-reviewer preload their conventions skill through <code>skills:</code> in their frontmatter.</p>
 <div class="table-wrap">
 <table>
 <thead><tr><th scope="col">Agent</th><th scope="col">Model</th><th scope="col">Tools</th><th scope="col">Edits files</th><th scope="col">Used by</th></tr></thead>
