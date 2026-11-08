@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/project-baseline/SKILL.md@361b3fbea2df">
+<meta name="dos-source" content="plugin/skills/project-baseline/SKILL.md@bcbb62c61c0a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -60,19 +60,18 @@
     <p>When you start work in a repository, or ask what the project is missing. Say it in your own words, for example:</p>
     <ul class="chips">
       <li class="chip">what is the repo missing</li>
-      <li class="chip">check the project standard</li>
       <li class="chip">project baseline</li>
     </ul>
 
     <h2 id="what-it-does">What it does</h2>
-    <p>It is a presence check, not a code review: each practice has a probe, and a missing practice becomes a backlog item.</p>
+    <p>It is a presence check, not a code review (for that, use <a href="audit-to-backlog.html">audit-to-backlog</a>): each practice has a probe, and a missing practice becomes a backlog item.</p>
     <ol>
       <li><strong>Reads the context.</strong> The stack, the package manager the lockfile selects, the CI workflows and the validation commands. It finds the backlog files the way audit-to-backlog does and continues their numbering under the ID prefix <code>BASE</code>. It reads <code>AGENTS.md</code>, <code>docs/pitfalls.md</code> and the decision records: a practice the project rejected or deferred on purpose is reported as <code>deliberate</code>, never proposed.</li>
       <li><strong>Probes each practice.</strong> Each probe and its result is recorded as evidence; an unsure result is listed as a question, not as missing. Missing practices get these severities:
         <ul>
           <li>Env read through one schema-validated module, with no direct env reads elsewhere: P2.</li>
-          <li>An agent deny-list for <code>.env*</code> and key files in <code>.claude/settings.json</code>: P1.</li>
-          <li>Secret scanning in CI (gitleaks, trufflehog or the host's scanning): P1.</li>
+          <li>An agent deny-list for <code>.env*</code> and key files in <code>.claude/settings.json</code>: P2.</li>
+          <li>Secret scanning in CI (gitleaks, trufflehog or the host's scanning): P2.</li>
           <li>A coverage floor that CI enforces and that only rises: P2.</li>
           <li>A guard that fails CI on destructive migrations without an explicit marker: P2, skipped without a database.</li>
           <li>Dependency or boundary rules that fail CI: P3.</li>
@@ -82,7 +81,7 @@
           <li>A script or CI step that checks docs against code: P3.</li>
           <li>A root <code>DESIGN.md</code> for a project with a UI: P3, skipped without a UI. When it exists, the skill suggests a lint command for you to run; it never runs or installs it.</li>
           <li>Runtime dependencies no more than one major version behind, from the package manager's outdated report: P2 for a framework or runtime dependency, otherwise P3; skipped when the report needs credentials or the network. After a second question, the three furthest behind get an upgrade plan from the dependency-upgrader agent as their fix; the plan reads changelogs on the web, and its install commands are for you to run.</li>
-          <li>A <code>PostToolUse</code> hook that lints each edited file and shows the agent only the failures (the after-edit runbook in the project templates): P3; skipped without a linter.</li>
+          <li>A <code>PostToolUse</code> hook on <code>Edit|Write</code> that reads <code>tool_input.file_path</code> from stdin, lints that file, and exits 2 with only the failures on stderr: P3; skipped without a linter.</li>
           <li>Claude Code's sandbox enabled in <code>.claude/settings.json</code>, with reads of <code>~/.ssh</code> and <code>~/.aws</code> denied, in <code>sandbox.filesystem.denyRead</code> or as <code>sandbox.credentials.files</code> deny entries (the sandbox allows them by default): P2. The guard and permission rules match text; the sandbox restricts every command.</li>
           <li>Every stdio server in <code>.mcp.json</code> pinned to a version, with no <code>@latest</code> or bare package name, since its tool descriptions reach the model: P2; skipped without <code>.mcp.json</code>.</li>
           <li>Every CI and validation gate exits non-zero on failure: P2.</li>
@@ -97,7 +96,7 @@
     <div class="terminal">
       <div class="terminal-bar"><i></i><i></i><i></i><span>project-baseline</span></div>
     <pre><code>Project baseline — &lt;repo&gt;
-Present: 6   Missing: 4 (P1 1, P2 2, P3 1)   Deliberate: 1   Not applicable: 1
+Present: 6   Missing: 4 (P2 3, P3 1)   Deliberate: 1   Not applicable: 1
 Needs your decision: test runner — package.json has both jest and vitest
 
 <span class="t-acc">Write the 4 items to TODO.md? A: all (recommended)  B: list IDs  C: none</span></code></pre>
@@ -105,7 +104,7 @@ Needs your decision: test runner — package.json has both jest and vitest
     <p>Each proposed item looks like this:</p>
     <div class="terminal">
       <div class="terminal-bar"><i></i><i></i><i></i><span>TODO.md</span></div>
-    <pre><code>- [ ] BASE-03 · P1 · Secret scanning in CI
+    <pre><code>- [ ] BASE-03 · P2 · Secret scanning in CI
   - Where: `.github/workflows/ci.yml:1`
   - Problem: no CI step scans for committed secrets.
   - Evidence: `rg -l 'gitleaks|trufflehog' .github/` → no match.
@@ -118,7 +117,7 @@ Needs your decision: test runner — package.json has both jest and vitest
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>It has shown the report and asked its question. After your approval it merges the approved items into the backlog file with an implementation-session line for them, shows <code>git diff --stat</code> and stops; implementation is implement-backlog's job.</p>
+      <p>It has shown the report and asked its question. After your approval it merges the approved items into the backlog file with implementation-session lines of 5–7 items each, grouped as audit-to-backlog groups them, shows <code>git diff --stat</code> and stops; implementation is implement-backlog's job.</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>
