@@ -3,6 +3,7 @@ name: instruction-review
 description: Review a project's instruction file (CLAUDE.md or AGENTS.md) against recent work and propose a minimal evidence-backed diff without applying it. Use when the user asks to improve or review project instructions or invokes instruction-review, for example "improve CLAUDE.md", "review the project instructions", "what should go in CLAUDE.md".
 license: MIT
 compatibility: "Claude Code"
+argument-hint: "[--prune]"
 ---
 
 # Instruction review
@@ -35,7 +36,7 @@ Scope: the project's `CLAUDE.md` or `AGENTS.md`. Review `plugin/rules/core.md` o
 ```
 | line | text | verdict | reason / source |
 |---|---|---|---|
-| 14 | Verify twice before committing. | DELETE | hedge; core rules "Before committing, run the validation" |
+| 14 | Verify twice before committing. | DELETE | hedge; core rules "Before each commit, run the fast check" |
 | 22 | Use pnpm. | REWRITE → "Use pnpm (pnpm-lock.yaml)." | contradicts line 31 "npm install" |
 | 31 | Run npm install after pulling. | DELETE | contradicts line 22; package manager is pnpm (pnpm-lock.yaml) |
 NOT RUN: `make e2e` (line 40) not executed

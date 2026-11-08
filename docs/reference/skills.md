@@ -50,7 +50,7 @@ and audit skills below in one pass.
 
 ### project-baseline
 
-[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 16 engineering
+[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 17 engineering
 practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog item.
 
 | Practice | Present when |
@@ -67,6 +67,7 @@ practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog i
 | Docs-vs-code check | a script or CI step checks docs against code |
 | Design system file | a UI project has a root `DESIGN.md` (skipped without a UI) |
 | No runtime dependency two majors behind | the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from `dependency-upgrader` as their Fix |
+| Dependency release-age cooldown | the update bot or package manager enforces a minimum release age (Dependabot `cooldown`, Renovate or pnpm `minimumReleaseAge`, uv `exclude-newer`; skipped without dependencies) |
 | After-edit lint hook | a `PostToolUse` hook on `Edit\|Write` lints the edited file and shows only failures (skipped without a linter) |
 | Agent sandbox | `.claude/settings.json` enables `sandbox` and denies reads of `~/.ssh` and `~/.aws` |
 | Pinned MCP servers | every stdio server in `.mcp.json` runs a pinned version (skipped without `.mcp.json`) |
@@ -235,7 +236,8 @@ Proposes mitigation, root-cause fix, regression test and rollback criteria; appl
 - **Verdict:** any failed or UNVERIFIED item is `NO-GO`; missing evidence is never counted as
   passed.
 - **Post-deploy:** error rate and latency against the thresholds, new exceptions, a critical-flow
-  smoke test, the recorded result.
+  smoke test, the result recorded in the closing status block (and offered as a line for a deploy
+  runbook in `docs/runbooks/`).
 
 ### parallel-lanes
 

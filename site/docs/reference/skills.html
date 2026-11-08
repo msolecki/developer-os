@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@17141e8b185e">
+<meta name="dos-source" content="docs/reference/skills.md@2f3bb29aea97">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -86,7 +86,7 @@ records reject on purpose is reported as <code>deliberate</code>, never proposed
 A/B/C question.</li>
     </ul>
     <h3 id="project-baseline">project-baseline</h3>
-    <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 16 engineering
+    <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 17 engineering
 practices; each one has a probe, and a missing one becomes a <code>BASE-NN</code> backlog item.</p>
     <div class="table-wrap">
 <table>
@@ -104,6 +104,7 @@ practices; each one has a probe, and a missing one becomes a <code>BASE-NN</code
 <tr><td>Docs-vs-code check</td><td>a script or CI step checks docs against code</td></tr>
 <tr><td>Design system file</td><td>a UI project has a root <code>DESIGN.md</code> (skipped without a UI)</td></tr>
 <tr><td>No runtime dependency two majors behind</td><td>the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from <code>dependency-upgrader</code> as their Fix</td></tr>
+<tr><td>Dependency release-age cooldown</td><td>the update bot or package manager enforces a minimum release age (Dependabot <code>cooldown</code>, Renovate or pnpm <code>minimumReleaseAge</code>, uv <code>exclude-newer</code>; skipped without dependencies)</td></tr>
 <tr><td>After-edit lint hook</td><td>a <code>PostToolUse</code> hook on <code>Edit|Write</code> lints the edited file and shows only failures (skipped without a linter)</td></tr>
 <tr><td>Agent sandbox</td><td><code>.claude/settings.json</code> enables <code>sandbox</code> and denies reads of <code>~/.ssh</code> and <code>~/.aws</code></td></tr>
 <tr><td>Pinned MCP servers</td><td>every stdio server in <code>.mcp.json</code> runs a pinned version (skipped without <code>.mcp.json</code>)</td></tr>
@@ -254,7 +255,8 @@ exact rollback command; a deployment window and an owner for an hour of monitori
 <li><strong>Verdict:</strong> any failed or UNVERIFIED item is <code>NO-GO</code>; missing evidence is never counted as
 passed.</li>
 <li><strong>Post-deploy:</strong> error rate and latency against the thresholds, new exceptions, a critical-flow
-smoke test, the recorded result.</li>
+smoke test, the result recorded in the closing status block (and offered as a line for a deploy
+runbook in <code>docs/runbooks/</code>).</li>
     </ul>
     <h3 id="parallel-lanes">parallel-lanes</h3>
     <p><a href="../../skills/parallel-lanes.html">Source</a>. For free-form tasks that can run at once;

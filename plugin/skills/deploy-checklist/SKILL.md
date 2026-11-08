@@ -25,7 +25,7 @@ Mark an item UNVERIFIED when its evidence is unavailable (no CI status, no dashb
 1. Monitor error rate and latency against the abort thresholds.
 2. Inspect new exceptions.
 3. Run a critical-flow smoke test.
-4. Record the result: stable, or rolled back with the trigger.
+4. Record the result (stable, or rolled back with the trigger) in the closing status block; when `docs/runbooks/` has a deploy runbook, offer the line for it.
 
 Never invent provider-specific commands. Derive them from repository configuration or ask for the missing deployment target.
 
@@ -33,7 +33,7 @@ End by offering the `brain-capture` skill when the deployment taught a lasting l
 
 ## Stop point
 
-Stop at the `GO`/`NO-GO` verdict before the deployment; after it, stop at the recorded result. The user runs the deployment.
+Stop at the `GO`/`NO-GO` verdict before the deployment; after it, stop at the result recorded in the closing status block. The user runs the deployment.
 
 ## Never
 

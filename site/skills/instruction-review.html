@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/instruction-review/SKILL.md@8dbff16b85af">
+<meta name="dos-source" content="plugin/skills/instruction-review/SKILL.md@4e6171ee14a9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -79,7 +79,7 @@
       <div class="terminal-bar"><i></i><i></i><i></i><span>instruction-review --prune</span></div>
 <pre><code>| line | text | verdict | reason / source |
 |---|---|---|---|
-| 14 | Verify twice before committing. | DELETE | hedge; core rules "Before committing, run the validation" |
+| 14 | Verify twice before committing. | DELETE | hedge; core rules "Before each commit, run the fast check" |
 | 22 | Use pnpm. | REWRITE → "Use pnpm (pnpm-lock.yaml)." | contradicts line 31 "npm install" |
 | 31 | Run npm install after pulling. | DELETE | contradicts line 22; package manager is pnpm (pnpm-lock.yaml) |
 NOT RUN: `make e2e` (line 40) not executed
