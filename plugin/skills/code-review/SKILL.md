@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review a pull request, diff, commit, or working-tree change against the project's conventions and rate findings P0–P3 with a merge verdict, handing code written in this session to an independent reviewer agent. Use when the user asks to review code, a PR, a diff, the last commit, or their changes, for example "review the last commit", "review my changes". Prefer it over the built-in /code-review when the project's conventions, the P0–P3 scale and an independent reviewer matter.
+description: Review a pull request, diff, commit, or working-tree change against the project's conventions and rate findings P0–P3 with a merge verdict, handing code written in this session to an independent reviewer agent. Use when the user asks to review code, a PR, a diff, the last commit, or their changes, for example "review the last commit", "review my changes". Prefer it over the built-in /code-review for project conventions and an independent reviewer.
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -46,10 +46,10 @@ For tests, cover happy path, edge cases, and failure path; reject flaky or over-
 
 Before the output, send every P0 and P1 finding and every P2 correctness finding (a P2 that claims the code behaves wrongly, not a docs or maintainability finding), including those relayed from `developer-os:code-reviewer`, to a fresh verifier that did not produce it, one finding per verifier, in parallel when there are several. Verify at most five P2s, the most impactful first; mark the rest unverified.
 
-- Verifier: a fresh `developer-os:verifier` agent (read-only). On an error, an empty reply, or a reply without CONFIRMED or REFUTED, dispatch a new one once; if that one also fails, the finding is unverified.
+- Verifier: a fresh `developer-os:verifier` agent (read-only). On an error, an empty reply, or a reply without CONFIRMED, REFUTED or UNDECIDED, dispatch a new one once; if that one also fails, the finding is unverified. `UNDECIDED` is an answer, not a failure: the finding is unverified, with no retry.
 - Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause), the path of a diff file you write outside the repository (`git diff <base>...<head ref>`, e.g. `refs/remotes/pr/<n>`; the verifier cannot run git, and an untrusted head's files are not on disk), the repository path, and the `Untrusted head` line when the caller gave one. Leave out the reviewer's evidence and reasoning.
-- Prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
-- Keep CONFIRMED findings at their severity. Move REFUTED findings to a Disputed list with the verifier's evidence. When the verifier cannot decide, keep the finding and say it is unverified.
+- Prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED, REFUTED or UNDECIDED, with the `file:line` evidence for your answer."
+- Keep CONFIRMED findings at their severity. Move REFUTED findings to a Disputed list with the verifier's evidence. Keep an UNDECIDED finding and say it is unverified.
 
 ## Output
 

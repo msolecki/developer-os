@@ -1,6 +1,6 @@
 ---
 name: project-init
-description: Adopt developer-os in a repository in one pass — detect the stack, pick the skills that apply, run project-baseline, docs-sync and instruction-review, audit the code against each applicable conventions skill, then give one report and one approval, writing nothing before it. Use when starting with developer-os in a repository, for example "init developer-os here", "check the whole project", "set the repo up for developer-os".
+description: Adopt developer-os in a repository in one pass — detect the stack, pick the skills that apply, run project-baseline, docs-sync and instruction-review, audit the code against each applicable conventions skill, then give one report and one approval; for a code audit alone, audit-to-backlog. Use when starting with developer-os in a repository, for example "init developer-os here", "check the whole project", "set the repo up for developer-os".
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -33,7 +33,7 @@ An orchestrator: it runs other skills up to their reports, adds a conventions au
 
 ## 3. Run the process skills
 
-Run project-baseline, then docs-sync, then instruction-review (when it applies), each up to its report and no further: do not ask their questions one by one, collect their numbered items and their "needs your decision" items. Baseline items keep the `BASE` prefix.
+Run project-baseline, then docs-sync, then instruction-review (when it applies), each up to its report and no further: do not ask their questions one by one, collect their numbered items and their "needs your decision" items. Baseline items keep the `BASE` prefix. Baseline's package-manager `outdated` probe is allowed: it reads the registry and runs no project script. Its "Plan the upgrades with `developer-os:dependency-upgrader` first?" question becomes one numbered item.
 
 ## 4. Audit the conventions
 
@@ -48,7 +48,7 @@ Load each applicable conventions skill and probe the repository for each of its 
 | monitoring | a `/health` handler that queries the database; paging alerts without a runbook link |
 | defensive-coding | webhook or event handlers with several side effects and no per-effect try/catch; hook scripts that grep a command without joining its lines |
 
-A rule that needs judgment (function size, composition) is sampled, not swept: report only concrete `file:line` cases, at most five per rule, with the total count when it is higher. Unsure counts as a question, not a finding. Send each P0 and P1 finding to a fresh verifier as in `developer-os:audit-to-backlog` Verify blocking findings; leave refuted ones out and list them under Disputed. Rate each finding on the `developer-os:code-review` scale and draft it as a backlog item in the audit-to-backlog format under the ID prefix `CONV`, continuing the numbering in both backlog files and deduplicated against them and the baseline items. A `Check` is a command that fails while the violation is there.
+A rule that needs judgment (function size, composition) is sampled, not swept: report only concrete `file:line` cases, at most five per rule, with the total count when it is higher. Unsure counts as a question, not a finding. Verify findings as in `developer-os:audit-to-backlog` Verify blocking findings; leave refuted ones out and list them under Disputed. Rate each finding on the `developer-os:code-review` scale and draft it as a backlog item in the audit-to-backlog format under the ID prefix `CONV`, continuing the numbering in both backlog files and deduplicated against them and the baseline items. A `Check` is a command that fails while the violation is there.
 
 ## 5. Report and ask
 
@@ -76,6 +76,6 @@ Stop after the report and the question. After approval, apply exactly the approv
 
 - Write, create, or delete any file before the user approves the numbered items.
 - Change application code, tests, configuration or existing comments; findings only become backlog items.
-- Run the project's scripts, tests or builds, install dependencies, or run deploy-checklist.
+- Run the project's scripts, tests or builds (baseline's `outdated` probe is not one), install dependencies, or run deploy-checklist.
 - Pick a default for a "needs your decision" item, or propose something the project rejected on purpose.
 - Commit, push, or open a pull request.
