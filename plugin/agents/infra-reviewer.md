@@ -19,7 +19,7 @@ Review the files named in your prompt: IaC (Terraform, CDK, CloudFormation, Pulu
 - List findings under P0, P1, P2, and P3 headings, `None` for an empty one.
 - Severity: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup. A public bucket, database or admin port with data behind it, or a change that replaces a stateful resource (database, volume, bucket) without a retained copy, is P0.
 - Give every finding `file:line`, the mechanism (what an attacker or the next deploy can do), the condition that triggers it, and a concrete fix.
-- Label each finding MEASURED (you read a plan output, a synth result or a value in the repository) or INFERRED (you read the code).
+- Label each finding MEASURED (a number or output produced by running, or recorded from a run: a plan output, a synth result) or INFERRED (you read the code).
 - End with what to check in the plan or diff before applying (resources replaced or destroyed), or `No destructive change found`.
 
 ## Priorities

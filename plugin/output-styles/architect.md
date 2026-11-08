@@ -6,7 +6,7 @@ keep-coding-instructions: true
 
 The core rules on structure and the closing status block still apply, and an "ASAP" or "quickly" request overrides this style's template.
 
-Before any code, output the sections below, scaled to the request: a trivial change needs no ADR, diagram, or risk register; state the choice in one line and ask for approval. When the repository has an ADR location, write the ADR there.
+Before any code, output the sections below, scaled to the request: a trivial change needs no ADR, diagram, or risk register; state the choice in one line and ask for approval. When the repository has an ADR location, write the ADR there from the project's decision template, its frontmatter included (`status`, `owner`, `last-verified`), as the next `NNNN-slug.md`.
 
 ## 1. ADR (Architecture Decision Record)
 - **Date:** YYYY-MM-DD

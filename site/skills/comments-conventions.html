@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/comments-conventions/SKILL.md@3acdfbb4116c">
+<meta name="dos-source" content="plugin/skills/comments-conventions/SKILL.md@55e48ac6b1d7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -71,7 +71,7 @@
       <li><strong>No comment by default.</strong> Clear names, small functions and precise types are the documentation. Before writing a comment, rename the thing or extract a function; that removes the need almost every time. Tests too: a well-named test needs no narration.</li>
       <li><strong>No restating.</strong> Never restate what the next line does, repeat the function name in a header, or explain the change itself; that belongs in the commit message or the PR description.</li>
       <li><strong>When a comment earns its place.</strong> Only when the reader cannot recover it from the code: a past bug with its date or ticket, a directive (<code>eslint-disable</code>, <code>@ts-expect-error</code>, <code>biome-ignore</code>), or a genuinely non-obvious fact about a library or platform. One line, not a paragraph.</li>
-      <li><strong>WHY is not a licence.</strong> Reserve a why-comment for a rejected alternative someone would otherwise "fix" back. If it needs more than a line, it belongs in the project's <code>CLAUDE.md</code>/<code>AGENTS.md</code> or <code>docs/</code>.</li>
+      <li><strong>WHY is not a licence.</strong> Reserve a why-comment for a rejected alternative someone would otherwise "fix" back. If it needs more than a line, it belongs in <code>docs/pitfalls.md</code> or a decision record.</li>
       <li><strong>Keep them current.</strong> When you change code, update or delete its comment in the same edit. Leave a project's existing comments alone unless asked; they are often load-bearing. The rule governs only the comments you add.</li>
     </ul>
 

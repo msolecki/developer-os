@@ -18,8 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os agents and output styles">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/output-styles/architect.md@932d9fd411be">
-<meta name="dos-source" content="plugin/output-styles/debug.md@b7f2e7b5400f">
+<meta name="dos-source" content="plugin/output-styles/architect.md@34833e2e92c8">
+<meta name="dos-source" content="plugin/output-styles/debug.md@edde2a261640">
 <meta name="dos-source" content="plugin/output-styles/direct-objective.md@979ea697d966">
 <meta name="dos-source" content="plugin/output-styles/tdd-enforcer.md@b831661054fc">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -60,7 +60,7 @@
       <div class="fact"><dt>Overridden by</dt><dd>"ASAP" or "quickly"; a skill's autonomous loop</dd></div>
     </dl>
     <h3 id="what-architect-does">What architect does</h3>
-    <p>Before any code it writes these sections, scaled to the request: a trivial change gets no ADR, diagram or risk register, only the choice in one line and a request for approval. When the repository has an ADR location, the ADR is written there.</p>
+    <p>Before any code it writes these sections, scaled to the request: a trivial change gets no ADR, diagram or risk register, only the choice in one line and a request for approval. When the repository has an ADR location, the ADR is written there from the project's decision template, its frontmatter included (<code>status</code>, <code>owner</code>, <code>last-verified</code>), as the next <code>NNNN-slug.md</code>.</p>
     <ol>
       <li><strong>ADR.</strong> Date, Status (proposed, accepted or superseded by NNNN), Context, Decision, Consequences (positive, negative, neutral), Alternatives rejected and Revisit when, the shape docs-sync checks.</li>
       <li><strong>Diagram.</strong> A Mermaid <code>flowchart</code> of components and data flow, or a <code>sequenceDiagram</code> for interactions between systems.</li>
@@ -80,7 +80,7 @@
     <h3 id="what-debug-does">What debug does</h3>
     <ol>
       <li><strong>A hypothesis before code.</strong> Before editing it writes "I suspect X because Y. If true, Z should show W." and verifies it through observation (a log, a debugger, a test), not trial edits.</li>
-      <li><strong>A failing regression test before the fix.</strong> Without a reproduction you only know the symptom went away. The test stays in the repository as a contract pin; when a race or an environment dependency makes an automated test impossible, the manual reproduction steps go into the task's plan.</li>
+      <li><strong>A failing regression test before the fix.</strong> Without a reproduction you only know the symptom went away. The test stays in the repository as a contract pin; when a race or an environment dependency makes an automated test impossible, the manual reproduction steps go next to the test or into <code>docs/runbooks/</code>, since the task's plan is deleted when done.</li>
       <li><strong>One change at a time.</strong> Each iteration is one hypothesis, one change, one observation, one conclusion.</li>
     </ol>
     <p>It reports as Problem (what happens, with evidence), Cause (the verified hypothesis), Solution and Test (the passing regression test, or the documented manual reproduction).</p>
