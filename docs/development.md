@@ -54,7 +54,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page under `site/docs/` whose words differ from its source's (D28); a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
-| agnix | `agnix --target claude-code --strict --config .agnix.toml .` reports an error or warning; the stage runs when `agnix` is on `PATH`, prints `SKIP agnix` otherwise, and fails when it is missing in CI |
+| agnix | `agnix --target claude-code --strict --config .agnix.toml .` reports an error or warning; the stage runs when `agnix` is on `PATH`, prints `SKIP agnix` otherwise, and fails when it is missing in CI; `AGNIX` overrides the command |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
 
 The file set is tracked plus untracked-not-ignored files, so a new doc is checked before it is

@@ -419,8 +419,10 @@ for d in . plugin; do
 done
 
 # Static lint of skills, hooks and manifests (.agnix.toml). CI sets up the pinned release; locally it runs when on PATH.
-if command -v agnix >/dev/null 2>&1; then
-  agnix --target claude-code --strict --config .agnix.toml . >&2 || fail agnix . "agnix --strict failed above"
+# AGNIX overrides the command (tests/check.test.sh points it at a missing binary).
+agnix=${AGNIX:-agnix}
+if command -v "$agnix" >/dev/null 2>&1; then
+  "$agnix" --target claude-code --strict --config .agnix.toml . >&2 || fail agnix . "agnix --strict failed above"
 elif [ -n "${CI:-}" ]; then
   fail agnix . "agnix not found; CI must set it up"
 else

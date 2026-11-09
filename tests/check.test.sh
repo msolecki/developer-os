@@ -100,9 +100,9 @@ run "an agnix finding fails the check" fail "agnix: .: agnix --strict failed abo
 rm "$tmp/bin/agnix"
 runpath=
 
-# In CI a missing agnix fails, never skips: a PATH without any directory that holds agnix.
-noagnix=$(IFS=:; for d in $PATH; do [ -x "$d/agnix" ] || printf '%s:' "$d"; done)
-out=$(cd "$r" && CI=1 PATH="${noagnix%:}" bash scripts/check.sh 2>&1) && got=pass || got=fail
+# In CI a missing agnix fails, never skips. AGNIX names a binary that does not exist: dropping agnix's directory
+# from PATH would also drop the other tools CI installs there (/usr/local/bin) and fail an earlier stage.
+out=$(cd "$r" && CI=1 AGNIX="$tmp/no-agnix" bash scripts/check.sh 2>&1) && got=pass || got=fail
 case $out in *"agnix not found; CI must set it up"*) ;; *) got="$got without the agnix message" ;; esac
 if [ "$got" = fail ]; then echo "ok   agnix missing in CI fails"; else echo "FAIL agnix missing in CI fails: got $got" >&2; failed=1; fi
 reset
