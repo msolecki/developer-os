@@ -32,6 +32,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   agents in CI for prompt injection (AGT-07, AGT-08, AGT-09).
 - A handoff and the state card name what is not started, what is not verified, and what to do if a named
   risk happens (FLOW-56).
+- session-retro takes a window (`14d`, a date, `all`) and runs `harvest.py`, a stdlib transcript scan for
+  rejections, interruptions, retractions and repeated tool errors, and routes at most five lessons; the
+  Imports stage also covers skill scripts (FLOW-55).
+- An optional `brain_vault` plugin option; notices.py and the brain skills prefer it over the
+  `Brain vault:` line (BRAIN-16).
+- `scripts/site-hashes.py` recomputes every `dos-source` hash; implement-backlog and parallel-lanes run
+  the project's regeneration command after each lane merge (FLOW-60, #134).
+- implement-backlog runs parallel delegates with a git-ignored backlog when each brief carries the full
+  item text, and has an optional PR ending, only on request, that never merges (FLOW-60, #134).
+- Behaviour eval cases for bug-triage and client-reply (CHK-14).
 
 ### Changed
 
@@ -53,6 +63,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   FLOW-43, FLOW-44, FLOW-45, FLOW-47, FLOW-48, FLOW-49, FLOW-50, SEC-12, AGT-12, AGT-13, BRAIN-11 and
   BRAIN-12; the project template ignores `.worktrees/` and asks for the fast check and the full suite
   (DOC-08).
+- bug-triage requires a failing repro command before ranking hypotheses and names a root cause only
+  when toggling one condition switches the bug on and off (FLOW-21).
+- audit-to-backlog briefs reviewers with a KEEP/DROP impact rubric, lints each `Check` and runs a P1/P2
+  `Check` red before writing the item (FLOW-59, #126).
+- security-auditor reports an excluded class when the finding shows a concrete account-takeover or
+  token-theft path (AGT-17); parallel-lanes' `resume.sh` defines `TOOLS` and `DENY` itself (FLOW-58).
 
 ### Fixed
 
@@ -62,6 +78,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - guard's quote scanner is linear, so a long command no longer runs into the hook timeout (FLOW-36).
 - hooks.md, the glossary, configuration.md, the architecture overview, D7 and the vault README match the
   code; `__pycache__` is ignored (DOC-10, DOC-12, DOC-13, DOC-14, DOC-15, DOC-16, BRAIN-15, CHK-16).
+- guard: a quoted-delimiter heredoc commit message no longer asks; `python -m pip install`, `docker
+  compose -f a.yml down -v` and an abbreviated `--out=` in a read-only agent ask; vendored `test/` paths
+  pass; MultiEdit is matched and a Write that adds a skip marker asks (SEC-16 to SEC-20, FLOW-57).
+- A check.test.sh case pins that a missing agnix fails in CI (CHK-18).
 
 ## [0.2.8] - 2026-11-08
 

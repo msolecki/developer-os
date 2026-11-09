@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-import-memory/SKILL.md@1ed80711f872">
+<meta name="dos-source" content="plugin/skills/brain-import-memory/SKILL.md@580307f9f971">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,7 +68,7 @@
     <h2 id="what-it-does">What it does</h2>
     <p>Claude Code's auto memory keeps one folder per project and machine, written without review, with its <code>MEMORY.md</code> index loaded into every session. developer-os keeps long-term knowledge in the vault (decision D24), so this skill drains that folder into the vault once, with the same gate as <a href="brain-capture.html">brain-capture</a>.</p>
     <ol>
-      <li><strong>Finds the vault</strong> from a path you or the calling skill gave, or the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code>, as the other brain skills do.</li>
+      <li><strong>Finds the vault</strong> from a path you or the calling skill gave, or the plugin option <code>brain_vault</code>, or the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code>, as the other brain skills do.</li>
       <li><strong>Finds the memory folder:</strong> <code>&lt;config&gt;/projects/&lt;project&gt;/memory/</code>, named after the repository's main checkout (so every worktree finds the same folder) with every non-alphanumeric character as <code>-</code>, or <code>autoMemoryDirectory</code> from the local, project or user settings (a leading <code>~/</code> is expanded). When it is missing or empty, it lists the projects that have memory files with their counts and asks which one; with all projects, it handles one folder at a time.</li>
       <li><strong>Reads and checks each file</strong> except <code>MEMORY.md</code>, which it reads only to report an index line whose file is missing. It searches the vault for each file's topic, reads the matching notes and gives the file one label: <code>covered</code> (a note, the user-level <code>CLAUDE.md</code>, its <code>rules/</code> or the project's instruction file already says it), <code>add</code> (sentences for an existing note), <code>new</code> (an inbox note in brain-capture's format; files on one topic make one note), <code>preference</code> (a line for the user-level <code>CLAUDE.md</code>), <code>project-rule</code> (a line for the repository's instruction file) or <code>skip</code> (with the reason). A file that contradicts a note shows both claims; the newer, better-evidenced one is proposed, otherwise the note stays. Everything brain-capture redacts (secrets, account IDs, IP addresses, client personal data) becomes <code>[REDACTED]</code>.</li>
       <li><strong>Shows the list and asks,</strong> with each new note in full and each addition as a diff.</li>

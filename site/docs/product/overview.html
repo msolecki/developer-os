@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/overview.md@cb5e0c90a3f9">
+<meta name="dos-source" content="docs/product/overview.md@eb2dafc98156">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -53,7 +53,7 @@
 <p>A Claude Code plugin, installed from this repository as a plugin marketplace, that adds two things:</p>
 <ol>
 <li><strong>Long-term memory in an Obsidian vault.</strong> Eight <code>brain-*</code> skills let the agent search the vault before a task, capture decisions and lessons into the vault's <code>_inbox/</code> while it works, and help the user review, garden and consolidate what was captured. The vault is plain Markdown; the agent reads and writes it with its own file tools. The user approves everything that becomes knowledge.</li>
-<li><strong>An engineering operating model.</strong> Core rules loaded into every session, workflow skills (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up), conventions skills, ten agents (nine specialists and a verifier), four output styles and small hooks, among them a guard on Bash, Edit and Write.</li>
+<li><strong>An engineering operating model.</strong> Core rules loaded into every session, workflow skills (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up), conventions skills, ten agents (nine specialists and a verifier), four output styles and small hooks, among them a guard on Bash, Edit, Write and MultiEdit.</li>
 </ol>
 <p>The plugin is Markdown and JSON plus five Python 3 hook scripts (standard library only). There is no server, database, index, binary, background job or network call in the plugin itself.</p>
 <h2 id="who-it-is-for">Who it is for</h2>
@@ -82,7 +82,7 @@
 <tr><td>Conventions skills</td><td>7 (<code>*-conventions</code>)</td><td><code>plugin/skills/</code></td></tr>
 <tr><td>Agents</td><td>10</td><td><code>plugin/agents/</code></td></tr>
 <tr><td>Output styles</td><td>4</td><td><code>plugin/output-styles/</code></td></tr>
-<tr><td>Hooks</td><td>6 (three on <code>SessionStart</code>, one on <code>Stop</code>, one on <code>PreToolUse</code> for Bash, Edit and Write, one on <code>PostToolUseFailure</code>)</td><td><code>plugin/hooks/hooks.json</code></td></tr>
+<tr><td>Hooks</td><td>6 (three on <code>SessionStart</code>, one on <code>Stop</code>, one on <code>PreToolUse</code> for Bash, Edit, Write and MultiEdit, one on <code>PostToolUseFailure</code>)</td><td><code>plugin/hooks/hooks.json</code></td></tr>
 <tr><td>Core rules</td><td>1 file</td><td><code>plugin/rules/core.md</code></td></tr>
 <tr><td>Vault template</td><td>1</td><td><code>plugin/vault-template/</code></td></tr>
 <tr><td>Project template</td><td>1</td><td><code>templates/project/</code> (in the repository, not in the installed plugin)</td></tr>

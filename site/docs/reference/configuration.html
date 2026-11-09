@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/configuration.md@10738b9c4c9e">
+<meta name="dos-source" content="docs/reference/configuration.md@503cea3d57f0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -47,13 +47,14 @@
   <main id="main" class="prose">
     <h1 id="configuration-reference">Configuration reference</h1>
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/configuration.md">docs/reference/configuration.md</a></span><span>Verified 2026-11-08</span></p>
-    <p>The plugin has no configuration file of its own. It is configured through lines and keys in files
-    the user already has, which the skills read. This page lists every one of them.</p>
+    <p>The plugin has no configuration file of its own. It is configured through one optional plugin option
+    and through lines and keys in files the user already has, which the skills read. This page lists every one of them.</p>
     <h2 id="user-level">User level</h2>
     <div class="table-wrap">
       <table>
         <thead><tr><th scope="col">Setting</th><th scope="col">Where</th><th scope="col">Read by</th><th scope="col">Written by</th></tr></thead>
         <tbody>
+          <tr><td>Plugin option <code>brain_vault</code> (optional, a directory)</td><td><code>pluginConfigs</code> in user or managed settings; Claude Code ignores project and local entries (D5)</td><td>All brain skills and the notices hook, before the <code>Brain vault:</code> line</td><td>The user, in the plugin's configuration dialog or <code>/config</code></td></tr>
           <tr><td><code>Brain vault: &lt;absolute path&gt;</code></td><td><code>~/.claude/CLAUDE.md</code> only; a project's <code>CLAUDE.md</code>/<code>AGENTS.md</code> is never read for it (D5)</td><td>All brain skills, unless you or a calling skill name the path; the core rule that runs brain-search before large tasks; the notices hook</td><td>brain-setup, after approval</td></tr>
           <tr><td>Vault in <code>permissions.additionalDirectories</code></td><td><code>~/.claude/settings.json</code></td><td>Claude Code, so the vault can be read from any project</td><td>brain-setup, after approval</td></tr>
           <tr><td><code>"autoMemoryEnabled": false</code> (recommended, D24)</td><td><code>~/.claude/settings.json</code>; <code>CLAUDE_CODE_DISABLE_AUTO_MEMORY=1</code> in the environment wins over it</td><td>Claude Code: no auto-memory files are created or loaded; existing ones stay on disk</td><td>brain-setup, after a separate yes; brain-import-memory, as one of its numbered items; the <code>/memory</code> toggle writes the same key</td></tr>

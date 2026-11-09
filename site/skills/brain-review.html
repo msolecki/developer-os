@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-review/SKILL.md@85f3d857cd21">
+<meta name="dos-source" content="plugin/skills/brain-review/SKILL.md@f4ae4b7fb336">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,7 +54,7 @@
       <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
       <div class="fact"><dt>Writes</dt><dd>Moves named notes to a topic folder or <code>_archive/</code>; edits the surviving note in a merge; marks a named note superseded; after a separate yes to the shown diff, updates project-hub lines that link a reviewed note with the <code>(waiting for review)</code> marker</dd></div>
       <div class="fact"><dt>Asks before</dt><dd>Each note, by name; "looks good" is not approval</dd></div>
-      <div class="fact"><dt>Needs</dt><dd><code>Brain vault:</code> line</dd></div>
+      <div class="fact"><dt>Needs</dt><dd>The <code>brain_vault</code> option or a <code>Brain vault:</code> line</dd></div>
     </dl>
 
     <h2 id="when-it-runs">When it runs</h2>
@@ -67,7 +67,7 @@
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
-      <li><strong>Finds the vault</strong> from a path you or the calling skill gave, or the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code>, as the other brain skills do, and asks once if there is none.</li>
+      <li><strong>Finds the vault</strong> from a path you or the calling skill gave, or the plugin option <code>brain_vault</code>, or the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code>, as the other brain skills do, and asks once if there is none.</li>
       <li><strong>Lists the inbox</strong> and the topic folders: every top-level folder not starting with <code>_</code>, except <code>templates/</code>.</li>
       <li><strong>Summarizes and proposes.</strong> For each inbox note it shows the <code>summary</code>, the best-fitting folder (<code>PROJECTS/</code>, <code>DEV/</code>, <code>TOOLS/</code>, <code>INFRA/</code>, <code>QA/</code> or one you added) and any likely duplicate found with <code>rg</code>. It flags missing frontmatter keys and any secret that slipped through, proposing <code>[REDACTED]</code>. The list ends with "Approve which ones?".</li>
       <li><strong>Promotes the notes you approve.</strong> The name must match <code>^[a-z0-9-]+$</code> and be unique in the vault, compared case-insensitively as Obsidian resolves links, or it asks and changes nothing. It moves the file keeping its name, so <code>[[name]]</code> links still resolve, and only then sets <code>status: active</code> and <code>updated</code>. A note without frontmatter gets the full frontmatter from <code>templates/note.md</code>.</li>

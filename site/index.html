@@ -215,7 +215,7 @@
       </div>
       <div class="hooks">
         <div class="hook"><span class="event">SessionStart <span class="badge info">loads</span></span><p>Prints the core rules; after a compaction, resume or fork, a second hook adds the state card of at most 1 KB.</p></div>
-        <div class="hook"><span class="event">PreToolUse · Bash, Edit, Write <span class="badge ask">asks</span></span><p>Asks before installs with a package argument, force pushes, git-hook bypasses, commands that destroy uncommitted work, and edits of secret or agent-config files. It never denies; in headless <code>claude -p</code> an ask becomes a denial.</p></div>
+        <div class="hook"><span class="event">PreToolUse · Bash, Edit, Write, MultiEdit <span class="badge ask">asks</span></span><p>Asks before installs with a package argument, force pushes, git-hook bypasses, commands that destroy uncommitted work, and edits of secret or agent-config files. It never denies; in headless <code>claude -p</code> an ask becomes a denial.</p></div>
         <div class="hook"><span class="event">PostToolUseFailure <span class="badge info">reminds</span></span><p>At the third identical failed call within 10 minutes of the last, tells the agent to stop retrying it unchanged and find the cause.</p></div>
         <div class="hook"><span class="event">Stop <span class="badge info">suggests</span></span><p>Once per long session, suggests session-retro. Reads tool-call counts and background-task ids, paths and times, never message content.</p></div>
       </div>
@@ -386,7 +386,7 @@
         </details>
         <details>
           <summary>Can I use it without a vault?</summary>
-          <p>Yes. The engineering and session skills, the agents and the hooks work on their own. The brain skills ask once for the vault path and stop if you have none, and the core rules run brain-search only when a <code>Brain vault:</code> line exists.</p>
+          <p>Yes. The engineering and session skills, the agents and the hooks work on their own. The brain skills ask once for the vault path and stop if you have none, and the core rules run brain-search only when a vault is configured (the <code>brain_vault</code> option or a <code>Brain vault:</code> line).</p>
         </details>
         <details>
           <summary>Can a hook block a command?</summary>

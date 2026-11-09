@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@32448967fa56">
+<meta name="dos-source" content="README.md@de9dbfdd81a0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -114,10 +114,10 @@ Monitor start times from it, never message content. Once per session, after 30 t
 while a background agent, command or Monitor it can see is still running, it asks the agent to run the session-retro skill, which proposes a wrap-up and applies only what you
 approve. Set <code>DEVELOPER_OS_CAPTURE_NUDGE=off</code> to turn it off, or <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN=&lt;n&gt;</code>
 to change the threshold.</p>
-    <p>A <code>PreToolUse</code> hook on Bash, Edit and Write (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/guard.py"><code>plugin/hooks/guard.py</code></a>) asks for confirmation
+    <p>A <code>PreToolUse</code> hook on Bash, Edit, Write and MultiEdit (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/guard.py"><code>plugin/hooks/guard.py</code></a>) asks for confirmation
 (it never blocks) before a dependency install, update or removal with a package argument
 (<code>npm|pnpm|yarn|bun install|add|i|update|remove &lt;pkg&gt;</code>, an alias such as <code>npm in</code>, <code>npm un</code> or <code>bun a</code>,
-<code>update --latest</code>, or the binary by full path; also <code>pip install</code>, <code>uv add</code>, <code>cargo add</code>, <code>go get</code> and the like, and <code>npx -y &lt;pkg&gt;</code>), a <code>git push</code> with <code>--force</code>, <code>-f</code>, a <code>+refspec</code> or
+<code>update --latest</code>, or the binary by full path; also <code>pip install</code> (and <code>python -m pip install</code>), <code>uv add</code>, <code>cargo add</code>, <code>go get</code> and the like, and <code>npx -y &lt;pkg&gt;</code>), a <code>git push</code> with <code>--force</code>, <code>-f</code>, a <code>+refspec</code> or
 <code>-c remote.&lt;name&gt;.push=+…</code> (even next to <code>--force-with-lease</code>; a lone <code>--force-with-lease</code> passes; git
 also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of it such as <code>--no-veri</code>,
 <code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form, and a command
