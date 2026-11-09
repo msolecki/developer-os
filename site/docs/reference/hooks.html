@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@7f95a2619625">
+<meta name="dos-source" content="docs/reference/hooks.md@52ca571c606e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -106,9 +106,9 @@ Worktrees:
     its output is a few hundred bytes.</p>
     <p><strong>Input:</strong> the hook JSON on stdin; uses <code>source</code> (anything but <code>startup</code> prints nothing; a missing <code>source</code> does not stop the hook). It also reads
     <code>${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json</code> for the version, and the vault path from the plugin's
-    <code>brain_vault</code> option (<code>CLAUDE_PLUGIN_OPTION_BRAIN_VAULT</code>) or, when that is unset or empty, from the
+    <code>brain_vault</code> option, read from <code>pluginConfigs</code> in the user-level <code>settings.json</code>, or, when that is unset or empty, from the
     <code>Brain vault:</code> line in <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code> (or <code>~/.claude/CLAUDE.md</code>), the user-level file
-    brain-setup writes. Claude Code reads the option from user or managed settings only. A
+    brain-setup writes. It never reads <code>CLAUDE_PLUGIN_OPTION_BRAIN_VAULT</code>, which a project's settings <code>env</code> block could set. A
     project's <code>CLAUDE.md</code> or <code>AGENTS.md</code> is never read, so a cloned repository cannot point the hook at a
     directory of its choosing. A <code>version</code> in <code>plugin.json</code> that does not match <code>[0-9A-Za-z.+-]{1,32}</code> makes
     the hook print nothing, the vault notices included.</p>
@@ -269,8 +269,7 @@ Worktrees:
           <tr><td><code>DEVELOPER_OS_REPEAT_FAILURE</code></td><td>repeat-failure</td><td><code>off</code> disables the repeated-failure reminder</td></tr>
           <tr><td><code>CLAUDE_CODE_ENTRYPOINT</code></td><td>capture-nudge, notices</td><td>Set by Claude Code but not in its documentation, so it may change without notice; <code>sdk-*</code> skips the hook</td></tr>
           <tr><td><code>CLAUDE_PLUGIN_DATA</code></td><td>capture-nudge, notices, repeat-failure</td><td>Set by Claude Code; marker directory root, kept across plugin updates</td></tr>
-          <tr><td><code>CLAUDE_CONFIG_DIR</code></td><td>notices, guard</td><td>Where the user-level config lives (default <code>~/.claude</code>): notices reads the <code>Brain vault:</code> line from its <code>CLAUDE.md</code>; guard protects the same files under it</td></tr>
-          <tr><td><code>CLAUDE_PLUGIN_OPTION_BRAIN_VAULT</code></td><td>notices</td><td>Set by Claude Code from the plugin's <code>brain_vault</code> option; when non-empty it wins over the <code>Brain vault:</code> line</td></tr>
+          <tr><td><code>CLAUDE_CONFIG_DIR</code></td><td>notices, guard</td><td>Where the user-level config lives (default <code>~/.claude</code>): notices reads the <code>brain_vault</code> option from its <code>settings.json</code> and the <code>Brain vault:</code> line from its <code>CLAUDE.md</code>; guard protects the same files under it</td></tr>
           <tr><td><code>CLAUDE_PLUGIN_ROOT</code></td><td>hooks.json, notices</td><td>Set by Claude Code; plugin install path</td></tr>
           <tr><td><code>TMPDIR</code></td><td>capture-nudge, notices, repeat-failure</td><td>Marker directory root when <code>CLAUDE_PLUGIN_DATA</code> is unset (default <code>/tmp</code>)</td></tr>
         </tbody>

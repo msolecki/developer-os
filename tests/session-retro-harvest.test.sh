@@ -21,6 +21,8 @@ expect "all adds the 2020 rejection" "$want" "$(h --since all | grep '^rejection
 
 h --since bogus >/dev/null 2>&1
 expect "a bad --since exits 2" 2 $?
+h --since 99999999999d >/dev/null 2>&1
+expect "an out-of-range --since exits 2" 2 $?
 
 expect "a missing root prints nothing" "" "$(python3 -I plugin/skills/session-retro/harvest.py --since all --root "$T/none")"
 

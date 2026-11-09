@@ -126,7 +126,7 @@ prints nothing outside `compact`/`resume`/`fork`, that the card holds the plan a
 safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds command fixtures to `guard.py` and expects `ask` or silence;
 `tests/repeat-failure.test.sh` feeds failed tool calls to `repeat-failure.py` and expects the reminder only at the third failure of the same call;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code, the JSON output and the message;
-`tests/notices.test.sh` runs `notices.py` with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's `CLAUDE.md` is ignored, that the `brain_vault` option wins over the line and an empty one falls back to it, and that no note name is printed;
+`tests/notices.test.sh` runs `notices.py` with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's `CLAUDE.md` is ignored, that the `brain_vault` option in the user-level `settings.json` wins over the line, an empty one falls back to it and its environment variable is ignored, and that no note name is printed;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
 stage's message; it runs the whole check once per case (several minutes), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;

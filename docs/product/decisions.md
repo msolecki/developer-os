@@ -76,8 +76,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   shell templates set it in single quotes.
 - **Amended 2026-11-08:** the Open point on `userConfig` is resolved: the plugin declares an optional
   `brain_vault` option (`type: directory`), and the line stays as the fallback, so setup without the
-  plugin dialog still works. Skills read `${user_config.brain_vault}` and the notices hook reads
-  `CLAUDE_PLUGIN_OPTION_BRAIN_VAULT`, preferring a non-empty option over the line
+  plugin dialog still works. Skills read `${user_config.brain_vault}` and the notices hook reads the option from
+  `pluginConfigs` in the user-level `settings.json` (never `CLAUDE_PLUGIN_OPTION_BRAIN_VAULT`, which a
+  project's settings `env` block could set), preferring a non-empty option over the line
   (https://code.claude.com/docs/en/plugins-reference#user-configuration). Claude Code reads
   `pluginConfigs` from user or managed settings only and ignores project and local entries
   (https://code.claude.com/docs/en/settings-reference#pluginconfigs), so the option keeps the rule

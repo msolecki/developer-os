@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@dcd9110724b3">
+<meta name="dos-source" content="docs/product/decisions.md@15dd3c95e005">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -85,7 +85,7 @@
 <li><strong>Why:</strong> works identically in Claude Code and Codex with no plugin configuration mechanism.</li>
 <li><strong>Amended 2026-10-24:</strong> the lookup no longer reads <code>~/.codex/AGENTS.md</code> (D21).</li>
 <li><strong>Amended 2026-11-08:</strong> skills take the vault path from the user or the calling skill, otherwise from the user-level <code>CLAUDE.md</code> only, as D22 does for the notices hook: a cloned repository must not point brain-search or brain-capture at a directory of its choosing. No project-file lookup, no mismatch warning. A path holding a quote, <code>$</code>, a backtick, <code>\</code> or a newline is rejected, and the shell templates set it in single quotes.</li>
-<li><strong>Amended 2026-11-08:</strong> the Open point on <code>userConfig</code> is resolved: the plugin declares an optional <code>brain_vault</code> option (<code>type: directory</code>), and the line stays as the fallback, so setup without the plugin dialog still works. Skills read <code>${user_config.brain_vault}</code> and the notices hook reads <code>CLAUDE_PLUGIN_OPTION_BRAIN_VAULT</code>, preferring a non-empty option over the line (https://code.claude.com/docs/en/plugins-reference#user-configuration). Claude Code reads <code>pluginConfigs</code> from user or managed settings only and ignores project and local entries (https://code.claude.com/docs/en/settings-reference#pluginconfigs), so the option keeps the rule above: a cloned repository cannot supply the path. The docs do not say what an unset <code>${user_config.KEY}</code> renders as in skill content, so the skills treat an empty value or an unexpanded <code>${...}</code> placeholder as unset.</li>
+<li><strong>Amended 2026-11-08:</strong> the Open point on <code>userConfig</code> is resolved: the plugin declares an optional <code>brain_vault</code> option (<code>type: directory</code>), and the line stays as the fallback, so setup without the plugin dialog still works. Skills read <code>${user_config.brain_vault}</code> and the notices hook reads the option from <code>pluginConfigs</code> in the user-level <code>settings.json</code> (never <code>CLAUDE_PLUGIN_OPTION_BRAIN_VAULT</code>, which a project's settings <code>env</code> block could set), preferring a non-empty option over the line (https://code.claude.com/docs/en/plugins-reference#user-configuration). Claude Code reads <code>pluginConfigs</code> from user or managed settings only and ignores project and local entries (https://code.claude.com/docs/en/settings-reference#pluginconfigs), so the option keeps the rule above: a cloned repository cannot supply the path. The docs do not say what an unset <code>${user_config.KEY}</code> renders as in skill content, so the skills treat an empty value or an unexpanded <code>${...}</code> placeholder as unset.</li>
 </ul>
 <h2 id="d6-hooks-ask-never-deny-and-fail-open">D6. Hooks ask, never deny, and fail open</h2>
 <ul>

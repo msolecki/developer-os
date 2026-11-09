@@ -34,7 +34,10 @@ def parse_args(argv):
     if since == "all":
         start = None
     elif since and re.fullmatch(r"\d+d", since):
-        start = today - datetime.timedelta(days=int(since[:-1]))
+        try:
+            start = today - datetime.timedelta(days=int(since[:-1]))
+        except (OverflowError, ValueError):
+            usage()
     elif since and re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
         try:
             start = datetime.date.fromisoformat(since)
@@ -142,10 +145,10 @@ def main():
     for dirpath, _, filenames in os.walk(root):
         for fn in sorted(filenames):
             path = os.path.join(dirpath, fn)
-            if not fn.endswith(".jsonl") or os.path.getmtime(path) < floor:
-                continue
-            files += 1
             try:
+                if not fn.endswith(".jsonl") or os.path.getmtime(path) < floor:
+                    continue
+                files += 1
                 scan(path, start, cwd, seen, found, errors)
             except OSError:
                 continue

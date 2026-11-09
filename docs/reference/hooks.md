@@ -75,9 +75,9 @@ its output is a few hundred bytes.
 
 **Input:** the hook JSON on stdin; uses `source` (anything but `startup` prints nothing; a missing `source` does not stop the hook). It also reads
 `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` for the version, and the vault path from the plugin's
-`brain_vault` option (`CLAUDE_PLUGIN_OPTION_BRAIN_VAULT`) or, when that is unset or empty, from the
+`brain_vault` option, read from `pluginConfigs` in the user-level `settings.json`, or, when that is unset or empty, from the
 `Brain vault:` line in `$CLAUDE_CONFIG_DIR/CLAUDE.md` (or `~/.claude/CLAUDE.md`), the user-level file
-brain-setup writes. Claude Code reads the option from user or managed settings only. A project's `CLAUDE.md` or `AGENTS.md` is never read, so a cloned repository cannot point the hook at a
+brain-setup writes. It never reads `CLAUDE_PLUGIN_OPTION_BRAIN_VAULT`, which a project's settings `env` block could set. A project's `CLAUDE.md` or `AGENTS.md` is never read, so a cloned repository cannot point the hook at a
 directory of its choosing. A `version` in `plugin.json` that does not match `[0-9A-Za-z.+-]{1,32}` makes
 the hook print nothing, the vault notices included.
 
@@ -279,7 +279,6 @@ script reads the file's modification time with `stat` and runs no other program 
 | `DEVELOPER_OS_REPEAT_FAILURE` | repeat-failure | `off` disables the repeated-failure reminder |
 | `CLAUDE_CODE_ENTRYPOINT` | capture-nudge, notices | Set by Claude Code but not in its documentation, so it may change without notice; `sdk-*` skips the hook |
 | `CLAUDE_PLUGIN_DATA` | capture-nudge, notices, repeat-failure | Set by Claude Code; marker directory root, kept across plugin updates |
-| `CLAUDE_CONFIG_DIR` | notices, guard | Where the user-level config lives (default `~/.claude`): notices reads the `Brain vault:` line from its `CLAUDE.md`; guard protects the same files under it |
-| `CLAUDE_PLUGIN_OPTION_BRAIN_VAULT` | notices | Set by Claude Code from the plugin's `brain_vault` option; when non-empty it wins over the `Brain vault:` line |
+| `CLAUDE_CONFIG_DIR` | notices, guard | Where the user-level config lives (default `~/.claude`): notices reads the `brain_vault` option from its `settings.json` and the `Brain vault:` line from its `CLAUDE.md`; guard protects the same files under it |
 | `CLAUDE_PLUGIN_ROOT` | hooks.json, notices | Set by Claude Code; plugin install path |
 | `TMPDIR` | capture-nudge, notices, repeat-failure | Marker directory root when `CLAUDE_PLUGIN_DATA` is unset (default `/tmp`) |

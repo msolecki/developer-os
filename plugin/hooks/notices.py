@@ -8,9 +8,8 @@
 - Inbox notes in the vault are older than 7 days: suggest brain-review, at most once every 7 days.
 - No brain-garden run in 30 days: suggest brain-garden, at most once every 30 days.
 
-The vault path comes from the plugin's brain_vault option (CLAUDE_PLUGIN_OPTION_BRAIN_VAULT; Claude Code
-reads it from user or managed settings only) or else from the user-level CLAUDE.md, where brain-setup writes
-it, never from the project: a cloned repository must not point the hook at a directory of its choosing. It prints counts and
+The vault path comes from the plugin's brain_vault option in the user-level settings.json (pluginConfigs)
+or else from the user-level CLAUDE.md, where brain-setup writes it, never from the project: a cloned repository must not point the hook at a directory of its choosing. It prints counts and
 dates, never a vault file name, and reads a bounded prefix of each file.
 
 Fails open: every unexpected state exits 0 with no output. Skips headless and SDK runs, like capture-nudge.
@@ -63,10 +62,24 @@ def marker(path):
         return ""
 
 
+def option(config):
+    # The brain_vault option from the user-level settings.json only; CLAUDE_PLUGIN_OPTION_BRAIN_VAULT is not
+    # read, because a project's settings `env` block could set that variable.
+    try:
+        configs = json.loads(head(os.path.join(config, "settings.json"), 1 << 20)).get("pluginConfigs") or {}
+        for key, entry in configs.items():
+            if key.split("@")[0] == "developer-os":
+                v = (entry.get("options") or {}).get("brain_vault")
+                return v.strip() if isinstance(v, str) else ""
+    except (OSError, ValueError, AttributeError):
+        pass
+    return ""
+
+
 def vault_path():
-    v = os.environ.get("CLAUDE_PLUGIN_OPTION_BRAIN_VAULT", "").strip()
+    config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    v = option(config)
     if not v:
-        config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
         try:
             m = re.search(r"^Brain vault:[ \t]*(\S.*?)[ \t]*$", head(os.path.join(config, "CLAUDE.md"), 65536), re.M)
         except OSError:
