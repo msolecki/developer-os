@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-11-09
+
 ### Added
 
 - `site/workflow.html`: an animated overview of how knowledge moves between the session, the vault and
