@@ -224,13 +224,19 @@ def installs(words):
         if any(name == m and tuple(ops[:len(s)]) == s and len(ops) > len(s) for m, s in PKG):
             return True
         if re.fullmatch(r"python[\d.]*", name):
-            j = 0  # interpreter options before -m; -X and -W take a value
-            while j < len(rest) and rest[j].startswith("-") and rest[j] != "-m":
+            # Interpreter options before -m (-X and -W take a value); -m may close a short-option cluster
+            # (`-Im`) and carry its module attached (`-mpip`).
+            j, mod = 0, None
+            while j < len(rest) and rest[j].startswith("-"):
+                mod = re.fullmatch(r"-[A-Za-z]*m(\S*)", rest[j]) if rest[j][1:2] not in ("X", "W") else None
+                if mod:
+                    break
                 j += 2 if rest[j] in ("-X", "-W") else 1
-            sub = rest[j:]
-            ops = [x for k, x in enumerate(sub) if not x.startswith("-") and (k == 0 or sub[k - 1] not in PKG_VALUE)]
-            if sub[:1] == ["-m"] and ops[:1] in (["pip"], ["pip3"]) and ops[1:2] == ["install"] and len(ops) > 2:
-                return True
+            if mod:
+                sub = ([mod.group(1)] if mod.group(1) else []) + rest[j + 1:]
+                ops = [x for k, x in enumerate(sub) if not x.startswith("-") and (k == 0 or sub[k - 1] not in PKG_VALUE)]
+                if ops[:1] in (["pip"], ["pip3"]) and ops[1:2] == ["install"] and len(ops) > 2:
+                    return True
     return False
 
 
@@ -608,14 +614,17 @@ def skips_added(tool, inp, path):
     there is none; a FIFO would block the read)."""
     count = lambda s: len(SKIP_MARK.findall(s)) if isinstance(s, str) else 0
     if tool == "Write":
-        old = ""
+        old, new, cap = "", inp.get("content"), 1 << 20
         if os.path.isfile(path):
             try:
                 with open(path, encoding="utf-8", errors="replace") as f:
-                    old = f.read(1 << 20)  # a bounded prefix keeps a huge file under the hook timeout
+                    old = f.read(cap + 1)  # a bounded prefix keeps a huge file under the hook timeout
             except OSError:
                 pass
-        return count(inp.get("content")) > count(old)
+        if len(old) > cap and isinstance(new, str):
+            # ponytail: a file over the cap compares equal prefixes, so a marker added past the first MiB is missed
+            old, new = old[:cap], new[:cap]
+        return count(new) > count(old)
     edits = inp.get("edits") if tool == "MultiEdit" else [inp]
     pairs = [e for e in edits if isinstance(e, dict)] if isinstance(edits, list) else []
     return sum(count(e.get("new_string")) - count(e.get("old_string")) for e in pairs) > 0

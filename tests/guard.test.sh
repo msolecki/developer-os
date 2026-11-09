@@ -564,6 +564,12 @@ check ask "$(fx 'python3 -m pip install requests')" "Dependency install"
 check ask "$(fx 'python3.12 -m pip install -U x')" "Dependency install"
 check pass "$(fx 'python -m pip list')"
 check pass "$(fx 'python3 -m pip install -r requirements.txt')"
+# short options clustered with -m, and the module attached to it
+check ask "$(fx 'python -Im pip install x')" "Dependency install"
+check ask "$(fx 'python -mpip install x')" "Dependency install"
+check ask "$(fx 'python3 -u -Em pip3 install x')" "Dependency install"
+check pass "$(fx 'python -Im pip list')"
+check pass "$(fx 'python -Wmodule script.py install x')"
 # SEC-21: interpreter options before -m
 check ask "$(fx 'python -u -m pip install requests')" "Dependency install"
 check ask "$(fx 'python3 -X dev -m pip install x')" "Dependency install"
@@ -600,6 +606,10 @@ check pass "$(fw "$wd/new.test.ts" 'it(a)')"
 # SEC-22: only the first MiB of the file on disk is read, so a marker past it does not count
 { head -c 1048576 /dev/zero | tr '\0' 'x'; printf '\nit.skip(a)\n'; } > "$wd/big.test.ts"
 check ask "$(fw "$wd/big.test.ts" 'it.skip(a)')" "test"
+# rewriting the same large file, its marker past the first MiB kept, is not an added skip
+xs=$(head -c 1048576 /dev/zero | tr '\0' 'x')
+printf '%s\nit.skip(a)' "$xs" > "$wd/big.test.ts"
+check pass "$(fw "$wd/big.test.ts" "$xs\\nit.skip(a)")"
 rm -rf "$wd"
 grep -q '"Bash|Edit|Write|MultiEdit"' "$(dirname "$0")/../plugin/hooks/hooks.json" || { fail=1; echo "FAIL: hooks.json matcher lacks MultiEdit"; }
 

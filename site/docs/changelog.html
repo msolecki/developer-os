@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@5d5ae45aa78b">
+<meta name="dos-source" content="CHANGELOG.md@c190b1d7a56e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -130,7 +130,7 @@ compose -f a.yml down -v</code> and an abbreviated <code>--out=</code> in a read
 pass; MultiEdit is matched and a Write that adds a skip marker asks (SEC-16 to SEC-20, FLOW-57).</li>
 <li>A check.test.sh case pins that a missing agnix fails in CI (CHK-18).</li>
 <li>brain-garden&#8217;s scan writes <code>$(0)</code>, because Claude Code replaced <code>$0</code> with the skill&#8217;s argument; every eval case without a measured mutation is now measured, and five graders that failed correct runs are fixed (CHK-08).</li>
-<li>parallel-lanes and skill-usage no longer hold a bare <code>$1</code>/<code>$0</code>, and the Skill sections stage fails on one (SKL-01); guard asks on <code>python -u -m pip install</code> and reads only the first MiB of a test file on a Write (SEC-21, SEC-22); brain-setup names the <code>brain_vault</code> option (BRAIN-17).</li>
+<li>parallel-lanes and skill-usage no longer hold a bare <code>$1</code>/<code>$0</code>, and the Skill sections stage fails on one (SKL-01); guard asks on <code>python -u -m pip install</code>, <code>-Im pip</code> and <code>-mpip</code>, and compares at most the first MiB of a large test file on a Write (SEC-21, SEC-22); brain-setup names the <code>brain_vault</code> option (BRAIN-17).</li>
     </ul>
     <h2 id="028---2026-11-08">[0.2.8] - 2026-11-08</h2>
     <h3 id="028-added">Added</h3>
