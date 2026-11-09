@@ -92,10 +92,10 @@ while a background agent, command or Monitor it can see is still running, it ask
 approve. Set `DEVELOPER_OS_CAPTURE_NUDGE=off` to turn it off, or `DEVELOPER_OS_CAPTURE_NUDGE_MIN=<n>`
 to change the threshold.
 
-A `PreToolUse` hook on Bash, Edit and Write ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) asks for confirmation
+A `PreToolUse` hook on Bash, Edit, Write and MultiEdit ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) asks for confirmation
 (it never blocks) before a dependency install, update or removal with a package argument
 (`npm|pnpm|yarn|bun install|add|i|update|remove <pkg>`, an alias such as `npm in`, `npm un` or `bun a`,
-`update --latest`, or the binary by full path; also `pip install`, `uv add`, `cargo add`, `go get` and the like, and `npx -y <pkg>`), a `git push` with `--force`, `-f`, a `+refspec` or
+`update --latest`, or the binary by full path; also `pip install` (and `python -m pip install`), `uv add`, `cargo add`, `go get` and the like, and `npx -y <pkg>`), a `git push` with `--force`, `-f`, a `+refspec` or
 `-c remote.<name>.push=+…` (even next to `--force-with-lease`; a lone `--force-with-lease` passes; git
 also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `--no-veri`,
 `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form, and a command

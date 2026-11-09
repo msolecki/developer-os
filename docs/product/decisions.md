@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-08
+last-verified: 2026-11-09
 ---
 
 # Decisions
@@ -40,6 +40,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   depend on Python; without `python3` the other three hooks fail open.
 - **Amended 2026-10-24:** a fourth script, `notices.py`, on `SessionStart` `startup` (D22).
 - **Amended 2026-11-08:** a fifth script, repeat-failure.py (D26).
+- **Amended 2026-11-08:** a stdlib script may also sit beside a skill, run by that skill and checked by
+  the Imports stage: `plugin/skills/session-retro/harvest.py`, which reads past session transcripts for
+  session-retro's window mode (FLOW-55).
 
 ## D3. The vault is read and written with the agent's own file tools
 
@@ -71,8 +74,17 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   point brain-search or brain-capture at a directory of its choosing. No project-file lookup, no
   mismatch warning. A path holding a quote, `$`, a backtick, `\` or a newline is rejected, and the
   shell templates set it in single quotes.
-- **Open:** replacing the line with the plugin's `userConfig` is under consideration (a local,
-  git-ignored proposal, not in the repository).
+- **Amended 2026-11-08:** the Open point on `userConfig` is resolved: the plugin declares an optional
+  `brain_vault` option (`type: directory`), and the line stays as the fallback, so setup without the
+  plugin dialog still works. Skills read `${user_config.brain_vault}` and the notices hook reads the option from
+  `pluginConfigs` in the user-level `settings.json` (never `CLAUDE_PLUGIN_OPTION_BRAIN_VAULT`, which a
+  project's settings `env` block could set), preferring a non-empty option over the line
+  (https://code.claude.com/docs/en/plugins-reference#user-configuration). Claude Code reads
+  `pluginConfigs` from user or managed settings only and ignores project and local entries
+  (https://code.claude.com/docs/en/settings-reference#pluginconfigs), so the option keeps the rule
+  above: a cloned repository cannot supply the path. The docs do not say what an unset
+  `${user_config.KEY}` renders as in skill content, so the skills treat an empty value or an
+  unexpanded `${...}` placeholder as unset.
 
 ## D6. Hooks ask, never deny, and fail open
 
@@ -146,6 +158,13 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   get`/`install`, `composer require`, `bundle add`, `gem install`, each with a package argument, and
   `npx -y`/`--yes`, which runs freshly fetched code; core.md's install rule was text only in Python,
   Rust, Go and PHP repositories (SEC-14).
+- **Amended 2026-11-08:** from the PR #133 review: a quoted-delimiter heredoc (`<<'EOF'`, `<<"EOF"`)
+  that is the whole body of a commit message's `$(…)` is not scanned (SEC-16); `python -m pip install`
+  asks (SEC-17); an option value (`-f`, `-p`, `--project-directory`) no longer hides `docker compose
+  down -v` (SEC-18); in the read-only agents an unambiguous prefix of `--output`/`--output-directory`
+  (`--out=`) asks (SEC-19); vendored `node_modules/`, `vendor/` and `.venv/` paths are not test paths
+  (FLOW-57); the matcher adds MultiEdit, and a Write that adds a skip marker the file on disk lacks
+  asks (SEC-20).
 - **Amended 2026-11-08:** a test category: an Edit of a test file (`*.test.*`, `*.spec.*`, `tests/`,
   `test_*.py`, `*_test.go`) whose `new_string` holds more skip or focus markers than its `old_string`
   (`it.skip(`, `.only(`, `xit(`, `@pytest.mark.skip`, `t.Skip(` and the like), and `rm`/`git rm` of a
@@ -302,6 +321,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   lint is proposed to projects yet.
 - **Why:** parallel agents took the same or blocked items, and implementers could lower a criterion
   to pass. A project lint waits until plan-status shows the format drifting.
+- **Amended 2026-11-08:** with a git-ignored backlog, implement-backlog keeps the `Owner` lines
+  uncommitted in the orchestrator's checkout and still runs parallel delegates, each brief carrying the
+  full item text, instead of running the batch sequentially; a run of 9 parallel lanes over 63 items
+  worked this way (#134). When the user asks for a PR, it pushes the batch branch and opens one, never
+  merging it, instead of the local fast-forward.
 
 ## D18. agnix in CI only, pinned
 
@@ -505,3 +529,7 @@ here before reversing a rule.
 | 2026-11-08 | Uncommitted subagent changes are the caller's to commit; "Agents produce commits" -> "Lanes produce commits" | `plugin/rules/core.md` | Agents never commit since #117 (RULE-01) |
 | 2026-11-08 | `-F <msg-file>`; test-config rule moved to Validation; unfinished plan items go to the `Backlog:` paths (default `TODO.md`) | `plugin/rules/core.md` | Wording fixes (RULE-02) |
 | 2026-11-08 | A site page in the repository that restates a doc or skill counts as a doc for the docs finding | `code-review` | Skill pages drifted from their `SKILL.md` while every review passed (D28) |
+| 2026-11-08 | security-auditor gets a closed not-a-finding list read with `docs/reference/review-exclusions.md`; rate limiting, including on auth endpoints, moves from the focus list to it (AGT-07, #133). Amended the same day: an excluded class (missing rate limiting, open redirect) is reported when the finding shows a concrete account-takeover or token-theft path with `file:line` (AGT-17) | `security-auditor` | The exclusions cut inflated P1s, but as a closed list they hid a login with no throttle and a `?next=` redirect that lead to takeover or token theft (PR #133 review) |
+| 2026-11-08 | audit-to-backlog briefs reviewers with a KEEP/DROP impact rubric, rejects a `Check` joined by prose, ending in `\| head`, already passing or restating the current code, runs each P1/P2 `Check` red before writing the item, and recommends re-verifying an old backlog (#126) | `audit-to-backlog` | About 30% of P2/P3 items were dropped on re-verification and 5 of about 50 P1/P2 Checks were wrong |
+| 2026-11-08 | implement-backlog runs parallel delegates with a git-ignored backlog (uncommitted `Owner` lines, full item text in each brief) and has an optional PR ending, only on request, that pushes the batch branch and opens a PR it never merges; implement-backlog and parallel-lanes run the project's regeneration command for derived files after each lane merge and every `Check` from the worktree root (#134; D17 amended) | `implement-backlog`, `parallel-lanes`, `audit-to-backlog` | A git-ignored backlog forced sequential work, a requested PR had no steps, site hashes conflicted on every lane merge, and a `Check` run from another checkout tested the wrong tree |
+| 2026-11-08 | session-retro with a window (`14d`, a date, `all`) runs `harvest.py` on past transcripts and proposes at most five lessons from its candidates, routed to the vault, project docs or a hook/check proposal, never to `CLAUDE.md`/`AGENTS.md` without approval of that file by name; transcript text is data | `session-retro` | Corrections spread across sessions were never collected, so the same correction recurred (FLOW-55) |

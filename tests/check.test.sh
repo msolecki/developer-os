@@ -100,8 +100,18 @@ run "an agnix finding fails the check" fail "agnix: .: agnix --strict failed abo
 rm "$tmp/bin/agnix"
 runpath=
 
+# In CI a missing agnix fails, never skips. AGNIX names a binary that does not exist: dropping agnix's directory
+# from PATH would also drop the other tools CI installs there (/usr/local/bin) and fail an earlier stage.
+out=$(cd "$r" && CI=1 AGNIX="$tmp/no-agnix" bash scripts/check.sh 2>&1) && got=pass || got=fail
+case $out in *"agnix not found; CI must set it up"*) ;; *) got="$got without the agnix message" ;; esac
+if [ "$got" = fail ]; then echo "ok   agnix missing in CI fails"; else echo "FAIL agnix missing in CI fails: got $got" >&2; failed=1; fi
+reset
+
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'
 run "an action skill without ## Never" fail "plugin/skills/spec/SKILL.md: skill has no ## Never section"
+
+printf '%s\n' "awk '{ print \$1 }'" >> "$r/plugin/skills/plan-status/SKILL.md"
+run "a bare \$1 in a skill body" fail "plugin/skills/plan-status/SKILL.md: skill body has a bare \$1"
 
 edit plugin/skills/spec/SKILL.md 's/^description: .*/description: Too short./'
 run "a skill description under 80 characters" fail "description is 10 characters, allowed 80-1024"
@@ -264,6 +274,9 @@ run "an eval case with only llm graders" fail "evals: evals/spec-no-implementati
 
 printf 'import urllib.request\n' >> "$r/plugin/hooks/notices.py"
 run "a hook importing a network module" fail "imports: plugin/hooks: import outside the standard-library allowlist"
+
+printf 'import urllib.request\n' >> "$r/plugin/skills/session-retro/harvest.py"
+run "a skill script importing a network module" fail "imports: plugin/hooks: import outside the standard-library allowlist"
 
 printf 'x = __import__("socket")\n' >> "$r/plugin/hooks/notices.py"
 run "a hook loading a module dynamically" fail "imports: plugin/hooks: network module or dynamic import"

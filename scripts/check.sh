@@ -24,6 +24,7 @@ done
 # session's skill listing. A skill with disable-model-invocation: true is not in the listing, so it does not count.
 # Every skill has a non-empty ## Stop point and a ## Never section with at least one `- ` rule, except the read-only ones: *-conventions,
 # brain-search, code-review, plan-status and skill-usage (they write nothing inside the repository, send nothing and change no git state).
+# No skill body holds a bare $<digit>: Claude Code substitutes it with the skill's argument.
 files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
   require "date"; require "yaml"
   read_only = %w[brain-search code-review plan-status skill-usage]
@@ -61,8 +62,12 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
     n = y["description"].to_s.size
     bad.("description is #{n} characters, allowed 80-1024") unless (80..1024).cover?(n)
     total += n unless y["disable-model-invocation"] == true
-    next if read_only.include?(want) || want.end_with?("-conventions")
     body = lines[close..].join("\n")
+    # Claude Code replaces $<digits> in skill content with the skill arguments (brain-garden, PR #136).
+    if (m = body[/\$\d+(?!\w)/])
+      bad.("skill body has a bare #{m}, which Claude Code replaces with the skill argument; write $(N) in awk, ${N} in sh")
+    end
+    next if read_only.include?(want) || want.end_with?("-conventions")
     ["## Stop point", "## Never"].each do |h|
       sec = body[/^#{h}$(.*?)(?=^## |\z)/m, 1]
       bad.("skill has no #{h} section") unless sec
@@ -170,13 +175,13 @@ files 'evals/*' | ruby -e '
   end
   (readme - cases).each { |c| abort "evals: evals/README.md: row #{c} names no case" }'
 
-# D2: hook scripts use the Python 3 standard library only and open no network connection. An import outside this
+# D2: hook and skill scripts use the Python 3 standard library only and open no network connection. An import outside this
 # allowlist fails (add a stdlib module here deliberately), and so does any network module, however it is loaded.
 stdlib='datetime|hashlib|itertools|json|os|re|stat|subprocess|sys|time'
-if grep -nE '^[[:space:]]*(import|from)[[:space:]]' plugin/hooks/*.py | grep -vE ":[[:space:]]*(import|from) ($stdlib)( |\$)" >&2; then
+if grep -nE '^[[:space:]]*(import|from)[[:space:]]' plugin/hooks/*.py plugin/skills/*/*.py | grep -vE ":[[:space:]]*(import|from) ($stdlib)( |\$)" >&2; then
   fail imports plugin/hooks "import outside the standard-library allowlist above"
 fi
-if grep -nE '\b(urllib|socket|http\.client|requests|httpx|importlib|__import__)\b' plugin/hooks/*.py >&2; then
+if grep -nE '\b(urllib|socket|http\.client|requests|httpx|importlib|__import__)\b' plugin/hooks/*.py plugin/skills/*/*.py >&2; then
   fail imports plugin/hooks "network module or dynamic import above"
 fi
 
@@ -414,8 +419,10 @@ for d in . plugin; do
 done
 
 # Static lint of skills, hooks and manifests (.agnix.toml). CI sets up the pinned release; locally it runs when on PATH.
-if command -v agnix >/dev/null 2>&1; then
-  agnix --target claude-code --strict --config .agnix.toml . >&2 || fail agnix . "agnix --strict failed above"
+# AGNIX overrides the command (tests/check.test.sh points it at a missing binary).
+agnix=${AGNIX:-agnix}
+if command -v "$agnix" >/dev/null 2>&1; then
+  "$agnix" --target claude-code --strict --config .agnix.toml . >&2 || fail agnix . "agnix --strict failed above"
 elif [ -n "${CI:-}" ]; then
   fail agnix . "agnix not found; CI must set it up"
 else

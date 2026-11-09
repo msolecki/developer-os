@@ -30,7 +30,7 @@ Never include the content of a vault or a secret. Describe it instead.
   line of the user-level `CLAUDE.md`, the first 2 KB of `_inbox/` notes and the last line of
   `_reports/garden-log.md`, and shows counts and dates, never note names; `Stop` runs
   `capture-nudge.py`, which counts `tool_use` entries in the session transcript and reads only
-  background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; `PreToolUse` runs `guard.py` on Bash, Edit and Write calls and can only ask for confirmation; `PostToolUseFailure` runs `repeat-failure.py`, which stores per-session hashes of failed calls, never their text, and can only add a reminder.
+  background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; `PreToolUse` runs `guard.py` on Bash, Edit, Write and MultiEdit calls and can only ask for confirmation; `PostToolUseFailure` runs `repeat-failure.py`, which stores per-session hashes of failed calls, never their text, and can only add a reminder.
   The five scripts are Python 3 with the standard library only, make no network calls and fail open. The plugin ships no binary,
   server or network code.
 - Updates come from this Git repository through the Claude Code plugin marketplace: each update

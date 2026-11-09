@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""PreToolUse guard for Bash, Edit and Write.
+"""PreToolUse guard for Bash, Edit, Write and MultiEdit.
 
 Answers "ask" (never "deny") before a dependency install, update or removal with a package argument
-(npm, pnpm, yarn, bun; in command position also the PKG table, pip to gem, and `npx -y`),
+(npm, pnpm, yarn, bun; in command position also the PKG table, pip to gem, `python -m pip install`, and `npx -y`),
 a force push (--force, -f, a +refspec or remote.<name>.push=+; a --force-with-lease alone passes),
 `git commit -n`, or any --no-verify, HUSKY=0, LEFTHOOK=0, SKIP= or core.hooksPath in any form, and before a
 command that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag,
@@ -14,12 +14,12 @@ infrastructure, data or deploy destroy from the closed INFRA list (`terraform de
 `kubectl delete`, `vercel --prod`, ...), in command position or after a runner such as `npx`. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
-An Edit or Write asks when its `file_path` is a secret or the agent's own user-level config: a `.env`,
+An Edit, Write or MultiEdit asks when its `file_path` is a secret or the agent's own user-level config: a `.env`,
 `.envrc`, `.env.*` or `.envrc.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
 `~/.gnupg`, `~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude/CLAUDE.md`,
 or anything under `~/.claude/hooks`, `rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`; the same files under
-`$CLAUDE_CONFIG_DIR` when it is set. An Edit of a test file (TEST_PATH) asks when `new_string` holds more
-skip or focus markers (SKIP_MARK) than `old_string`, and so does `rm`/`git rm` of one or `mv` of one to
+`$CLAUDE_CONFIG_DIR` when it is set. A change to a test file (TEST_PATH) asks when it adds skip or focus
+markers (SKIP_MARK, see skips_added()), and so does `rm`/`git rm` of one or `mv` of one to
 `.bak`, `.disabled` or `.skip`.
 
 Inside the read-only agents (code-reviewer, database-reviewer, dependency-upgrader, infra-reviewer,
@@ -36,7 +36,7 @@ agent to run the project's fast check first; the rule loaded at session start fa
 
 Quotes are stripped before matching, so `sh -c "pnpm add zod"` asks, and so does a mention such as
 `echo "pnpm add zod"`: install, push and hook-bypass words count anywhere, except in a quoted commit
-message (`-m "..."`, see messages()). An extra prompt costs one click; a missed install rewrites the lockfile.
+message (`-m "..."`, or `-m "$(cat <<'EOF' ... EOF\\n)"`, see messages()). An extra prompt costs one click; a missed install rewrites the lockfile.
 """
 import json
 import os
@@ -223,6 +223,21 @@ def installs(words):
             return True
         if any(name == m and tuple(ops[:len(s)]) == s and len(ops) > len(s) for m, s in PKG):
             return True
+        if re.fullmatch(r"python[\d.]*", name):
+            # Interpreter options before -m, up to `--`. In a short-option cluster the first m, X or W decides:
+            # m takes the rest as its module (`-Im pip`, `-mpip`), X and W take it as their value, or the next word.
+            j, mod = 0, None
+            while j < len(rest) and rest[j].startswith("-") and rest[j] != "--":
+                opt = re.fullmatch(r"-[A-Za-z]*?([mXW])(\S*)", rest[j])
+                if opt and opt.group(1) == "m":
+                    mod = opt
+                    break
+                j += 2 if opt and not opt.group(2) else 1
+            if mod:
+                sub = ([mod.group(2)] if mod.group(2) else []) + rest[j + 1:]
+                ops = [x for k, x in enumerate(sub) if not x.startswith("-") and (k == 0 or sub[k - 1] not in PKG_VALUE)]
+                if ops[:1] in (["pip"], ["pip3"]) and ops[1:2] == ["install"] and len(ops) > 2:
+                    return True
     return False
 
 
@@ -236,6 +251,9 @@ INFRA = [(t, s, f) for t in ("terraform", "tofu") for s, f in (
     ("kubectl", ("delete",), None), ("helm", ("uninstall",), None), ("vercel", (), {"--prod"})]
 # Words that run the next word as the command (`npx prisma`, `pnpm exec prisma`, `php artisan`, `bundle exec rails`).
 RUNNERS = {"npx", "bunx", "pnpx", "pnpm", "yarn", "bun", "php", "bundle", "exec", "dlx"}
+# Options whose value is the next word, so it does not split a subcommand (`docker compose -f a.yml down`).
+INFRA_VALUE = {"-f", "--file", "-p", "--project-name", "--project-directory", "--env-file", "--profile", "-c",
+               "--context", "-H", "--host"}
 
 
 def infra(words):
@@ -248,7 +266,8 @@ def infra(words):
         if i >= len(words):
             continue
         name, rest = words[i].rsplit("/", 1)[-1], words[i + 1:]
-        ops, flags = [x for x in rest if not x.startswith("-")], {x.split("=")[0] for x in rest if x.startswith("-")}
+        ops = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in INFRA_VALUE)]
+        flags = {x.split("=")[0] for x in rest if x.startswith("-")}
         for cmd, sub, need in INFRA:
             n = len(sub)
             if name == cmd and any(tuple(ops[k:k + n]) == sub for k in range(len(ops) - n + 1)) and (need is None or need & flags):
@@ -256,7 +275,9 @@ def infra(words):
     return False
 
 
-TEST_PATH = re.compile(r"(^|/)(tests?|__tests__)(/|$)|\.(test|spec)\.[^/]+$|(^|/)test_[^/]*\.py$|_test\.go$")
+# A test file of the project; one under node_modules/, vendor/ or .venv/ is a dependency's.
+TEST_PATH = re.compile(r"^(?!(?:.*/)?(?:node_modules|vendor|\.venv)/).*?"
+                       r"(?:(^|/)(tests?|__tests__)(/|$)|\.(test|spec)\.[^/]+$|(^|/)test_[^/]*\.py$|_test\.go$)")
 # A marker that skips or focuses a test (`it.skip(`, `.only(`, `@pytest.mark.skip`); `model.fit(` is none.
 SKIP_MARK = re.compile(r"\b(?:it|test|describe)\.skip\(|(?<![\w.])(?:xit|xdescribe|fit|fdescribe)\(|\.only\(|"
                        r"@pytest\.mark\.(?:skip|xfail)|pytest\.skip\(|@unittest\.skip|@Disabled|@Ignore|\bt\.Skip")
@@ -363,7 +384,7 @@ def git_writes(sub, rest):
         outs = []
         for k, x in enumerate(rest):
             name, eq, value = x.partition("=")
-            if name in ("--output", "--output-directory") or (x.startswith("-o") and not x.startswith("--")):
+            if long(name, "--output") or long(name, "--output-directory") or (x.startswith("-o") and not x.startswith("--")):
                 if not eq:
                     value = x[2:] if x.startswith("-o") and len(x) > 2 else (rest[k + 1] if k + 1 < len(rest) else "")
                 outs.append(value or ".")
@@ -446,6 +467,30 @@ def unquoted(cmd):
 
 
 MESSAGE = re.compile(r"""(\s(?:-[a-zA-Z]*m|-F|--message|--file)(?:=|\s+))("(?:[^"\\]|\\.)*"|'[^']*')""")
+# `-m "$(cat <<'EOF'` or `<<"EOF"`, up to the end of the delimiter line.
+HEREDOC = re.compile(r"""(\s(?:-[a-zA-Z]*m|--message)(?:=|\s+))"\$\(\s*cat\s+<<(-?)\s*(['"])(\w+)\3[ \t]*\n""")
+
+
+def heredocs(s):
+    """`-m "$(cat <<'EOF' ... EOF\\n)"` becomes `-m x`: a quoted-delimiter heredoc is never expanded. The body
+    ends at the first line that is the delimiter (`<<-` strips leading tabs), and only `)"` may follow it;
+    anything else after that line is a command the shell runs, so the value stays."""
+    pos = 0
+    while True:
+        m = HEREDOC.search(s, pos)
+        if not m:
+            return s
+        lines, end = s[m.end():].split("\n"), None
+        for k, line in enumerate(lines):
+            if (line.lstrip("\t") if m.group(2) else line) == m.group(4):
+                rest = "\n".join(lines[k + 1:])
+                end = re.match(r'\s*\)"', rest)
+                break
+        if not end:
+            pos = m.end()
+            continue
+        s = s[:m.start()] + m.group(1) + "x" + rest[end.end():]
+        pos = m.start() + len(m.group(1)) + 1
 
 
 def messages(cmd):
@@ -459,7 +504,7 @@ def messages(cmd):
     if "commit" not in s:
         return cmd
     keep = lambda m: m.group(0) if m.group(2)[0] == '"' and ("$(" in m.group(2) or "`" in m.group(2)) else m.group(1) + "x"
-    return json.dumps(MESSAGE.sub(keep, s), ensure_ascii=False)[1:-1]
+    return json.dumps(MESSAGE.sub(keep, heredocs(s)), ensure_ascii=False)[1:-1]
 
 
 def scratch(path):
@@ -564,6 +609,28 @@ def protected(path):
     return any(p in files or any(p == d or p.startswith(d + os.sep) for d in dirs) for p in paths)
 
 
+def skips_added(tool, inp, path):
+    """More skip or focus markers after the call than before: Edit's `new_string` over its `old_string`, the
+    `edits` of a MultiEdit summed, a Write's `content` over the first MiB of the regular file on disk (empty when
+    there is none; a FIFO would block the read)."""
+    count = lambda s: len(SKIP_MARK.findall(s)) if isinstance(s, str) else 0
+    if tool == "Write":
+        old, new, cap = "", inp.get("content"), 1 << 20
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    old = f.read(cap + 1)  # a bounded prefix keeps a huge file under the hook timeout
+            except OSError:
+                pass
+        if len(old) > cap and isinstance(new, str):
+            # ponytail: a file over the cap compares equal prefixes, so a marker added past the first MiB is missed
+            old, new = old[:cap], new[:cap]
+        return count(new) > count(old)
+    edits = inp.get("edits") if tool == "MultiEdit" else [inp]
+    pairs = [e for e in edits if isinstance(e, dict)] if isinstance(edits, list) else []
+    return sum(count(e.get("new_string")) - count(e.get("old_string")) for e in pairs) > 0
+
+
 def ask(reason):
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": REASONS[reason]}},
@@ -572,13 +639,13 @@ def ask(reason):
 
 def main():
     raw = sys.stdin.buffer.read().decode("utf-8", "replace")
-    if re.search(r'"tool_name"\s*:\s*"(Edit|Write)"', raw):
+    tool = re.search(r'"tool_name"\s*:\s*"(Edit|Write|MultiEdit)"', raw)
+    if tool:
         inp = json.loads(raw).get("tool_input", {})
-        path, old, new = inp.get("file_path"), inp.get("old_string"), inp.get("new_string")
+        path = inp.get("file_path")
         if isinstance(path, str) and protected(path):
             ask("protected")
-        elif isinstance(path, str) and TEST_PATH.search(path) and isinstance(old, str) and isinstance(new, str) and (
-                len(SKIP_MARK.findall(new)) > len(SKIP_MARK.findall(old))):
+        elif isinstance(path, str) and TEST_PATH.search(path) and skips_added(tool.group(1), inp, path):
             ask("tests")
         return
     cmd = command(raw)

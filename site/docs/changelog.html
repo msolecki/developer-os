@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@c60919d9b078">
+<meta name="dos-source" content="CHANGELOG.md@c190b1d7a56e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -77,6 +77,16 @@ with <code>REFUTE_REASON</code>; code-reviewer names the trigger of every P0 and
 checks AI agents in CI for prompt injection (AGT-07, AGT-08, AGT-09).</li>
 <li>A handoff and the state card name what is not started, what is not verified, and what to do if a named
 risk happens (FLOW-56).</li>
+<li>session-retro takes a window (<code>14d</code>, a date, <code>all</code>) and runs <code>harvest.py</code>, a stdlib transcript scan for
+rejections, interruptions, retractions and repeated tool errors, and routes at most five lessons; the
+Imports stage also covers skill scripts (FLOW-55).</li>
+<li>An optional <code>brain_vault</code> plugin option; notices.py and the brain skills prefer it over the
+<code>Brain vault:</code> line (BRAIN-16).</li>
+<li><code>scripts/site-hashes.py</code> recomputes every <code>dos-source</code> hash; implement-backlog and parallel-lanes run
+the project's regeneration command after each lane merge (FLOW-60, #134).</li>
+<li>implement-backlog runs parallel delegates with a git-ignored backlog when each brief carries the full
+item text, and has an optional PR ending, only on request, that never merges (FLOW-60, #134).</li>
+<li>Behaviour eval cases for bug-triage and client-reply (CHK-14).</li>
     </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
@@ -99,6 +109,12 @@ P0–P3 layout; the verifier omits <code>CLAUDE.md</code> (AGT-11, AGT-14, AGT-1
 FLOW-43, FLOW-44, FLOW-45, FLOW-47, FLOW-48, FLOW-49, FLOW-50, SEC-12, AGT-12, AGT-13, BRAIN-11 and
 BRAIN-12; the project template ignores <code>.worktrees/</code> and asks for the fast check and the full
 suite (DOC-08).</li>
+<li>bug-triage requires a failing repro command before ranking hypotheses and names a root cause only
+when toggling one condition switches the bug on and off (FLOW-21).</li>
+<li>audit-to-backlog briefs reviewers with a KEEP/DROP impact rubric, lints each <code>Check</code> and runs a P1/P2
+<code>Check</code> red before writing the item (FLOW-59, #126).</li>
+<li>security-auditor reports an excluded class when the finding shows a concrete account-takeover or
+token-theft path (AGT-17); parallel-lanes' <code>resume.sh</code> defines <code>TOOLS</code> and <code>DENY</code> itself (FLOW-58).</li>
     </ul>
     <h3 id="unreleased-fixed">Fixed</h3>
     <ul>
@@ -109,6 +125,12 @@ implement-backlog's L-item approval, brain-setup's <code>.obsidian/types.json</c
 <li>hooks.md, the glossary, configuration.md, the architecture overview, D7 and the vault README match the
 code; <code>__pycache__</code> is ignored (DOC-10, DOC-12, DOC-13, DOC-14, DOC-15, DOC-16, BRAIN-15,
 CHK-16).</li>
+<li>guard: a quoted-delimiter heredoc commit message no longer asks; <code>python -m pip install</code>, <code>docker
+compose -f a.yml down -v</code> and an abbreviated <code>--out=</code> in a read-only agent ask; vendored <code>test/</code> paths
+pass; MultiEdit is matched and a Write that adds a skip marker asks (SEC-16 to SEC-20, FLOW-57).</li>
+<li>A check.test.sh case pins that a missing agnix fails in CI (CHK-18).</li>
+<li>brain-garden&#8217;s scan writes <code>$(0)</code>, because Claude Code replaced <code>$0</code> with the skill&#8217;s argument; every eval case without a measured mutation is now measured, and five graders that failed correct runs are fixed (CHK-08).</li>
+<li>parallel-lanes and skill-usage no longer hold a bare <code>$1</code>/<code>$0</code>, and the Skill sections stage fails on one (SKL-01); guard asks on <code>python -u -m pip install</code>, <code>-Im pip</code> and <code>-mpip</code>, and compares at most the first MiB of a large test file on a Write (SEC-21, SEC-22); brain-setup names the <code>brain_vault</code> option (BRAIN-17).</li>
     </ul>
     <h2 id="028---2026-11-08">[0.2.8] - 2026-11-08</h2>
     <h3 id="028-added">Added</h3>

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-capture/SKILL.md@c10be4115ec7">
+<meta name="dos-source" content="plugin/skills/brain-capture/SKILL.md@c7d8ecf49a36">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,7 +54,7 @@
       <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
       <div class="fact"><dt>Writes</dt><dd>One new note in <code>_inbox/</code>, <code>status: inbox</code></dd></div>
       <div class="fact"><dt>Asks before</dt><dd>Once for the why, when it is missing; writing a capture it started on its own</dd></div>
-      <div class="fact"><dt>Needs</dt><dd><code>Brain vault:</code> line</dd></div>
+      <div class="fact"><dt>Needs</dt><dd>The <code>brain_vault</code> option or a <code>Brain vault:</code> line</dd></div>
     </dl>
 
     <h2 id="when-it-runs">When it runs</h2>
@@ -67,7 +67,7 @@
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
-      <li><strong>Finds the vault.</strong> It takes a vault path you or the calling skill gave, else the <code>Brain vault: &lt;absolute path&gt;</code> line from <code>~/.claude/CLAUDE.md</code> (or <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code>) only, never from a project's <code>CLAUDE.md</code> or <code>AGENTS.md</code>. A path holding a quote, <code>$</code>, a backtick, <code>\</code> or a newline is rejected. With no line it asks you once; without a vault it stops.</li>
+      <li><strong>Finds the vault.</strong> It takes a vault path you or the calling skill gave, else the plugin option <code>brain_vault</code>, else the <code>Brain vault: &lt;absolute path&gt;</code> line from <code>~/.claude/CLAUDE.md</code> (or <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code>) only, never from a project's <code>CLAUDE.md</code> or <code>AGENTS.md</code>. A path holding a quote, <code>$</code>, a backtick, <code>\</code> or a newline is rejected. With neither it asks you once; without a vault it stops.</li>
       <li><strong>Checks that it outlives the task.</strong> Four questions: would it help in another task or project, is the why written down, is it absent from the code, plan and ADRs, and could a test, lint rule or project instruction hold it instead? A lesson a check or instruction already holds is not written; the file is named, and one that could hold it is proposed instead of a note. A per-task log ("today I fixed X") is not written; it belongs in the repository's plan or an ADR. A missing why is asked for once. Content already in the repository is linked by path, not copied.</li>
       <li><strong>Looks for an existing note.</strong> It searches the vault with <code>rg</code> for the topic's keywords. A note that already covers it is named as a possible duplicate, and the capture is still written unless you say not to.</li>
       <li><strong>Redacts secrets.</strong> API keys, tokens, passwords, private keys, connection strings or URLs with credentials, account IDs, IP addresses, and personal data of people at a client become <code>[REDACTED]</code>. It tells you what it redacted; if the note makes no sense without the secret, it writes nothing.</li>

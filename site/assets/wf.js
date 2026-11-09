@@ -105,7 +105,7 @@
       { at: 4, lbl: 'start', ev: 'SessionStart', c: '--pine', s: '--pine-soft', name: 'core.md · notices.py',
         p: 'The core rules on every start. On a fresh start, at most a few one-line notices: a new version, inbox notes older than 7 days, no garden run for 30 days.' },
       { at: 30, lbl: 'git push --force?', ev: 'PreToolUse', c: '--ask', s: '--ask-soft', name: 'guard.py',
-        p: 'Before Bash, Edit and Write: asks before destructive commands, dependency installs and writes to protected files. On git commit it reminds the agent of the fast check.' },
+        p: 'Before Bash, Edit, Write and MultiEdit: asks before destructive commands, dependency installs and writes to protected files. On git commit it reminds the agent of the fast check.' },
       { at: 55, lbl: 'same failure, third time', ev: 'PostToolUseFailure', c: '--ask', s: '--ask-soft', name: 'repeat-failure.py',
         p: 'The same failed call a third time in one run: one reminder to change the approach instead of retrying.' },
       { at: 72, lbl: 'compaction', ev: 'SessionStart', c: '--pine', s: '--pine-soft', name: 'state-card.py',

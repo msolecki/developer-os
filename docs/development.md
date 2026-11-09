@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-08
+last-verified: 2026-11-09
 ---
 
 # Development guide
@@ -33,7 +33,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name; a line inside the frontmatter of an `evals/` file contains `---` (the eval loader ends frontmatter there) |
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or the descriptions of skills without `disable-model-invocation: true` together exceed 12000 |
-| Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
+| Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`); any skill body holds a bare `$<digits>`, which Claude Code replaces with the skill's argument (write `$(N)` in awk, `${N}` in sh) |
 | Last-verified (warning) | A `docs/*.md` committed after its `last-verified` date prints a warning; the exit status does not change |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden`, `brain-import-memory`, `brain-project-refresh` or `brain-review` differs from `brain-search`'s |
 | Docs standard | A `## ` heading or bold field of `templates/project/docs/decisions/0001-template.md`, a bold field of `templates/project/docs/pitfalls.md`, or a `## ` heading of `templates/project/docs/CURRENT-STATE.md` does not appear whole, as a fixed string, on that template file's own line of `## The standard` in `docs-sync` (the plugin does not ship `templates/`, so the skill restates them) |
@@ -41,7 +41,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Local paths | A file under `plugin/` or `site/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
 | Evals | An `evals/<case>/` directory lacks a `case.yaml` whose `name` is the folder, a `prompt.md`, the `scaffold_script` it names, or `graders/*.md`; a grader's `type` is not `llm`, `regex`, `file_exists` or `tool_used`; every grader of a case is `llm`; a case has no row in the Cases table of `evals/README.md`, or a row names no case; a case has no positive deterministic grader (one that fails a run that does nothing: not `not_contains`, `exists: false`, `min: 0`, `tool: Skill` or a regex over a scaffolded file), except `injection-fix-pr` and `injection-pr-cycle` |
-| Imports | A `plugin/hooks/*.py` import is outside the standard-library allowlist in `scripts/check.sh`, or a hook names `urllib`, `socket`, `http.client`, `requests`, `httpx`, `importlib` or `__import__` (D2) |
+| Imports | A `plugin/hooks/*.py` or `plugin/skills/*/*.py` import is outside the standard-library allowlist in `scripts/check.sh`, or such a script names `urllib`, `socket`, `http.client`, `requests`, `httpx`, `importlib` or `__import__` (D2) |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Tool versions | The `claude-code` version `.github/workflows/check.yml` installs differs from `claude_code` under `[tool_versions]` in `.agnix.toml` |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
@@ -54,7 +54,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page under `site/docs/` whose words differ from its source's (D28); a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
-| agnix | `agnix --target claude-code --strict --config .agnix.toml .` reports an error or warning; the stage runs when `agnix` is on `PATH`, prints `SKIP agnix` otherwise, and fails when it is missing in CI |
+| agnix | `agnix --target claude-code --strict --config .agnix.toml .` reports an error or warning; the stage runs when `agnix` is on `PATH`, prints `SKIP agnix` otherwise, and fails when it is missing in CI; `AGNIX` overrides the command |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
 
 The file set is tracked plus untracked-not-ignored files, so a new doc is checked before it is
@@ -103,7 +103,10 @@ Each page that restates a source carries `<meta name="dos-source" content="<sour
 first 12 hex digits of the source's SHA-256 with any `last-verified:` line removed, so re-verifying a
 doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style,
 the Site stage names the page to refresh: update its text, then its hash
-(`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). A page under `site/docs/` must
+(`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). The regeneration command for
+these derived hashes, which implement-backlog and parallel-lanes run after each lane merge, is
+`python3 scripts/site-hashes.py` from the repository root: it rewrites every `dos-source` hash to its
+source's current one and changes no page text. A page under `site/docs/` must
 carry its source's words in order, so a new hash on an unedited page still fails; skill, agent and
 output-style pages are summaries, which code-review checks instead (D28). A new doc or skill needs a new
 page, and a new doc an entry in `NAV`. The landing page and the skills index restate many sources
@@ -123,14 +126,18 @@ prints nothing outside `compact`/`resume`/`fork`, that the card holds the plan a
 safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds command fixtures to `guard.py` and expects `ask` or silence;
 `tests/repeat-failure.test.sh` feeds failed tool calls to `repeat-failure.py` and expects the reminder only at the third failure of the same call;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code, the JSON output and the message;
-`tests/notices.test.sh` runs `notices.py` with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's `CLAUDE.md` is ignored and that no note name is printed;
+`tests/notices.test.sh` runs `notices.py` with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's `CLAUDE.md` is ignored, that the `brain_vault` option in the user-level `settings.json` wins over the line, an empty one falls back to it and its environment variable is ignored, and that no note name is printed;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
 stage's message; it runs the whole check once per case (several minutes), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
 `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
 and expects one count per message; when `rg` is missing it prints SKIP locally and fails in CI,
-which installs ripgrep.
+which installs ripgrep;
+`tests/session-retro-harvest.test.sh` runs session-retro's `harvest.py` on the synthetic transcript in
+`tests/fixtures/session-retro/` and expects one line per seeded rejection, retraction and repeated
+error and none for the negatives (a permission-rule denial, an `api-request-blob` copy, a single error,
+an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines.
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 

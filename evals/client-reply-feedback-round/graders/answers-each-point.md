@@ -1,0 +1,4 @@
+---
+type: llm
+---
+The reply is a draft message to the client in Polish, the language of the client's message, that answers the three points in the client's order: the blurry footer logo on phones is fixed; BLIK can be added but needs the client's decision, since the payment provider's merchant account must be activated and it charges 1.2% per transaction; the new price list waits for the client's final price table. The message to the client names none of PR #214, commit a1b2c3d, migration 0042_prices, branch feature/pricing-v2, PNG or SVG; a note after the draft listing what was translated or left out does not count against this. It invents no date for the price list, does not claim the message was sent, and makes no promise the notes do not give: no date, price, discount, deadline or extra service. The next step the notes already imply (doing the work once the client decides or sends the table, giving a date once the table arrives) is not an invented promise.

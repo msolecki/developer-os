@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@f9126372fdd2">
+<meta name="dos-source" content="docs/reference/skills.md@6a4023144f35">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -157,14 +157,19 @@ specialists: security (<code>security-auditor</code>), performance (<code>perfor
 (<code>infra-reviewer</code>, skipped without IaC or CI), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs <code>file:line</code>, current-code
 evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code> (a negated grep paired with <code>test -f</code>, no
-error swallowed into a default); unsupported claims are rejected. The findings
+error swallowed into a default; not two commands joined by prose, a trailing <code>| head</code>, a test that
+already passes or a restatement of the current code); unsupported claims are rejected. Reviewers keep
+findings with real impact and drop style, comments, refactor wishes and unmeasured performance (the
+KEEP/DROP rubric). Each P1 and P2 <code>Check</code> is run once and must exit non-zero before its item is
+written. The findings
 code-review would verify (each P0 and P1, up to five P2 correctness findings) go to a fresh verifier
 (the <code>verifier</code> agent); refuted ones are listed as Disputed, not written, and an undecided one is
 written with an <code>Unverified:</code> line. Findings are deduplicated by file and root cause against the backlog and
 its done file; one already fixed in the done file or in flight in an open pull request (<code>gh pr list</code>,
 skipped when <code>gh</code> is unavailable) is dropped and named in the report. A perspective whose reviewer ended <code>BLOCKED</code>, failed or hit its turn cap is listed under
 <code>Not covered:</code> at the top of the backlog and in the report, with the union of the reviewers'
-<code>Not read:</code> lines (in-scope paths they did not open).</p>
+<code>Not read:</code> lines (in-scope paths they did not open). For a backlog whose base commit is old, or after
+a large rename, it recommends re-verifying it before implement-backlog.</p>
     <h2 id="code-review-and-pull-requests">Code review and pull requests</h2>
     <h3 id="code-review">code-review</h3>
     <p><a href="../../skills/code-review.html">Source</a>. Reviews a PR, diff, commit or working tree.</p>
@@ -237,12 +242,17 @@ item for you), no open pull request touches its files (skipped when <code>gh</co
 unavailable), and no project decision record or doc contradicts it. A failing item leaves the
 batch, is never claimed or dispatched, and is reported as <code>stale: &lt;ID&gt; · &lt;point&gt; · &lt;evidence&gt;</code>
 for you to close, amend or keep; the batch is topped up from the next ready items.</li>
-<li><strong>While running:</strong> runs each item's <code>Check</code> itself on a <code>DONE</code> report, then the full build, types,
+<li><strong>Git-ignored backlog:</strong> the <code>Owner</code> lines stay uncommitted in the orchestrator's checkout, and
+each delegate's brief carries the full item text, so the batch can still run in parallel worktrees.</li>
+<li><strong>While running:</strong> runs each item's <code>Check</code> itself from the delegate's worktree root on a <code>DONE</code>
+report, the project's regeneration command for derived files after each merge, then the full build, types,
 tests and lint for the batch; classifies a failure before editing; stops after three failed
 repair cycles.</li>
 <li><strong>Review:</strong> the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
 the item's <code>Done when</code> nor the spec settles goes to you as an intent gap; the base moves only by a
-fast-forward after the review passes.</li>
+fast-forward after the review passes. When you ask for a PR, it pushes the batch branch and opens
+one whose body lists the items, dropped and unverified items and review verdicts, instead of the
+fast-forward; it never merges it, and the done items are marked <code>PR #N, open</code>.</li>
 <li><strong>Spec convergence:</strong> when the batch closes the last open item that cites a spec, checks each
 acceptance criterion against the code (exists, not a stub, wired into a caller) and proposes each
 gap as a <code>FEAT-</code> item for your approval.</li>
@@ -255,10 +265,15 @@ stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
 A/B/C questions. It runs no test or build to get a number.</p>
     <h3 id="bug-triage">bug-triage</h3>
     <p><a href="../../skills/bug-triage.html">Source</a>. Severity first, then the stack trace,
-reproduction, affected users, frequency and first-known time; logs, recent commits and data
-invariants; ranked hypotheses with at least one real alternative and the observation that would
-falsify the leader. Library or vendor behaviour goes to <code>research-analyst</code> for a sourced answer.
-Proposes mitigation, root-cause fix, regression test and rollback criteria; applies none of them.</p>
+reproduction, affected users, frequency and first-known time. Before any hypothesis, one repro
+command it has already run must fail on the exact symptom, repeatably and without a human, and is
+then shrunk; without one it stops, lists what it tried and asks for access or an artifact. Then
+logs, recent commits and data invariants; ranked hypotheses with at least one real alternative and
+the observation that would falsify the leader, each claim graded <code>[hypothesis]</code>, <code>[evidence: X]</code>,
+<code>[ruled out: X because Y]</code> or <code>[demonstrated]</code>. A root cause is <code>[demonstrated]</code> only when toggling
+one condition switches the failure on and off. Library or vendor behaviour goes to
+<code>research-analyst</code> for a sourced answer. Proposes mitigation, root-cause fix, regression test and
+rollback criteria; applies none of them.</p>
     <h3 id="deploy-checklist">deploy-checklist</h3>
     <p><a href="../../skills/deploy-checklist.html">Source</a>. Run before a release, not at setup.</p>
     <ul>
@@ -290,7 +305,8 @@ can be resumed: <code>resume.sh</code> continues its session with <code>claude -
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished <code>DONE</code> lanes whose fast check and <code>Check</code> pass when the
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
-other lane goes to Needs you. After merging, it runs every merged lane's <code>Check</code> and the
+other lane goes to Needs you. After each lane merge it runs the project's regeneration command for
+derived files (in developer-os, <code>scripts/site-hashes.py</code>). After merging, it runs every merged lane's <code>Check</code> and the
 repository-wide gate on <code>lanes/&lt;run&gt;</code>, and stops on a <code>REQUEST_CHANGES</code> review.</p>
     <h2 id="communication">Communication</h2>
     <h3 id="client-reply">client-reply</h3>
@@ -309,24 +325,31 @@ proposed as a diff to it), rule candidates (with the commit they would reverse),
 and docs updates (open items of a finished plan become <code>PLAN-</code> backlog items, P2 by default, with a
 session line), plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.
 Every check result names the commit it ran on (<code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus
-<code>+ uncommitted: &lt;changed files&gt;</code> on a dirty tree).</p>
+<code>+ uncommitted: &lt;changed files&gt;</code> on a dirty tree).
+With a window argument (<code>14d</code>, a date or <code>all</code>) it also runs <code>harvest.py</code> beside the skill, which reads
+past session transcripts (Python 3 standard library only, no file names printed) and lists rejected tool
+calls, user interruptions, agent retractions and tool errors repeated at least twice, at most 15 per kind; from them it
+proposes at most five lessons, routed to the vault, the project's docs or a hook or check proposal,
+never to <code>CLAUDE.md</code> or <code>AGENTS.md</code> unless the user approves that file by name, behind the same question.</p>
     <h3 id="skill-usage">skill-usage</h3>
     <p><a href="../../skills/skill-usage.html">Source</a>. Counts <code>developer-os:&lt;name&gt;</code> Skill calls and
 typed commands in local transcripts (deduplicated by message uuid): last 30 days, ever, last date,
 with a keep / rewrite-description / merge / remove / hide suggestion per skill (hide: only ever typed, so
 <code>disable-model-invocation: true</code> frees the shared skill listing). It prints no transcript
-content. It runs in a forked subagent (<code>context: fork</code>), so only its report reaches the conversation.</p>
+content. It runs in a forked subagent (<code>context: fork</code>), so only its report reaches the conversation;
+<code>background: false</code>, a skill field that applies with <code>context: fork</code> (<a href="https://code.claude.com/docs/en/skills">skills frontmatter
+reference</a>), makes the invoking turn wait for that report.</p>
     <h2 id="brain-obsidian-vault">Brain (Obsidian vault)</h2>
     <h3 id="brain-setup">brain-setup</h3>
     <p><a href="../../skills/brain-setup.html">Source</a>. Checks whether the path is empty (new vault)
 or not (connect, only after you agree); in connect mode adds only missing folders, views, the note
 template, <code>.gitignore</code> lines and <code>types.json</code> keys, never overwriting a file. Shows the
 <code>Brain vault:</code> line, the <code>additionalDirectories</code> change and, after a separate yes,
-<code>"autoMemoryEnabled": false</code> as one diff; merges absent <code>.obsidian/types.json</code> keys after approval;
+<code>"autoMemoryEnabled": false</code> as one diff, and says the optional <code>brain_vault</code> plugin option wins over the line; merges absent <code>.obsidian/types.json</code> keys after approval;
 then smoke-tests with brain-search, passing it the vault path.</p>
     <h3 id="brain-search">brain-search</h3>
-    <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the path you give or the
-<code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code> (never a project file, never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
+    <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the path you give, the
+plugin's <code>brain_vault</code> option or the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code> (never a project file, never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
 ranks by <code>summary</code>/<code>tags</code>/name match, project slug, <code>active</code> over <code>inbox</code> and recency, reads the
 top five, follows a superseded note's <code>superseded_by</code> chain to the current note (a broken or looping
 chain is incomplete history, with no note named current), and answers only from them with a path

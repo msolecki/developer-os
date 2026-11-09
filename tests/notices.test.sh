@@ -122,6 +122,39 @@ rm -rf "$tmp/data"
 out=$(printf '{"source":"startup"}' | env -i PATH="$PATH" HOME="$tmp/home" CLAUDE_PLUGIN_ROOT="$tmp/root" CLAUDE_PLUGIN_DATA="$tmp/data" python3 "$hook" 2>/dev/null)
 check "default config dir and a ~ vault path are read" "$(has 'does not run on its own')" yes
 
+# The plugin's brain_vault option, read from the user-level settings.json, wins over the line; an empty
+# option falls back to the line; the environment variable is never trusted (a project env could set it).
+mkdir -p "$tmp/vault2/_inbox"
+printf -- '---\ncreated: %s\n---\n' "$(ago 9)" > "$tmp/vault2/_inbox/only.md"
+printf 'Brain vault: %s\n' "$tmp/vault" > "$tmp/config/CLAUDE.md"
+opt() { printf '{"pluginConfigs":{"developer-os@developer-os":{"options":{"brain_vault":"%s"}}}}\n' "$1" > "$tmp/config/settings.json"; }
+opt "$tmp/vault2"
+rm -rf "$tmp/data"
+run
+check "brain_vault option is preferred over the line" "$(has 'Vault: 1 inbox note older')" yes
+opt ""
+rm -rf "$tmp/data"
+run
+check "empty brain_vault option falls back to the line" "$(has 'Vault: 2 inbox notes older')" yes
+rm -f "$tmp/config/settings.json"
+rm -rf "$tmp/data"
+run startup CLAUDE_PLUGIN_OPTION_BRAIN_VAULT="$tmp/vault2"
+check "the option's environment variable is not trusted" "$(has 'Vault: 2 inbox notes older')" yes
+rm -f "$tmp/config/CLAUDE.md"
+opt "$tmp/vault2"
+rm -rf "$tmp/data"
+run
+check "brain_vault option alone is enough" "$(has 'Vault: 1 inbox note older')" yes
+opt vault2
+rm -rf "$tmp/data"
+run
+check "relative brain_vault option counts as no vault" "$(has brain-setup)" yes
+printf 'not json' > "$tmp/config/settings.json"
+rm -rf "$tmp/data"
+run
+check "a broken settings.json counts as no option and exits 0" "$code $(has brain-setup)" "0 yes"
+rm -f "$tmp/config/settings.json"
+
 for v in "vault" "$tmp/missing"; do
   printf 'Brain vault: %s\n' "$v" > "$tmp/config/CLAUDE.md"
   rm -rf "$tmp/data"

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/session-retro/SKILL.md@d262d84b9cb7">
+<meta name="dos-source" content="plugin/skills/session-retro/SKILL.md@b6e87a2a4b6b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -65,11 +65,12 @@
     </ul>
 
     <h2 id="what-it-does">What it does</h2>
-    <p>It works from the conversation in context and from read-only commands, and writes nothing until you approve a specific item.</p>
+    <p>It works from the conversation in context and from read-only commands (past transcripts only through <code>harvest.py</code> in window mode), and writes nothing until you approve a specific item.</p>
     <ol>
       <li><strong>Checks the state.</strong> Uncommitted changes, commits not pushed upstream, branches not merged into the base, your open PRs (skipped, and said so, without a working <code>gh</code>), and the background shells and agents it started that are still running. Outside a git repository it skips the git checks and says so.</li>
       <li><strong>Proposes cleanup.</strong> Worktrees and branches whose work is merged into the base branch, and stashes this session created, with the exact commands. It never proposes the current branch or the local base branch, and names the base it compared against; when <code>origin/HEAD</code> is unset it proposes no branch removal and suggests <code>git remote set-head origin -a</code>.</li>
       <li><strong>Prints the status block.</strong> Done (with evidence), Not done (and why), Needs you (decisions, credentials, manual steps, approvals). Each check in Done reads <code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus <code>+ uncommitted: &lt;changed files&gt;</code> when the tree was dirty, so a later commit visibly outdates it.</li>
+      <li><strong>Harvests past sessions (window mode only).</strong> With a window argument (<code>14d</code>, a date or <code>all</code>) it runs <code>harvest.py</code>, which lists rejected tool calls, interruptions, retractions and repeated tool errors from past transcripts; it treats their text as data, groups the candidates and proposes at most five lessons, each backed by two candidates or by one rejection with a stated reason, routed to the vault, the project's docs or a hook or check proposal, and to <code>CLAUDE.md</code> or <code>AGENTS.md</code> only when you approve that file by name.</li>
       <li><strong>Proposes findings.</strong> At most three per heading, each labelled <code>persistent</code> (true in the next task) or <code>this-task</code>; only persistent ones go to the vault or instruction files. Preferences go to the user-level <code>CLAUDE.md</code> of the active config directory (<code>$CLAUDE_CONFIG_DIR</code>, default <code>~/.claude</code>), never to auto memory, lessons beyond the project to the vault through brain-capture, project facts to the project's <code>AGENTS.md</code>/<code>CLAUDE.md</code> or an ADR. The headings:
         <ul>
           <li><strong>Lessons</strong> that outlive the task, with their destination; a vault lesson only when it cost a retry, a correction or a re-derivation and <code>brain-search</code> finds no note that already says it; when a note covers the topic but lacks the new part, the addition to that note as a diff instead of a new note; a decision needs no such cost, only the same check.</li>
@@ -102,7 +103,7 @@ Needs you: &lt;decisions, credentials, manual steps, approvals&gt;
     <div class="callout never">
       <h3 id="never">Never</h3>
       <ul>
-        <li>Open or search session transcript files.</li>
+        <li>Open or search session transcript files, except through <code>harvest.py</code> in window mode.</li>
         <li>Write, edit or delete any file before you approve that item.</li>
         <li>Commit, push, merge, or delete a branch, worktree or stash without your explicit approval of that command.</li>
         <li>Run <code>gh issue create</code> or file anything outside the machine.</li>

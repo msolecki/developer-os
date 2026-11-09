@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@b2886f3b24a2">
+<meta name="dos-source" content="docs/architecture/overview.md@61f0c9f6a4db">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -58,7 +58,7 @@ plugin/                           the installed payload
   hooks/hooks.json                6 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
-  hooks/guard.py                  PreToolUse guard for Bash, Edit and Write
+  hooks/guard.py                  PreToolUse guard for Bash, Edit, Write and MultiEdit
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/&lt;name&gt;/SKILL.md          32 skills
@@ -106,7 +106,7 @@ site/                             public documentation site, published by .githu
       .arch-svg .sm { font-size: 12px; }
     </style>
 <div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-seq-title" viewBox="0 0 1160 580" style="display:block;width:100%;min-width:900px;height:auto">
-<title id="arch-seq-title">Hook pipeline: Claude Code runs cat core.md, after compact, resume or fork state-card.py, and on startup notices.py on SessionStart, guard.py on PreToolUse for every Bash, Edit and Write call, repeat-failure.py on PostToolUseFailure, and capture-nudge.py on Stop</title>
+<title id="arch-seq-title">Hook pipeline: Claude Code runs cat core.md, after compact, resume or fork state-card.py, and on startup notices.py on SessionStart, guard.py on PreToolUse for every Bash, Edit, Write and MultiEdit call, repeat-failure.py on PostToolUseFailure, and capture-nudge.py on Stop</title>
 <defs><marker id="arch-seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
 <line class="life" x1="100" y1="64" x2="100" y2="570"/>
 <rect class="box" x="5" y="14" width="190" height="50" rx="6"/>
@@ -133,7 +133,7 @@ site/                             public documentation site, published by .githu
 <text class="sm" x="220" y="177" text-anchor="middle">card after compact/resume/fork; notices on startup</text>
 <text class="sm" x="220" y="161" text-anchor="middle">stdout = core rules, plus a state card</text>
 <line class="edge" x1="100" y1="245" x2="576" y2="245" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="340" y="237" text-anchor="middle">every Bash, Edit and Write call, JSON on stdin</text>
+<text class="sm" x="340" y="237" text-anchor="middle">every Bash, Edit, Write and MultiEdit call, JSON on stdin</text>
 <line class="edge dash" x1="580" y1="305" x2="104" y2="305" marker-end="url(#arch-seq-arrow)"/>
 <text class="sm" x="340" y="297" text-anchor="middle">additionalContext (fast-check reminder) on git commit</text>
 <text class="sm" x="340" y="281" text-anchor="middle">{"permissionDecision":"ask", reason} or</text>
@@ -152,7 +152,7 @@ site/                             public documentation site, published by .githu
     <ul>
       <li>A <code>cat</code> hook prints <code>core.md</code> on every source, without Python. <code>state-card.py</code>, for <code>source</code> <code>compact</code>, <code>resume</code> or <code>fork</code> inside a git repository, prints the branch, the newest plan, <code>docs/plans/.devos-state.md</code> (skipped when older than 7 days) and the worktrees, cut to whole lines within 1024 bytes.</li>
       <li><code>notices.py</code>, for <code>source</code> <code>startup</code>, compares the plugin version with a marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/notices/</code> (Claude Code has no install or update hook) and, when the user-level <code>CLAUDE.md</code> names a vault, counts <code>_inbox/</code> notes older than 7 days and reads the last line of <code>_reports/garden-log.md</code>. It shows due notices to the user as a <code>systemMessage</code>, each throttled by its own marker.</li>
-      <li><code>guard.py</code> extracts <code>tool_input.command</code> with a regular expression, unescapes JSON, joins line continuations, drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on purpose, so a mention such as <code>echo "pnpm add zod"</code> also asks; a quoted commit message (<code>-m "..."</code>) is read as one word. Any parse failure prints nothing. For Edit and Write it reads <code>tool_input.file_path</code> (and an Edit's <code>old_string</code>/<code>new_string</code>) instead and asks when the path is a secret file or part of the user-level Claude config (also under <code>CLAUDE_CONFIG_DIR</code>), compared without case and through up to 8 symlink hops, or when an Edit adds a skip or focus marker to a test file. A Bash call from one of the read-only review agents, named by <code>agent_type</code>, also asks when it writes. A <code>git commit</code> that hits no category gets an <code>additionalContext</code> reminder to run the fast check, with no decision.</li>
+      <li><code>guard.py</code> extracts <code>tool_input.command</code> with a regular expression, unescapes JSON, joins line continuations, drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on purpose, so a mention such as <code>echo "pnpm add zod"</code> also asks; a quoted commit message (<code>-m "..."</code>, or a quoted-delimiter heredoc inside <code>$(…)</code>) is read as one word. Any parse failure prints nothing. For Edit, Write and MultiEdit it reads <code>tool_input.file_path</code> (and an Edit's <code>old_string</code>/<code>new_string</code>, a MultiEdit's <code>edits</code>, a Write's <code>content</code>) instead and asks when the path is a secret file or part of the user-level Claude config (also under <code>CLAUDE_CONFIG_DIR</code>), compared without case and through up to 8 symlink hops, or when an Edit, MultiEdit or Write adds a skip or focus marker to a test file (a Write against the file on disk; vendored <code>node_modules/</code>, <code>vendor/</code> and <code>.venv/</code> paths are not test files). A Bash call from one of the read-only review agents, named by <code>agent_type</code>, also asks when it writes. A <code>git commit</code> that hits no category gets an <code>additionalContext</code> reminder to run the fast check, with no decision.</li>
       <li><code>capture-nudge.py</code> reads <code>session_id</code> and <code>transcript_path</code> from the input, counts the <code>tool_use</code> blocks of the transcript's assistant lines, defers while a background task launched in the session has no <code>&lt;task-notification&gt;</code> and a fresh output file under a <code>tasks/</code> directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/capture-nudge/</code> so it fires once. Markers 8 days old or older are removed.</li>
       <li><code>repeat-failure.py</code> hashes the agent, tool and input of each failed call (for Bash, the command), keeps the counts per session in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/repeat-failure/</code>, and at the third failure of the same hash, each within 10 minutes of the last, adds a "stop retrying" reminder. It stores no command text.</li>
     </ul>
