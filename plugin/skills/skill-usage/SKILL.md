@@ -26,7 +26,7 @@ from=$(date -u -v-30d +%F 2>/dev/null || date -u -d '30 days ago' +%F)
 rg -o --no-filename -g '*.jsonl' -r '${1}${2} ${3} ${4}' \
   '(?:"name":"Skill","input":\{"skill":"developer-os:([a-z0-9-]+)"|<command-name>/developer-os:([a-z0-9-]+)</command-name>).*"uuid":"([0-9a-f-]+)","timestamp":"(\d{4}-\d{2}-\d{2})' \
   "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects" 2>/dev/null |  # append <dir>/projects per extra config dir
-  sort -u -k2,2 | sort -k1,1 -k3,3 | awk -v from="$from" '{ all[$1]++; if ($3 >= from) m[$1]++; last[$1] = $3 }
+  sort -u -k2,2 | sort -k1,1 -k3,3 | awk -v from="$from" '{ all[$(1)]++; if ($(3) >= from) m[$(1)]++; last[$(1)] = $(3) }
     END { for (k in all) printf "%s %d %d %s\n", k, m[k], all[k], last[k] }'
 ```
 

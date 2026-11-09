@@ -110,6 +110,9 @@ reset
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'
 run "an action skill without ## Never" fail "plugin/skills/spec/SKILL.md: skill has no ## Never section"
 
+printf '%s\n' "awk '{ print \$1 }'" >> "$r/plugin/skills/plan-status/SKILL.md"
+run "a bare \$1 in a skill body" fail "plugin/skills/plan-status/SKILL.md: skill body has a bare \$1"
+
 edit plugin/skills/spec/SKILL.md 's/^description: .*/description: Too short./'
 run "a skill description under 80 characters" fail "description is 10 characters, allowed 80-1024"
 

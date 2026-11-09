@@ -85,6 +85,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - brain-garden's scan writes `$(0)`, because Claude Code replaced `$0` with the skill's argument; every
   eval case without a measured mutation is now measured, and five graders that failed correct runs are
   fixed (CHK-08).
+- parallel-lanes and skill-usage no longer hold a bare `$1`/`$0`, and the Skill sections stage fails on
+  one (SKL-01); guard asks on `python -u -m pip install` and reads only the first MiB of a test file on a
+  Write (SEC-21, SEC-22); brain-setup names the `brain_vault` option (BRAIN-17).
 
 ## [0.2.8] - 2026-11-08
 

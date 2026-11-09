@@ -24,6 +24,7 @@ done
 # session's skill listing. A skill with disable-model-invocation: true is not in the listing, so it does not count.
 # Every skill has a non-empty ## Stop point and a ## Never section with at least one `- ` rule, except the read-only ones: *-conventions,
 # brain-search, code-review, plan-status and skill-usage (they write nothing inside the repository, send nothing and change no git state).
+# No skill body holds a bare $<digit>: Claude Code substitutes it with the skill's argument.
 files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
   require "date"; require "yaml"
   read_only = %w[brain-search code-review plan-status skill-usage]
@@ -61,8 +62,12 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
     n = y["description"].to_s.size
     bad.("description is #{n} characters, allowed 80-1024") unless (80..1024).cover?(n)
     total += n unless y["disable-model-invocation"] == true
-    next if read_only.include?(want) || want.end_with?("-conventions")
     body = lines[close..].join("\n")
+    # Claude Code replaces $<digits> in skill content with the skill arguments (brain-garden, PR #136).
+    if (m = body[/\$\d+(?!\w)/])
+      bad.("skill body has a bare #{m}, which Claude Code replaces with the skill argument; write $(N) in awk, ${N} in sh")
+    end
+    next if read_only.include?(want) || want.end_with?("-conventions")
     ["## Stop point", "## Never"].each do |h|
       sec = body[/^#{h}$(.*?)(?=^## |\z)/m, 1]
       bad.("skill has no #{h} section") unless sec

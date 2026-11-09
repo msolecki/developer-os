@@ -223,9 +223,14 @@ def installs(words):
             return True
         if any(name == m and tuple(ops[:len(s)]) == s and len(ops) > len(s) for m, s in PKG):
             return True
-        if re.fullmatch(r"python[\d.]*", name) and rest[:1] == ["-m"] and ops[:1] in (["pip"], ["pip3"]) and (
-                ops[1:2] == ["install"] and len(ops) > 2):
-            return True
+        if re.fullmatch(r"python[\d.]*", name):
+            j = 0  # interpreter options before -m; -X and -W take a value
+            while j < len(rest) and rest[j].startswith("-") and rest[j] != "-m":
+                j += 2 if rest[j] in ("-X", "-W") else 1
+            sub = rest[j:]
+            ops = [x for k, x in enumerate(sub) if not x.startswith("-") and (k == 0 or sub[k - 1] not in PKG_VALUE)]
+            if sub[:1] == ["-m"] and ops[:1] in (["pip"], ["pip3"]) and ops[1:2] == ["install"] and len(ops) > 2:
+                return True
     return False
 
 
@@ -599,15 +604,15 @@ def protected(path):
 
 def skips_added(tool, inp, path):
     """More skip or focus markers after the call than before: Edit's `new_string` over its `old_string`, the
-    `edits` of a MultiEdit summed, a Write's `content` over the regular file on disk (empty when there is none;
-    a FIFO would block the read)."""
+    `edits` of a MultiEdit summed, a Write's `content` over the first MiB of the regular file on disk (empty when
+    there is none; a FIFO would block the read)."""
     count = lambda s: len(SKIP_MARK.findall(s)) if isinstance(s, str) else 0
     if tool == "Write":
         old = ""
         if os.path.isfile(path):
             try:
                 with open(path, encoding="utf-8", errors="replace") as f:
-                    old = f.read()
+                    old = f.read(1 << 20)  # a bounded prefix keeps a huge file under the hook timeout
             except OSError:
                 pass
         return count(inp.get("content")) > count(old)

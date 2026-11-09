@@ -39,7 +39,7 @@ for lane in "${LANES[@]}"; do
   id=$(python3 -c 'import uuid; print(uuid.uuid4())')
   cd "$ROOT/.worktrees/$lane"
   python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
-    sh -c 'p=$1; shift; claude -p "$@" < "$p"; echo "EXIT=$?"' \
+    sh -c 'p=${1}; shift; claude -p "$@" < "$p"; echo "EXIT=$?"' \
     lane "$R/prompt-$lane.md" --session-id "$id" --max-turns "$MAX_TURNS" --permission-mode acceptEdits \
     --allowedTools "${TOOLS[@]}" --disallowedTools "${DENY[@]}" > "$R/log-$lane.txt" 2>&1 < /dev/null &
   echo "$lane $! $id" >> "$R/pids.txt"
@@ -55,7 +55,7 @@ Read only: kill nothing, restart nothing, commit nothing.
 
 ```bash
 R=docs/plans/lanes/<run>
-awk '{ last[$1] = $2 } END { for (l in last) print l, last[l] }' "$R/pids.txt" | sort | while read -r lane pid; do
+awk '{ last[$(1)] = $(2) } END { for (l in last) print l, last[l] }' "$R/pids.txt" | sort | while read -r lane pid; do
   if ps -o command= -p "$pid" 2>/dev/null | grep -q 'claude -p'; then state="running $(ps -o etime= -p "$pid" | tr -d ' ')"; else state="finished $(grep -o 'EXIT=[0-9]*' "$R/log-$lane.txt" | tail -1)"; fi
   report=$(head -1 ".worktrees/$lane/$R/REPORT-$lane.md" 2>/dev/null || echo none)
   idle=$(python3 -c '
@@ -83,10 +83,10 @@ For a lane cut off by a usage limit, a crash or `--max-turns`: its process has f
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-R="/abs/path/to/run"; ROOT="/abs/path/to/repo"; MAX_TURNS=200; lane="$1"
+R="/abs/path/to/run"; ROOT="/abs/path/to/repo"; MAX_TURNS=200; lane="${1}"
 cd "$ROOT"
 while read -r h f; do [ "$(git hash-object "$f")" = "$h" ] || { echo "changed since launch: $f" >&2; exit 1; }; done < "$R/hashes.txt"
-read -r _ pid id < <(awk -v l="$lane" '$1 == l { last = $0 } END { print last }' "$R/pids.txt")
+read -r _ pid id < <(awk -v l="$lane" '$(1) == l { last = $(0) } END { print last }' "$R/pids.txt")
 [ -n "${id:-}" ] || { echo "$lane: no session id in pids.txt" >&2; exit 1; }
 ! ps -o command= -p "$pid" 2>/dev/null | grep -q 'claude -p' || { echo "$lane is still running" >&2; exit 1; }
 case "$(head -1 ".worktrees/$lane/${R#"$ROOT"/}/REPORT-$lane.md" 2>/dev/null)" in DONE*|REVIEW*|BLOCKED*) echo "$lane has a final report" >&2; exit 1;; esac

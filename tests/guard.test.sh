@@ -461,15 +461,17 @@ check pass "$(fa $r 'git fetch --depth 1 git@host:a/b.git main')"
 check pass "$(fa $r 'git fetch --filter blob:none git@host:a/b.git main')"
 check pass "$(fa $r 'git fetch -j 4 git@host:a/b.git main')"
 check ask "$(fa $r 'git fetch --depth 1 origin main:main')" "read-only"
-# SEC-06: many -c words stay linear
+# SEC-06: many -c words stay linear. cpu INPUT: the guard's own CPU time stays under 1 s; CPU time, not the wall
+# clock, so a loaded machine does not fail it.
+cpu() { printf '%s' "$1" | python3 -c 'import resource, subprocess, sys
+subprocess.run([sys.executable, sys.argv[1]], stdin=sys.stdin, stdout=subprocess.DEVNULL)
+r = resource.getrusage(resource.RUSAGE_CHILDREN); sys.exit(r.ru_utime + r.ru_stime > 1)' "$guard"; }
 c=$(python3 -c "print(' '.join(['-c']*2000))")
-t0=$(python3 -c 'import time;print(time.time())')
 check pass "$(fx "$c")"
-python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: 2000 -c words took over 1 s"; }
+cpu "$(fx "$c")" || { fail=1; echo "FAIL: 2000 -c words took over 1 s of CPU"; }
 c=$(python3 -c "print('git ' + ' '.join(['-c x=y']*3000) + ' status')")
-t0=$(python3 -c 'import time;print(time.time())')
 check pass "$(fa $r "$c")"
-python3 -c "import sys,time;sys.exit(time.time()-$t0>1)" || { fail=1; echo "FAIL: git with 3000 -c pairs took over 1 s"; }
+cpu "$(fa $r "$c")" || { fail=1; echo "FAIL: git with 3000 -c pairs took over 1 s of CPU"; }
 
 # 2026-11-08 batch: FLOW-39 commit only as git's subcommand; a quoted -m value is not scanned
 check pass "$(fx 'git log --grep commit -n 5')"
@@ -562,6 +564,11 @@ check ask "$(fx 'python3 -m pip install requests')" "Dependency install"
 check ask "$(fx 'python3.12 -m pip install -U x')" "Dependency install"
 check pass "$(fx 'python -m pip list')"
 check pass "$(fx 'python3 -m pip install -r requirements.txt')"
+# SEC-21: interpreter options before -m
+check ask "$(fx 'python -u -m pip install requests')" "Dependency install"
+check ask "$(fx 'python3 -X dev -m pip install x')" "Dependency install"
+check pass "$(fx 'python -u -m pip list')"
+check pass "$(fx 'python3 -X dev script.py install x')"
 # SEC-18: option values between compose and its subcommand
 for c in 'docker compose -f a.yml down -v' 'docker compose -p x down -v' 'docker compose --project-directory d down --volumes' \
   'docker-compose -f a.yml down -v'; do
@@ -590,6 +597,9 @@ check pass "$(fw "$wd/a.test.ts" 'it.skip(a) it(b)')"
 check ask "$(fw "$wd/a.test.ts" 'it.skip(a) it.skip(b)')" "test"
 check ask "$(fw "$wd/new.test.ts" 'it.only(a)')" "test"
 check pass "$(fw "$wd/new.test.ts" 'it(a)')"
+# SEC-22: only the first MiB of the file on disk is read, so a marker past it does not count
+{ head -c 1048576 /dev/zero | tr '\0' 'x'; printf '\nit.skip(a)\n'; } > "$wd/big.test.ts"
+check ask "$(fw "$wd/big.test.ts" 'it.skip(a)')" "test"
 rm -rf "$wd"
 grep -q '"Bash|Edit|Write|MultiEdit"' "$(dirname "$0")/../plugin/hooks/hooks.json" || { fail=1; echo "FAIL: hooks.json matcher lacks MultiEdit"; }
 

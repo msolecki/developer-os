@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-08
+last-verified: 2026-11-09
 ---
 
 # Skills reference
@@ -338,7 +338,7 @@ reference](https://code.claude.com/docs/en/skills)), makes the invoking turn wai
 or not (connect, only after you agree); in connect mode adds only missing folders, views, the note
 template, `.gitignore` lines and `types.json` keys, never overwriting a file. Shows the
 `Brain vault:` line, the `additionalDirectories` change and, after a separate yes,
-`"autoMemoryEnabled": false` as one diff; merges absent `.obsidian/types.json` keys after approval;
+`"autoMemoryEnabled": false` as one diff, and says the optional `brain_vault` plugin option wins over the line; merges absent `.obsidian/types.json` keys after approval;
 then smoke-tests with brain-search, passing it the vault path.
 
 ### brain-search

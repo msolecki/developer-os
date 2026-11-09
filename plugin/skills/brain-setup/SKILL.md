@@ -45,7 +45,7 @@ fi
 
 Show the edits as a diff and apply them only after the user approves:
 
-- `$C/CLAUDE.md`: append `Brain vault: <V>` (skip if the line is already there).
+- `$C/CLAUDE.md`: append `Brain vault: <V>` (skip if the line is already there). Tell the user the plugin's optional `brain_vault` option (`/config` or the plugin dialog) wins over this line when set, so a later move changes both or clears the option.
 - `$C/settings.json`: add `<V>` to `permissions.additionalDirectories` (skip if present).
 - Recommended, asked as a separate yes/no: `$C/settings.json`: `"autoMemoryEnabled": false` (skip if already `false`). Say why in one line: Claude Code's auto memory keeps a second, unreviewed store per project and machine, and developer-os keeps long-term knowledge in the vault (D24). Ask it before building the preview and set `AM=true` on a yes, `AM=false` on a no (or when it is already `false`); if the answer changes after the preview, build the preview again before applying.
 
