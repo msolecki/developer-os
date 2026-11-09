@@ -570,6 +570,8 @@ check ask "$(fx 'python -mpip install x')" "Dependency install"
 check ask "$(fx 'python3 -u -Em pip3 install x')" "Dependency install"
 check pass "$(fx 'python -Im pip list')"
 check pass "$(fx 'python -Wmodule script.py install x')"
+check ask "$(fx 'python -uWmodule -m pip install x')" "Dependency install"
+check pass "$(fx 'python -- -m pip install x')"
 # SEC-21: interpreter options before -m
 check ask "$(fx 'python -u -m pip install requests')" "Dependency install"
 check ask "$(fx 'python3 -X dev -m pip install x')" "Dependency install"

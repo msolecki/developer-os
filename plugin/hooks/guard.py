@@ -224,16 +224,17 @@ def installs(words):
         if any(name == m and tuple(ops[:len(s)]) == s and len(ops) > len(s) for m, s in PKG):
             return True
         if re.fullmatch(r"python[\d.]*", name):
-            # Interpreter options before -m (-X and -W take a value); -m may close a short-option cluster
-            # (`-Im`) and carry its module attached (`-mpip`).
+            # Interpreter options before -m, up to `--`. In a short-option cluster the first m, X or W decides:
+            # m takes the rest as its module (`-Im pip`, `-mpip`), X and W take it as their value, or the next word.
             j, mod = 0, None
-            while j < len(rest) and rest[j].startswith("-"):
-                mod = re.fullmatch(r"-[A-Za-z]*m(\S*)", rest[j]) if rest[j][1:2] not in ("X", "W") else None
-                if mod:
+            while j < len(rest) and rest[j].startswith("-") and rest[j] != "--":
+                opt = re.fullmatch(r"-[A-Za-z]*?([mXW])(\S*)", rest[j])
+                if opt and opt.group(1) == "m":
+                    mod = opt
                     break
-                j += 2 if rest[j] in ("-X", "-W") else 1
+                j += 2 if opt and not opt.group(2) else 1
             if mod:
-                sub = ([mod.group(1)] if mod.group(1) else []) + rest[j + 1:]
+                sub = ([mod.group(2)] if mod.group(2) else []) + rest[j + 1:]
                 ops = [x for k, x in enumerate(sub) if not x.startswith("-") and (k == 0 or sub[k - 1] not in PKG_VALUE)]
                 if ops[:1] in (["pip"], ["pip3"]) and ops[1:2] == ["install"] and len(ops) > 2:
                     return True
