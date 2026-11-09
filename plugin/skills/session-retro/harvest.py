@@ -153,8 +153,16 @@ def main():
         if count >= 2:
             found.append(["repeated-error", last, count, project, one_line(name + ": " + line)])
     found.sort(key=lambda c: (c[0], -c[2]))
+    shown, cut = {}, 0
     for c in found:
+        # ponytail: fixed 15 per kind keeps a long window out of the agent's context; add --limit if it hides real lessons
+        shown[c[0]] = shown.get(c[0], 0) + 1
+        if shown[c[0]] > 15:
+            cut += 1
+            continue
         print("\t".join(str(x) for x in c))
+    if cut:
+        print("# %d more not shown (15 per kind)" % cut)
     print("# window %s..%s, %d files" % (start or "all", today, files))
 
 

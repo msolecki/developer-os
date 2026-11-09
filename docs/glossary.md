@@ -13,7 +13,7 @@ last-verified: 2026-11-08
 | Conventions skill | A `*-conventions` skill with stack- or file-specific rules, loaded only when its description matches the work. |
 | Core rules | `plugin/rules/core.md`, printed into every session by the `SessionStart` hook. |
 | Brain, vault | The user's Obsidian vault of Markdown notes, the agent's long-term memory. |
-| `Brain vault:` line | `Brain vault: <absolute path>` in the user-level `CLAUDE.md`; how skills find the vault. |
+| `Brain vault:` line | `Brain vault: <absolute path>` in the user-level `CLAUDE.md`; how skills find the vault when the optional `brain_vault` plugin option is unset. |
 | Inbox note | A note an agent created in `_inbox/` with `status: inbox`; unreviewed, a draft rather than a fact. |
 | Promote | Move an approved inbox note to a topic folder and set `status: active` (brain-review). |
 | Archive | Move a note to `_archive/` with `status: archived`. The plugin's replacement for deletion. |

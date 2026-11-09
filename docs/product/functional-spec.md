@@ -196,7 +196,7 @@ What the plugin never does without the user's explicit answer for that specific 
 | Create backlog files or add backlog items | audit-to-backlog, project-baseline, project-init, spec, implement-backlog (review findings), session-retro (open items of a finished plan) |
 | Edit code for review findings | fix-pr (per edit), pr-cycle (one A/B/C answer) |
 | Commit | fix-pr (per commit); pr-cycle commits the base merge once conflicts are resolved and the fast check passes, and fix commits after its A/B/C answer; implement-backlog commits only green batch work it was asked to do; parallel-lanes merges or cherry-picks the approved lanes onto a new local `lanes/<run>` branch after the shown integration plan |
-| Push | fix-pr, pr-cycle; implement-backlog never pushes |
+| Push | fix-pr, pr-cycle; implement-backlog pushes only its batch branch, and only when you ask for a PR |
 | Merge a PR, push to a base branch, force-push, rebase a pushed branch | No skill does this |
 | Send email, chat, issues or comments outside the PR thread | No skill does this; client-reply drafts, session-retro prints a command |
 | Install a dependency | Core rule; the `PreToolUse` guard asks |

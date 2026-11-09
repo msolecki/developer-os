@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@324089f9f900">
+<meta name="dos-source" content="docs/development.md@d451dd0278f0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -137,7 +137,7 @@
     <code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
     transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
     and expects one count per message; when <code>rg</code> is missing it prints SKIP locally and fails in CI, which installs ripgrep;
-    <code>tests/session-retro-harvest.test.sh</code> runs session-retro's <code>harvest.py</code> on the synthetic transcript in <code>tests/fixtures/session-retro/</code> and expects one line per seeded rejection, retraction and repeated error and none for the negatives (a permission-rule denial, an <code>api-request-blob</code> copy, a single error, an old rejection outside the window, a duplicate uuid, an invalid line).
+    <code>tests/session-retro-harvest.test.sh</code> runs session-retro's <code>harvest.py</code> on the synthetic transcript in <code>tests/fixtures/session-retro/</code> and expects one line per seeded rejection, retraction and repeated error and none for the negatives (a permission-rule denial, an <code>api-request-blob</code> copy, a single error, an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines.
     After changing a hook, run its test from the repository root, for example <code>sh tests/guard.test.sh</code>,
     and add a fixture for the case you changed.</p>
     <h2 id="evals">Evals</h2>

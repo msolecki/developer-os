@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/glossary.md@885663da76f6">
+<meta name="dos-source" content="docs/glossary.md@51ec57d7a23c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -56,7 +56,7 @@
           <tr><td>Conventions skill</td><td>A <code>*-conventions</code> skill with stack- or file-specific rules, loaded only when its description matches the work.</td></tr>
           <tr><td>Core rules</td><td><code>plugin/rules/core.md</code>, printed into every session by the <code>SessionStart</code> hook.</td></tr>
           <tr><td>Brain, vault</td><td>The user's Obsidian vault of Markdown notes, the agent's long-term memory.</td></tr>
-          <tr><td><code>Brain vault:</code> line</td><td><code>Brain vault: &lt;absolute path&gt;</code> in the user-level <code>CLAUDE.md</code>; how skills find the vault.</td></tr>
+          <tr><td><code>Brain vault:</code> line</td><td><code>Brain vault: &lt;absolute path&gt;</code> in the user-level <code>CLAUDE.md</code>; how skills find the vault when the optional <code>brain_vault</code> plugin option is unset.</td></tr>
           <tr><td>Inbox note</td><td>A note an agent created in <code>_inbox/</code> with <code>status: inbox</code>; unreviewed, a draft rather than a fact.</td></tr>
           <tr><td>Promote</td><td>Move an approved inbox note to a topic folder and set <code>status: active</code> (brain-review).</td></tr>
           <tr><td>Archive</td><td>Move a note to <code>_archive/</code> with <code>status: archived</code>. The plugin's replacement for deletion.</td></tr>

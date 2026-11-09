@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/functional-spec.md@e561576e5952">
+<meta name="dos-source" content="docs/product/functional-spec.md@5215479e24ac">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -200,7 +200,7 @@ code behind every claim it writes.</p>
 <tr><td>Create backlog files or add backlog items</td><td>audit-to-backlog, project-baseline, project-init, spec, implement-backlog (review findings), session-retro (open items of a finished plan)</td></tr>
 <tr><td>Edit code for review findings</td><td>fix-pr (per edit), pr-cycle (one A/B/C answer)</td></tr>
 <tr><td>Commit</td><td>fix-pr (per commit); pr-cycle commits the base merge once conflicts are resolved and the fast check passes, and fix commits after its A/B/C answer; implement-backlog commits only green batch work it was asked to do; parallel-lanes merges or cherry-picks the approved lanes onto a new local <code>lanes/&lt;run&gt;</code> branch after the shown integration plan</td></tr>
-<tr><td>Push</td><td>fix-pr, pr-cycle; implement-backlog never pushes</td></tr>
+<tr><td>Push</td><td>fix-pr, pr-cycle; implement-backlog pushes only its batch branch, and only when you ask for a PR</td></tr>
 <tr><td>Merge a PR, push to a base branch, force-push, rebase a pushed branch</td><td>No skill does this</td></tr>
 <tr><td>Send email, chat, issues or comments outside the PR thread</td><td>No skill does this; client-reply drafts, session-retro prints a command</td></tr>
 <tr><td>Install a dependency</td><td>Core rule; the <code>PreToolUse</code> guard asks</td></tr>

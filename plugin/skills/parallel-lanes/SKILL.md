@@ -93,6 +93,7 @@ case "$(head -1 ".worktrees/$lane/${R#"$ROOT"/}/REPORT-$lane.md" 2>/dev/null)" i
 TOOLS=(Read Edit Write Glob Grep 'Bash(git status:*)' 'Bash(git diff:*)' 'Bash(git add:*)' 'Bash(git commit:*)' 'Bash(<fast check>:*)')
 DENY=()
 for p in '<package manifest>' Makefile '.husky/**' '.githooks/**' '.claude/**'; do DENY+=("Edit($p)" "Write($p)"); done
+# the lane's case line from launch.sh, if it has one, goes here
 cd "$ROOT/.worktrees/$lane"
 echo "--- resumed $(date -u +%FT%TZ)" >> "$R/log-$lane.txt"
 python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \

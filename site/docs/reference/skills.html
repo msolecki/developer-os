@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@6dcaf830f12d">
+<meta name="dos-source" content="docs/reference/skills.md@4022ef4d66d4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -328,7 +328,7 @@ Every check result names the commit it ran on (<code>&lt;command&gt;: &lt;result
 <code>+ uncommitted: &lt;changed files&gt;</code> on a dirty tree).
 With a window argument (<code>14d</code>, a date or <code>all</code>) it also runs <code>harvest.py</code> beside the skill, which reads
 past session transcripts (Python 3 standard library only, no file names printed) and lists rejected tool
-calls, user interruptions, agent retractions and tool errors repeated at least twice; from them it
+calls, user interruptions, agent retractions and tool errors repeated at least twice, at most 15 per kind; from them it
 proposes at most five lessons, routed to the vault, the project's docs or a hook or check proposal,
 never to <code>CLAUDE.md</code> or <code>AGENTS.md</code> unless the user approves that file by name, behind the same question.</p>
     <h3 id="skill-usage">skill-usage</h3>

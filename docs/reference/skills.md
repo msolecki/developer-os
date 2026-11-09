@@ -316,7 +316,7 @@ Every check result names the commit it ran on (`<command>: <result> at <short SH
 `+ uncommitted: <changed files>` on a dirty tree).
 With a window argument (`14d`, a date or `all`) it also runs `harvest.py` beside the skill, which reads
 past session transcripts (Python 3 standard library only, no file names printed) and lists rejected tool
-calls, user interruptions, agent retractions and tool errors repeated at least twice; from them it
+calls, user interruptions, agent retractions and tool errors repeated at least twice, at most 15 per kind; from them it
 proposes at most five lessons, routed to the vault, the project's docs or a hook or check proposal,
 never to `CLAUDE.md` or `AGENTS.md` unless the user approves that file by name, behind the same question.
 

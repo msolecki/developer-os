@@ -137,7 +137,7 @@ which installs ripgrep;
 `tests/session-retro-harvest.test.sh` runs session-retro's `harvest.py` on the synthetic transcript in
 `tests/fixtures/session-retro/` and expects one line per seeded rejection, retraction and repeated
 error and none for the negatives (a permission-rule denial, an `api-request-blob` copy, a single error,
-an old rejection outside the window, a duplicate uuid, an invalid line).
+an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines.
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 

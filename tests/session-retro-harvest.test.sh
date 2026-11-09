@@ -24,4 +24,14 @@ expect "a bad --since exits 2" 2 $?
 
 expect "a missing root prints nothing" "" "$(python3 -I plugin/skills/session-retro/harvest.py --since all --root "$T/none")"
 
+mkdir -p "$T/many/q"
+i=0
+while [ $i -lt 17 ]; do
+  printf '{"type":"assistant","uuid":"r-%s","timestamp":"%sT11:00:00.000Z","cwd":"/work/demo","message":{"content":[{"type":"text","text":"I was wrong about item %s."}]}}\n' "$i" "$today" "$i"
+  i=$((i + 1))
+done > "$T/many/q/s.jsonl"
+out=$(python3 -I plugin/skills/session-retro/harvest.py --since 14d --root "$T/many")
+expect "at most 15 per kind" 15 "$(printf '%s\n' "$out" | grep -c '^retraction')"
+expect "the cut is counted" "# 2 more not shown (15 per kind)" "$(printf '%s\n' "$out" | grep '^# 2 more')"
+
 exit $failed
