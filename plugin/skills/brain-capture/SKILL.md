@@ -94,12 +94,15 @@ One file next to the code, reviewed in the same PR.
 - `created` and `updated`: today. `project`: for a note about this project, the slug from the `Vault project slug:` line in `_Context.md` at the repository root (read the file if the line is not in your context); empty for a cross-project note that applies beyond this repository, or when there is no such line. Accept a slug only when it matches `^[a-z0-9-]+$`; otherwise show it and ask the user. Ask if unsure. Never derive it from the directory name.
 - `summary`: one sentence in double quotes (a bare colon breaks YAML).
 
+When the vault is a git work tree (`git -C "$V" rev-parse --is-inside-work-tree` prints `true`) and nothing is staged (`git -C "$V" diff --cached --name-only` is empty), commit only the new note: `git -C "$V" add -- '<note path>'`, then `git -C "$V" commit -m 'brain-capture: <note name>' -- '<note path>'`. Never push, pull, switch branches or stage other files. With something already staged, skip the commit and say so in the report. Without this commit the note has no history until a review commits it.
+
 ## 7. Report
 
 ```
 Captured: _inbox/release-notes-in-changelog.md (decision, status: inbox)
 Possible duplicate: DEV/release-process.md
 Redacted: nothing
+Committed: 3f2a1c9 (or: skipped, something was already staged)
 Review it with the brain-review skill or in Obsidian (_views/Inbox.base).
 ```
 
