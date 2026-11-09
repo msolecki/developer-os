@@ -82,6 +82,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   compose -f a.yml down -v` and an abbreviated `--out=` in a read-only agent ask; vendored `test/` paths
   pass; MultiEdit is matched and a Write that adds a skip marker asks (SEC-16 to SEC-20, FLOW-57).
 - A check.test.sh case pins that a missing agnix fails in CI (CHK-18).
+- brain-garden's scan writes `$(0)`, because Claude Code replaced `$0` with the skill's argument; every
+  eval case without a measured mutation is now measured, and five graders that failed correct runs are
+  fixed (CHK-08).
 
 ## [0.2.8] - 2026-11-08
 

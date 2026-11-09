@@ -27,7 +27,7 @@ stale_cut=$(date -v-180d +%F 2>/dev/null || date -d '180 days ago' +%F)
 rg --files --sort path -g '*.[mM][dD]' -g '!templates/**' . | awk -v inbox_cut="$inbox_cut" -v stale_cut="$stale_cut" '
 function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\047]|["\047]$/, "", s); return s }
 {
-  f = $0; name = f; sub(/.*\//, "", name); sub(/\.[mM][dD]$/, "", name); k = tolower(name)
+  f = $(0); name = f; sub(/.*\//, "", name); sub(/\.[mM][dD]$/, "", name); k = tolower(name)
   if (f ~ /^\.\/(_views|_reports)\//) { live[k] = 1; next }   # link targets only
   nl0 = nl; fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; sb = ""; key = ""; comp = 0; sec = ""; ln = 0; code = 0
   while ((getline line < f) > 0) {
