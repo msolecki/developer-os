@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@937f637df9af">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="docs/product/decisions.md@fd3290f8a353">
+<link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
 <body>
@@ -387,6 +385,7 @@ comma, or an <code>allow</code> entry is not one tool rule: each would grant mor
 <tr><td>2026-11-12</td><td>A gate or test is seen red by mutating with an edit and undoing that edit, not with git</td><td><code>plugin/rules/core.md</code></td><td><code>git checkout -- &lt;path&gt;</code> discards other uncommitted work and a command guard blocks it, which left no documented way to revert a mutation (#140)</td></tr>
 <tr><td>2026-11-12</td><td>Undo a test mutation by hand; never revert it with <code>git checkout</code>, <code>git restore</code> or <code>git stash</code></td><td><code>testing-conventions</code></td><td>The same gap, stated where tests are written (#140)</td></tr>
 <tr><td>2026-11-12</td><td>Two sessions sharing a checkout announce a commit, a branch switch or an edit of a shared file and wait before a commit or switch; when the message cannot be delivered, an edit proceeds after a <code>git status</code> check before and after and a note to the user, and a commit or switch stops and asks</td><td><code>plugin/rules/core.md</code></td><td>The announce rule had no path for a peer that <code>SendMessage</code> could not reach (#139)</td></tr>
+<tr><td>2026-11-12</td><td>The paging sentence names the lower-case <code>recommend:</code>, a reason in brackets on every line, the current page only and the literal question "Approve which ones?"</td><td><code>brain-review</code></td><td>The first eval run of brain-review-pages scored 0.70: the model capitalised the keyword, left most lines without a reason, summarised page two and paraphrased the question; 1.00 over three runs after the change</td></tr>
 </table>
 </div>
 <nav class="doc-foot" aria-label="Pagination">

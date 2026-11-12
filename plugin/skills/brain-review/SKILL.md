@@ -67,7 +67,7 @@ Above 20 inbox notes (expired ones not counted), work in pages of 20. Do not rea
 V='/path/to/vault'; rg -N '^(type|summary|tags|project):' -g '*.md' "$V/_inbox"
 ```
 
-Number the notes once, in order of proposed folder, and show numbers 1–20 as the first page, grouped under their folder. Each note takes one line that ends with `recommend: promote | merge into <note> | reject` and a one-clause reason. The `Expired` group follows the first page, numbered after the last inbox note.
+Number the notes once, in order of proposed folder, and show numbers 1–20 as the first page, grouped under their folder. Each note takes one line that ends with `recommend: promote | merge into <note> | reject`, written in lower case as here, and a one-clause reason in brackets; no line goes without its reason. Show only the current page: say how many notes remain, and do not list, summarize or recommend the notes of a later page. End with the question "Approve which ones?" and a range example. The `Expired` group follows the first page, numbered after the last inbox note.
 
 ```
 Page 1 of 2: notes 1–20 of 25
