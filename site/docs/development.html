@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@4fed54e15cc3">
+<meta name="dos-source" content="docs/development.md@1b9cd0c3272e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -97,10 +97,10 @@
     <h2 id="ci">CI</h2>
     <p><code>.github/workflows/check.yml</code> runs <code>scripts/check.sh</code> on pushes to <code>development</code> and <code>main</code> and on
     every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
-    Before the check it puts agnix on <code>PATH</code> for the agnix stage (<code>agent-sh/agnix</code> v0.57.0, the release binary pinned by its
+    Before the check it puts agnix on <code>PATH</code> for the agnix stage (<code>agent-sh/agnix</code> v0.61.0, the release binary pinned by its
     SHA-256, <code>--strict</code>, target <code>claude-code</code>), a static lint of skills, hooks and manifests configured in
     <code>.agnix.toml</code>; every rule disabled there carries its reason. It pins <code>actions/checkout</code> to a commit SHA, does not persist credentials, has
-    read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.300</code> (with <code>--ignore-scripts</code>, then only its own <code>install.cjs</code>, which links the native binary, then <code>claude --version</code>) and a gitleaks
+    read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.322</code> (with <code>--ignore-scripts</code>, then only its own <code>install.cjs</code>, which links the native binary, then <code>claude --version</code>) and a gitleaks
     release verified by SHA-256, and, on a pull request, <code>gitleaks git</code> over the PR's commits, so a secret added and
     removed inside one PR still fails. The same step fails a PR that changes <code>.gitleaks.toml</code> or
     <code>.gitleaksignore</code> or adds a <code>gitleaks&#58;allow</code> marker; the workflow file itself comes from the PR, so
@@ -144,16 +144,24 @@ error and none for the negatives (a permission-rule denial, an <code>api-request
 an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines;
 <code>tests/lanes.test.sh</code> runs parallel-lanes' <code>lanes.py</code> in a temporary repository with a stub <code>claude</code> first on
 <code>PATH</code> and checks the launch (one <code>pids.txt</code> line per lane, the <code>.git</code> deny rules, and a second launch, a
-moved worktree <code>HEAD</code>, a lane without a budget or with an infinite one, a duplicate or path-like lane name and
-a <code>fast_check</code> with a bracket refused), the status table (a changed prompt, a rewritten worktree <code>.git</code> file,
-the session's total cost, not counted twice after a resume), the resume refusals (a forged <code>pids.txt</code> line
-never reaches <code>claude</code>) and the conflict preview;
+moved worktree <code>HEAD</code>, a lane without a budget or with an infinite one, a duplicate or path-like lane name, a
+<code>fast_check</code> with a bracket, a <code>drop_deny</code> path outside the deny list or naming <code>.git</code>, and a <code>base</code> that is
+no full commit id refused), the status table (a changed prompt, a rewritten worktree <code>.git</code> file, a reused PID
+not read as a running lane, the session's total cost, not counted twice after a resume and kept when a later
+result reports zero), the resume refusals (a forged <code>pids.txt</code> line never reaches <code>claude</code>) and the conflict
+preview (a lane still running is left out; a failing <code>git merge-tree</code> exits 1);
 <code>tests/patterns.test.sh</code> feeds edits to <code>patterns.py</code> and expects the note for each pattern and silence
-for a test path, a Markdown file and an edit that adds nothing;
+for a test path, a Markdown file and an edit that adds nothing, a state directory of mode 700 with files of
+mode 600, a session file 9 days old removed while newer ones stay, and the list of shown notes cut to its
+newest 5000;
 <code>tests/setup-check.test.sh</code> runs setup-check's <code>check.py</code> with a fake <code>PATH</code> and config directory and checks
-each line, and that a vault path in a project's <code>CLAUDE.md</code> is ignored;
+each line, that a vault path in a project's <code>CLAUDE.md</code> is ignored, that <code>CLAUDE_CODE_DISABLE_AUTO_MEMORY=1</code>
+counts as auto memory off, and that a hanging <code>gh auth status</code> is cut off with a warning while the later
+checks still print (this case takes about 10 seconds);
 <code>tests/eval-summary.test.sh</code> runs <code>scripts/eval-summary.py</code> on result fixtures and expects exit 1 with the
-case name for a seeded regression and exit 2 for summaries of different models.
+case name for a seeded regression or a case missing from the new summary, exit 2 for summaries or runs of
+different agent or judge models, for a version that is a path and for a wrong number of <code>--diff</code> arguments,
+and a warning on stderr for a partial run.
 After changing a hook, run its test from the repository root, for example <code>sh tests/guard.test.sh</code>,
 and add a fixture for the case you changed.</p>
     <h2 id="evals">Evals</h2>

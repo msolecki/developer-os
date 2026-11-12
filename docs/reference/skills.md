@@ -505,7 +505,8 @@ TypeScript, Python, Go and PHP are in `references/<lang>.md` beside the skill.
 contract, not current behavior; fixtures pin an absolute instant (`2030-01-01T08:00:00Z`); partial
 module mocks built on the original; a regression test seen red before the fix; the boundary that
 could be wrong is not faked; failure messages show the missing record; no raised retries or
-timeouts to hide a flaky test. A convention the project documents wins on layout and tooling (file names,
+timeouts to hide a flaky test. A test mutation is undone by
+hand, never with `git checkout`, `git restore` or `git stash`. A convention the project documents wins on layout and tooling (file names,
 the mock library, the fixture format); it never permits a regression test that was not seen red, a skipped
 test or a raised retry.
 

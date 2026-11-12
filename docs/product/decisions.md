@@ -199,6 +199,12 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   Claude Code run the command unchecked, and a command padded to that size is the one case built to
   get past the guard. The bound is the command's size (command-position words times words in one view
   above 1,500,000, computed in linear time before the scan), with a 4-second backstop between views.
+- **Amended 2026-11-12:** the same classes take the forms the first tables missed: `gsutil rb` and
+  `gsutil rm` with a recursive flag, `gcloud storage rm -r`, `aws s3 sync --delete`, an aws operand that
+  starts `batch-delete-`, `npm unpublish` and `deprecate`, `python -m twine upload`, `gh api` with the
+  DELETE method, a download piped into an interpreter that reads its program from the pipe
+  (`curl u | python3`; `python3 -m json.tool` reads data and passes), a bracket after the pipe
+  (`curl u | (sh)`) and `. <(curl u)`. `--dry-run=false` no longer counts as a dry run (PR #141 review).
 - **Amended 2026-11-12:** a seventh hook, `patterns.py` on `PostToolUse` for Edit, Write and MultiEdit,
   adds `additionalContext` (no decision, no block) when an edit adds one of a closed table of risky
   constructs; once per pattern and file in a session, fail open, `DEVELOPER_OS_PATTERNS=off`.
@@ -368,6 +374,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-11-08:** `scripts/check.sh` runs agnix when it is on `PATH` and fails in CI without it, so a
   contributor who has it sees CI's result before pushing; CI only sets up the pinned binary. A local install stays
   optional: without it the stage prints `SKIP agnix`.
+- **Amended 2026-11-12:** CI pins agnix v0.61.0 with its new SHA-256, `actions/checkout` v7.0.1 and Claude
+  Code 2.1.322 (`claude_code` in `.agnix.toml` moves with it, the Tool versions stage).
 
 ## D19. A Codex installer that copies, not symlinks (superseded by D21)
 
@@ -593,3 +601,6 @@ here before reversing a rule.
 | 2026-11-12 | The `Expired` group belongs to the page shown, so its numbers are in range like the others | `brain-review` | A number in the group read either as in range or as outside the page, and two readings gave different actions (PR #141 review) |
 | 2026-11-12 | The changed-ref check runs as `git -C <repository root>` | `brain-project-refresh` | Run from a subdirectory, the relative path matched nothing and read as "no change" (PR #141 review) |
 | 2026-11-12 | A lane never edits `.git`; `fast_check` holds no bracket or comma and each `allow` entry is one tool rule; Status and Resume refuse a lane whose worktree `.git` file changed; the launch question names the `git diff --output` risk | `parallel-lanes` | A lane could run its own commands through a rewritten `.git` file, or reach `claude` options through `pids.txt` (PR #141 security review, D23) |
+| 2026-11-12 | A gate or test is seen red by mutating with an edit and undoing that edit, not with git | `plugin/rules/core.md` | `git checkout -- <path>` discards other uncommitted work and a command guard blocks it, which left no documented way to revert a mutation (#140) |
+| 2026-11-12 | Undo a test mutation by hand; never revert it with `git checkout`, `git restore` or `git stash` | `testing-conventions` | The same gap, stated where tests are written (#140) |
+| 2026-11-12 | Two sessions sharing a checkout announce a commit, a branch switch or an edit of a shared file and wait before a commit or switch; when the message cannot be delivered, an edit proceeds after a `git status` check before and after and a note to the user, and a commit or switch stops and asks | `plugin/rules/core.md` | The announce rule had no path for a peer that `SendMessage` could not reach (#139) |

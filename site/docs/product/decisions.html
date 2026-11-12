@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@9809843b7fbe">
+<meta name="dos-source" content="docs/product/decisions.md@937f637df9af">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -131,6 +131,12 @@ instead of failing open: the scan is quadratic in command-position words, a hook
 Claude Code run the command unchecked, and a command padded to that size is the one case built to
 get past the guard. The bound is the command's size (command-position words times words in one view
 above 1,500,000, computed in linear time before the scan), with a 4-second backstop between views.</li>
+<li><strong>Amended 2026-11-12:</strong> the same classes take the forms the first tables missed: <code>gsutil rb</code> and
+<code>gsutil rm</code> with a recursive flag, <code>gcloud storage rm -r</code>, <code>aws s3 sync --delete</code>, an aws operand that
+starts <code>batch-delete-</code>, <code>npm unpublish</code> and <code>deprecate</code>, <code>python -m twine upload</code>, <code>gh api</code> with the
+DELETE method, a download piped into an interpreter that reads its program from the pipe
+(<code>curl u | python3</code>; <code>python3 -m json.tool</code> reads data and passes), a bracket after the pipe
+(<code>curl u | (sh)</code>) and <code>. &lt;(curl u)</code>. <code>--dry-run=false</code> no longer counts as a dry run (PR #141 review).</li>
 <li><strong>Amended 2026-11-12:</strong> a seventh hook, <code>patterns.py</code> on <code>PostToolUse</code> for Edit, Write and MultiEdit,
 adds <code>additionalContext</code> (no decision, no block) when an edit adds one of a closed table of risky
 constructs; once per pattern and file in a session, fail open, <code>DEVELOPER_OS_PATTERNS=off</code>.</li>
@@ -230,6 +236,8 @@ machine's tools and user-level config and writes nothing. It still carries both 
 <li><strong>Decision:</strong> CI downloads the <code>agent-sh/agnix</code> v0.57.0 release binary, checks it against a SHA-256 in the workflow, and runs it strict, with suppressions in <code>.agnix.toml</code>, each with its reason. <code>scripts/check.sh</code> adds <code>plugin/SURFACE.txt</code> and digit-count checks, which need no new tool.</li>
 <li><strong>Why:</strong> a local agnix would need an install on every contributor's machine. The hash lives in the workflow because the action's own checksum file comes from the same release and proves nothing if the release is replaced.</li>
 <li><strong>Amended 2026-11-08:</strong> <code>scripts/check.sh</code> runs agnix when it is on <code>PATH</code> and fails in CI without it, so a contributor who has it sees CI's result before pushing; CI only sets up the pinned binary. A local install stays optional: without it the stage prints <code>SKIP agnix</code>.</li>
+<li><strong>Amended 2026-11-12:</strong> CI pins agnix v0.61.0 with its new SHA-256, <code>actions/checkout</code> v7.0.1 and Claude
+Code 2.1.322 (<code>claude_code</code> in <code>.agnix.toml</code> moves with it, the Tool versions stage).</li>
 </ul>
 <h2 id="d19-a-codex-installer-that-copies-not-symlinks-superseded-by-d21">D19. A Codex installer that copies, not symlinks (superseded by D21)</h2>
 <ul>
@@ -376,6 +384,9 @@ comma, or an <code>allow</code> entry is not one tool rule: each would grant mor
 <tr><td>2026-11-12</td><td>The <code>Expired</code> group belongs to the page shown, so its numbers are in range like the others</td><td><code>brain-review</code></td><td>A number in the group read either as in range or as outside the page, and two readings gave different actions (PR #141 review)</td></tr>
 <tr><td>2026-11-12</td><td>The changed-ref check runs as <code>git -C &lt;repository root&gt;</code></td><td><code>brain-project-refresh</code></td><td>Run from a subdirectory, the relative path matched nothing and read as "no change" (PR #141 review)</td></tr>
 <tr><td>2026-11-12</td><td>A lane never edits <code>.git</code>; <code>fast_check</code> holds no bracket or comma and each <code>allow</code> entry is one tool rule; Status and Resume refuse a lane whose worktree <code>.git</code> file changed; the launch question names the <code>git diff --output</code> risk</td><td><code>parallel-lanes</code></td><td>A lane could run its own commands through a rewritten <code>.git</code> file, or reach <code>claude</code> options through <code>pids.txt</code> (PR #141 security review, D23)</td></tr>
+<tr><td>2026-11-12</td><td>A gate or test is seen red by mutating with an edit and undoing that edit, not with git</td><td><code>plugin/rules/core.md</code></td><td><code>git checkout -- &lt;path&gt;</code> discards other uncommitted work and a command guard blocks it, which left no documented way to revert a mutation (#140)</td></tr>
+<tr><td>2026-11-12</td><td>Undo a test mutation by hand; never revert it with <code>git checkout</code>, <code>git restore</code> or <code>git stash</code></td><td><code>testing-conventions</code></td><td>The same gap, stated where tests are written (#140)</td></tr>
+<tr><td>2026-11-12</td><td>Two sessions sharing a checkout announce a commit, a branch switch or an edit of a shared file and wait before a commit or switch; when the message cannot be delivered, an edit proceeds after a <code>git status</code> check before and after and a note to the user, and a commit or switch stops and asks</td><td><code>plugin/rules/core.md</code></td><td>The announce rule had no path for a peer that <code>SendMessage</code> could not reach (#139)</td></tr>
 </table>
 </div>
 <nav class="doc-foot" aria-label="Pagination">

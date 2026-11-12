@@ -64,10 +64,10 @@ committed.
 
 `.github/workflows/check.yml` runs `scripts/check.sh` on pushes to `development` and `main` and on
 every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
-Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.57.0, the release binary pinned by its
+Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.61.0, the release binary pinned by its
 SHA-256, `--strict`, target `claude-code`), a static lint of skills, hooks and manifests configured in
 `.agnix.toml`; every rule disabled there carries its reason. It pins `actions/checkout` to a commit SHA, does not persist credentials, has
-read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`) and a gitleaks
+read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.322` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`) and a gitleaks
 release verified by SHA-256, and, on a pull request, `gitleaks git` over the PR's commits, so a secret added and
 removed inside one PR still fails. The same step fails a PR that changes `.gitleaks.toml` or
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
@@ -140,16 +140,24 @@ error and none for the negatives (a permission-rule denial, an `api-request-blob
 an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines;
 `tests/lanes.test.sh` runs parallel-lanes' `lanes.py` in a temporary repository with a stub `claude` first on
 `PATH` and checks the launch (one `pids.txt` line per lane, the `.git` deny rules, and a second launch, a
-moved worktree `HEAD`, a lane without a budget or with an infinite one, a duplicate or path-like lane name and
-a `fast_check` with a bracket refused), the status table (a changed prompt, a rewritten worktree `.git` file,
-the session's total cost, not counted twice after a resume), the resume refusals (a forged `pids.txt` line
-never reaches `claude`) and the conflict preview;
+moved worktree `HEAD`, a lane without a budget or with an infinite one, a duplicate or path-like lane name, a
+`fast_check` with a bracket, a `drop_deny` path outside the deny list or naming `.git`, and a `base` that is
+no full commit id refused), the status table (a changed prompt, a rewritten worktree `.git` file, a reused PID
+not read as a running lane, the session's total cost, not counted twice after a resume and kept when a later
+result reports zero), the resume refusals (a forged `pids.txt` line never reaches `claude`) and the conflict
+preview (a lane still running is left out; a failing `git merge-tree` exits 1);
 `tests/patterns.test.sh` feeds edits to `patterns.py` and expects the note for each pattern and silence
-for a test path, a Markdown file and an edit that adds nothing;
+for a test path, a Markdown file and an edit that adds nothing, a state directory of mode 700 with files of
+mode 600, a session file 9 days old removed while newer ones stay, and the list of shown notes cut to its
+newest 5000;
 `tests/setup-check.test.sh` runs setup-check's `check.py` with a fake `PATH` and config directory and checks
-each line, and that a vault path in a project's `CLAUDE.md` is ignored;
+each line, that a vault path in a project's `CLAUDE.md` is ignored, that `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`
+counts as auto memory off, and that a hanging `gh auth status` is cut off with a warning while the later
+checks still print (this case takes about 10 seconds);
 `tests/eval-summary.test.sh` runs `scripts/eval-summary.py` on result fixtures and expects exit 1 with the
-case name for a seeded regression and exit 2 for summaries of different models.
+case name for a seeded regression or a case missing from the new summary, exit 2 for summaries or runs of
+different agent or judge models, for a version that is a path and for a wrong number of `--diff` arguments,
+and a warning on stderr for a partial run.
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 

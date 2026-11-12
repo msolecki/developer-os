@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@263a463a7294">
+<meta name="dos-source" content="CHANGELOG.md@68f5ab6cb9f7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,6 +68,11 @@ tool, never the command; <code>DEVELOPER_OS_GUARD_LOG=off</code> disables it.</l
 <li>Guard: a Bash command too large to scan inside the hook timeout asks (<code>slow</code>) instead of running
 unchecked: the bound is the command's size (command-position words times words in one view above
 1,500,000), with a 4-second backstop.</li>
+<li>Guard: more forms of those classes ask: <code>gsutil rb</code> and <code>gsutil rm -r</code>, <code>gcloud storage rm -r</code>,
+<code>aws s3 sync --delete</code>, <code>aws … batch-delete-*</code>, <code>npm unpublish</code>, <code>npm deprecate</code>, <code>python -m twine upload</code>,
+<code>gh api -X DELETE</code>, a download piped into an interpreter that reads its program from the pipe
+(<code>curl … | python3</code>; <code>python3 -m json.tool</code> passes), <code>curl … | (sh)</code> and <code>. &lt;(curl …)</code>; <code>--dry-run=false</code>
+is no dry run.</li>
 <li>A <code>PostToolUse</code> hook, <code>patterns.py</code>, tells the agent once per pattern and file when an edit adds a known
 risky construct (<code>eval(</code>, <code>exec(</code>, <code>pickle.load</code>, <code>yaml.load(</code> without a safe loader, <code>verify=False</code>,
 <code>shell=True</code>, <code>.innerHTML =</code>, <code>dangerouslySetInnerHTML</code>, <code>${{ github.event.</code> in a workflow <code>run:</code> line,
@@ -131,6 +136,12 @@ error-handling description says "in server and library code".</li>
 <code>sandbox.allowUnsandboxedCommands: false</code> and denies <code>~/.kube</code>, <code>~/.npmrc</code> and <code>~/.config/gh</code>; the
 decisions list no longer names npm, pnpm, Jest or Vitest. <code>project-init</code> Audit is now step 5 and Report
 step 6.</li>
+<li>Core rules: a test or gate is seen red by mutating with an edit and undoing that edit, not with git, which
+discards other work (#140; <code>testing-conventions</code> says the same in a bullet of its own). Two sessions that
+share a checkout announce a commit, a branch switch or an edit of a shared file to each other; when the
+message cannot be delivered, an edit goes ahead after a <code>git status</code> check before and after and a note to
+the user, and a commit or switch stops and asks (#139).</li>
+<li>CI pins <code>actions/checkout</code> v7.0.1, agnix v0.61.0 and Claude Code 2.1.322.</li>
     </ul>
     <h2 id="029---2026-11-09">[0.2.9] - 2026-11-09</h2>
     <h3 id="029-added">Added</h3>

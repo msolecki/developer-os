@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@bef94f7319b6">
+<meta name="dos-source" content="docs/reference/skills.md@7611022880d7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -488,7 +488,8 @@ TypeScript, Python, Go and PHP are in <code>references/&lt;lang&gt;.md</code> be
 contract, not current behavior; fixtures pin an absolute instant (<code>2030-01-01T08:00:00Z</code>); partial
 module mocks built on the original; a regression test seen red before the fix; the boundary that
 could be wrong is not faked; failure messages show the missing record; no raised retries or
-timeouts to hide a flaky test. A convention the project documents wins on layout and tooling (file names,
+timeouts to hide a flaky test. A test mutation is undone by
+hand, never with <code>git checkout</code>, <code>git restore</code> or <code>git stash</code>. A convention the project documents wins on layout and tooling (file names,
 the mock library, the fixture format); it never permits a regression test that was not seen red, a skipped
 test or a raised retry.</p>
     <h3 id="monitoring-conventions">monitoring-conventions</h3>

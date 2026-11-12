@@ -23,6 +23,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Guard: a Bash command too large to scan inside the hook timeout asks (`slow`) instead of running
   unchecked: the bound is the command's size (command-position words times words in one view above
   1,500,000), with a 4-second backstop.
+- Guard: more forms of those classes ask: `gsutil rb` and `gsutil rm -r`, `gcloud storage rm -r`,
+  `aws s3 sync --delete`, `aws … batch-delete-*`, `npm unpublish`, `npm deprecate`, `python -m twine upload`,
+  `gh api -X DELETE`, a download piped into an interpreter that reads its program from the pipe
+  (`curl … | python3`; `python3 -m json.tool` passes), `curl … | (sh)` and `. <(curl …)`; `--dry-run=false`
+  is no dry run.
 - A `PostToolUse` hook, `patterns.py`, tells the agent once per pattern and file when an edit adds a known
   risky construct (`eval(`, `exec(`, `pickle.load`, `yaml.load(` without a safe loader, `verify=False`,
   `shell=True`, `.innerHTML =`, `dangerouslySetInnerHTML`, `${{ github.event.` in a workflow `run:` line,
@@ -86,6 +91,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `sandbox.allowUnsandboxedCommands: false` and denies `~/.kube`, `~/.npmrc` and `~/.config/gh`; the
   decisions list no longer names npm, pnpm, Jest or Vitest. `project-init` Audit is now step 5 and Report
   step 6.
+- Core rules: a test or gate is seen red by mutating with an edit and undoing that edit, not with git, which
+  discards other work (#140; `testing-conventions` says the same in a bullet of its own). Two sessions that
+  share a checkout announce a commit, a branch switch or an edit of a shared file to each other; when the
+  message cannot be delivered, an edit goes ahead after a `git status` check before and after and a note to
+  the user, and a commit or switch stops and asks (#139).
+- CI pins `actions/checkout` v7.0.1, agnix v0.61.0 and Claude Code 2.1.322.
 
 ## [0.2.9] - 2026-11-09
 

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/testing-conventions/SKILL.md@02ae562ac131">
+<meta name="dos-source" content="plugin/skills/testing-conventions/SKILL.md@05056809e54e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -72,6 +72,7 @@
       <li><strong>Red before the fix.</strong> A regression test must fail on the unfixed code: run it before the fix and see it red. A test only ever seen green may not exercise the bug at all.</li>
       <li><strong>Real boundaries.</strong> Do not fake the boundary that could be wrong. A fake database that returns ready records hides a broken query; test that path against a real test database or the real call.</li>
       <li><strong>Telling failures.</strong> A failure message names the missing record or shows the actual response. Never raise retries or timeouts to hide a flaky test; find the race instead.</li>
+      <li><strong>Undo a mutation by hand.</strong> To see a test fail, mutate the code with one edit, run the test, then undo that same edit. Never revert with <code>git checkout</code>, <code>git restore</code> or <code>git stash</code>: they discard or hide other uncommitted work, and a command guard may block them.</li>
       <li><strong>The project's convention wins on layout and tooling.</strong> A convention the project documents wins over a rule here on file names, the mock library and the fixture format. It never permits a regression test that was not seen red, a skipped test or a raised retry to hide a flake.</li>
     </ul>
     <p>Examples and probes for TypeScript, Python, Go and PHP are in <code>references/&lt;lang&gt;.md</code> beside the skill.</p>
