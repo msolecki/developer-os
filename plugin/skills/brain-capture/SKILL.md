@@ -68,6 +68,7 @@ type: decision
 status: inbox
 created: 2026-10-14
 updated: 2026-10-14
+expires: 2026-11-13
 project: my-app
 tags: [release, changelog]
 summary: "Release notes live in CHANGELOG.md at the repository root."
@@ -92,6 +93,7 @@ One file next to the code, reviewed in the same PR.
 
 - `type`: `decision`, `knowledge` (a lesson or how-to), `reference`, or `project`.
 - `created` and `updated`: today. `project`: for a note about this project, the slug from the `Vault project slug:` line in `_Context.md` at the repository root (read the file if the line is not in your context); empty for a cross-project note that applies beyond this repository, or when there is no such line. Accept a slug only when it matches `^[a-z0-9-]+$`; otherwise show it and ask the user. Ask if unsure. Never derive it from the directory name.
+- `expires`: `created` plus 30 days (`date -v+30d +%F 2>/dev/null || date -d '30 days' +%F`). After that date brain-search stops answering from the note while it is still `status: inbox`, and brain-review offers it for archiving; promotion removes the key.
 - `summary`: one sentence in double quotes (a bare colon breaks YAML).
 
 When the vault is a git work tree (`git -C "$V" rev-parse --is-inside-work-tree` prints `true`) and nothing is staged (`git -C "$V" diff --cached --name-only` is empty), commit only the new note: `git -C "$V" add -- '<note path>'`, then `git -C "$V" commit -m 'brain-capture: <note name>' -- '<note path>'`. Never push, pull, switch branches or stage other files. With something already staged, skip the commit and say so in the report. Without this commit the note has no history until a review commits it.

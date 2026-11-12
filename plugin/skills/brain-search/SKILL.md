@@ -29,6 +29,16 @@ Drop notes with `status: archived` unless the user asked for them (Bash calls ke
 V='/path/to/vault'; rg -l '^status: archived' -g '*.md' -g '!_archive/' "$V"
 ```
 
+Drop expired inbox notes the same way, unless the user asked for expired or unreviewed notes. A note with `status: inbox` is expired when today is after its `expires:` date, or more than 30 days after `created` when it has no such key; an `active` note never expires. This prints the expired ones:
+
+```bash
+V='/path/to/vault'; today=$(date +%F); cut=$(date -v-30d +%F 2>/dev/null || date -d '30 days ago' +%F)
+rg -l '^status:[ \t]*"?inbox' -g '*.md' -g '!_archive/' -g '!templates/' "$V" | while IFS= read -r f; do
+  awk -v today="$today" -v cut="$cut" 'NR > 1 && /^---/ { exit } { gsub(/["\r]/, "") } /^status:/ { s = $(2) } /^created:/ { c = $(2) } /^expires:/ { e = $(2) }
+    END { if (s == "inbox" && (e != "" ? (e < today) : (c != "" && c < cut))) print FILENAME ": expired " (e != "" ? e : "30 days after " c) }' "$f"
+done
+```
+
 ## 3. Rank
 
 Rank higher: a match in `summary`, `tags`, or the file name; a `project` equal to the current project's slug (the `Vault project slug:` line in `_Context.md` at the repository root; read the file if the line is not in your context); more distinct keywords matched; `status: active` over `inbox`; a newer `updated`. Keep the top 5.
@@ -39,7 +49,7 @@ A note with `status: superseded` was replaced: follow its `superseded_by: "[[not
 
 Read the top notes in full. Answer the question, and attach the vault-relative path to every claim. Mark every claim drawn from an `_inbox/` note as unreviewed.
 
-Never cite or mention a note in `_archive/` or with `status: archived` unless the user asked for archived notes. Archived is not history: only notes reached through a `superseded_by` chain are named as history.
+Never cite or mention a note in `_archive/` or with `status: archived` unless the user asked for archived notes, and never answer from or name an expired inbox note unless the user asked for those. When expired notes matched the keywords, end the answer with their count and no names: "Skipped <N> expired inbox notes; brain-review can promote or archive them." Archived is not history: only notes reached through a `superseded_by` chain are named as history.
 
 For a superseded chain, answer from its end note and name every superseded note on the way as history, with its `## Why`. When the chain broke or looped, say "History incomplete: <note> points to [[<target>]], which <does not exist | is archived | loops back to <note>>", cite the notes you reached as history, and name no note as current.
 
@@ -56,4 +66,5 @@ Each entry links the PR that introduced it.
   — _inbox/changelog-pr-links.md (inbox, unreviewed)
 Until 2026-08, release notes were kept in GitHub releases only, because no file had to be maintained.
   — DEV/release-notes-in-github.md (superseded by DEV/release-notes-location.md, history)
+Skipped 1 expired inbox note; brain-review can promote or archive it.
 ```
