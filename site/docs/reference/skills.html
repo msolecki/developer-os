@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@57b5990b2360">
+<meta name="dos-source" content="docs/reference/skills.md@bef94f7319b6">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -95,7 +95,8 @@ A/B/C question.</li>
     </ul>
     <h3 id="project-baseline">project-baseline</h3>
     <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 21 engineering
-practices; each one has a probe that reads files only, and a missing one becomes a <code>BASE-NN</code> backlog item.</p>
+practices; each one has a probe that reads files only, except the dependency probe, which runs the package
+manager's outdated report, and a missing one becomes a <code>BASE-NN</code> backlog item.</p>
     <div class="table-wrap">
 <table>
 <thead><tr><th>Practice</th><th>Present when</th></tr></thead>
@@ -259,7 +260,7 @@ exists (for a <code>FEAT-</code>, <code>BASE-</code> or <code>PLAN-</code> item,
 now (exit 126 or 127, a grep exit 2 or a "no such file" or "no tests found" message is a broken
 <code>Check</code>, so the item is stale; a failure on authentication, quota or a missing secret blocks the
 item for you), no open pull request touches its files (skipped when <code>gh</code> is
-unavailable), and no project decision record, doc or vault note read at the start contradicts it. A failing item leaves the
+unavailable), and no project decision record, doc or <code>active</code> vault note read at the start contradicts it (an inbox note is unreviewed: it is reported as context and the item stays). A failing item leaves the
 batch, is never claimed or dispatched, and is reported as <code>stale: &lt;ID&gt; · &lt;point&gt; · &lt;evidence&gt;</code>
 for you to close, amend or keep; the batch is topped up from the next ready items.</li>
 <li><strong>Git-ignored backlog:</strong> the <code>Owner</code> lines stay uncommitted in the orchestrator's checkout, and
@@ -293,8 +294,8 @@ the observation that would falsify the leader, each claim graded <code>[hypothes
 <code>[ruled out: X because Y]</code> or <code>[demonstrated]</code>. A root cause is <code>[demonstrated]</code> only when toggling
 one condition switches the failure on and off. Library or vendor behaviour goes to
 <code>research-analyst</code> for a sourced answer. Proposes mitigation, root-cause fix, regression test and
-rollback criteria; applies none of them. With a vault configured it first runs brain-search on the
-symptom and reads the top note; without one it skips that silently.</p>
+rollback criteria; applies none of them. With a vault configured it runs brain-search on the
+symptom, after the repro and before the hypotheses, and reads the top note; without one it skips that silently.</p>
     <h3 id="deploy-checklist">deploy-checklist</h3>
     <p><a href="../../skills/deploy-checklist.html">Source</a>. Run before a release, not at setup.</p>
     <ul>
@@ -317,24 +318,31 @@ git-ignored run directory and <code>.worktrees/</code>. The skill writes <code>l
 the turn cap and, per lane, its budget, fast check and extra tools) and shows it with one command;
 <code>lanes.py</code>, a standard-library script beside the skill, launches, reports and resumes the lanes. Each
 lane is a detached <code>claude -p</code> in its own worktree and session, so it outlives the turn; the worktree
-starts from the base commit recorded in <code>LANES.md</code>, which the launch checks. Each lane runs with a
+starts from the base commit recorded in <code>lanes.json</code>, which the launch checks. Each lane runs with a
 recorded <code>--session-id</code>, a <code>--max-turns</code> cap, <code>--max-budget-usd</code>, <code>--output-format json</code>, and
 <code>--disallowedTools</code> for edits to the manifest,
-<code>Makefile</code>, hook directories and <code>.claude/</code> unless it owns them; its prompt allows only the lane's
+<code>Makefile</code>, hook directories and <code>.claude/</code> unless it owns them, and always for <code>.git</code> and anything under
+it: a lane that rewrote its worktree's <code>.git</code> file could point git at a config of its own. <code>lanes.py</code>
+refuses a <code>lanes.json</code> with an unknown key, a budget or turn cap that is not a finite number, a
+<code>fast_check</code> holding a bracket or a comma, or an <code>allow</code> entry that is not one tool rule; its prompt allows only the lane's
 paths and commits in the worktree, and its report starts with a final status and lists what is not
 started, what is not verified and If-X-then-Y contingencies. The status table reads
 the PIDs, the <code>EXIT=</code> line and the result in each log, what the lane spent (Cost), the time since the
 worktree last changed, the report's first
 line, the lane's commits, any changed file outside its owned paths, and a <code>LANES.md</code>, <code>lanes.json</code> or
-prompt whose hash differs from the one recorded at launch. The budget is checked after a response, so a
+prompt whose hash differs from the one recorded at launch. <code>lanes.py</code> runs git with <code>core.fsmonitor</code> and
+hooks off, reads a <code>pids.txt</code> line only when it holds a lane name, a numeric PID and a UUID session id,
+and marks a lane whose worktree <code>.git</code> file no longer points into the repository's own <code>.git/worktrees</code>,
+without running git there. The budget is checked after a response, so a
 lane can pass it; a lane cut off by it is marked. A finished lane with no report or a <code>CONTINUING</code> one
-can be resumed: <code>lanes.py resume</code> continues its session with <code>claude -p --resume</code> and a new budget after
-the user's yes. Each lane has a runnable <code>Check</code> next to its <code>Done when</code>; the
+can be resumed: <code>lanes.py resume</code> continues its session with <code>claude -p --resume</code> and the same
+<code>--max-budget-usd</code> after the user's yes, and refuses a lane with a changed <code>LANES.md</code>, <code>lanes.json</code>,
+prompt or worktree <code>.git</code> file. Each lane has a runnable <code>Check</code> next to its <code>Done when</code>; the
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished <code>DONE</code> lanes whose fast check and <code>Check</code> pass when the
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
 other lane goes to Needs you. Before the first merge it previews conflicts between the <code>DONE</code> lanes
-(<code>lanes.py conflicts</code>, read-only, git 2.38 or later) and puts them on a <code>Conflicts:</code> line of the merge
+(<code>lanes.py conflicts</code>, git 2.38 or later; it moves no ref and changes no working-tree file, though git stores the trial merge's tree objects) and puts them on a <code>Conflicts:</code> line of the merge
 plan. After each lane merge it runs the project's regeneration command for
 derived files (in developer-os, <code>scripts/site-hashes.py</code>). After merging, it runs every merged lane's <code>Check</code> and the
 repository-wide gate on <code>lanes/&lt;run&gt;</code>, and stops on a <code>REQUEST_CHANGES</code> review.</p>
@@ -389,7 +397,7 @@ then smoke-tests with brain-search, passing it the vault path.</p>
     <h3 id="brain-search">brain-search</h3>
     <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the path you give, the
 plugin's <code>brain_vault</code> option or the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code> (never a project file, never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
-skips inbox notes that have expired (30 days after <code>created</code>, or a passed <code>expires:</code>) and ends with
+skips inbox notes that have expired (a passed <code>expires:</code>, or 30 days after <code>created</code> when the note has no such key) and ends with
 their count, ranks by <code>summary</code>/<code>tags</code>/name match, project slug, <code>active</code> over <code>inbox</code> and recency, reads the
 top five, follows a superseded note's <code>superseded_by</code> chain to the current note (a broken or looping
 chain is incomplete history, with no note named current), and answers only from them with a path
@@ -410,7 +418,8 @@ checks the name (<code>^[a-z0-9-]+$</code>) and that no other note has it, case-
 a named active note by another active one (not itself, not one already superseded; the old note
 stays in its folder). When a project hub links a promoted, merged or rejected note as
 <code>(waiting for review)</code>, it shows the hub-line change as a diff and applies it only after a yes.
-Expired inbox notes are shown as one group that "archive the expired ones" names. Above 20 notes it
+Expired inbox notes are shown as one group that "archive the expired ones" names; the group belongs to the
+page shown, so its numbers can be answered like the others. Above 20 notes it
 shows pages of 20 grouped by proposed folder, each line with <code>recommend: promote | merge into &lt;note&gt; |
 reject</code> and a reason, and takes range answers (<code>1-12 promote, 13 reject</code>) for the page shown.</p>
     <h3 id="brain-garden">brain-garden</h3>
@@ -434,7 +443,7 @@ hub against the README, the docs map, <code>CURRENT-STATE.md</code>, the decisio
 commits (claims the repository contradicts, repository paths that no longer exist) and against the
 vault (active or superseded notes of the slug it does not link, links to notes that do not exist, a
 summary or status that no longer fits). A note of the slug whose <code>refs:</code> file changed since its
-<code>verified</code> date is listed under Verify, with a <code>Changed refs</code> count; the skill does not edit it. A drifted code fact is usually replaced by a link to the
+<code>verified</code> date (checked with <code>git -C &lt;repository root&gt;</code>, so the working directory does not matter) is listed under Verify, with a <code>Changed refs</code> count; the skill does not edit it. A drifted code fact is usually replaced by a link to the
 repository doc, since the hub keeps only what outlives the repository. A claim it cannot check is
 listed as unchecked, not changed.</p>
     <h3 id="brain-import-memory">brain-import-memory</h3>
@@ -470,14 +479,18 @@ server and library code, in any language. An error raised while handling another
 its cause; a typed result instead of a null or zero value as failure; one error envelope
 <code>{ error: { code, message, details? } }</code> with a <code>SCREAMING_SNAKE_CASE</code> code and no stack trace;
 never log and re-raise the same error; no swallowed error without a one-line comment saying why; exceptions are
-not control flow. A convention the project documents wins over a rule here. Examples and probes for
+not control flow. A convention the project documents wins over a rule here on shape and naming (the error
+type, the envelope's field names, the logging library); it never permits a swallowed error, a lost cause or
+internals in a response. Examples and probes for
 TypeScript, Python, Go and PHP are in <code>references/&lt;lang&gt;.md</code> beside the skill.</p>
     <h3 id="testing-conventions">testing-conventions</h3>
     <p><a href="../../skills/testing-conventions.html">Source</a>. Loads for test files. A test pins the
 contract, not current behavior; fixtures pin an absolute instant (<code>2030-01-01T08:00:00Z</code>); partial
 module mocks built on the original; a regression test seen red before the fix; the boundary that
 could be wrong is not faked; failure messages show the missing record; no raised retries or
-timeouts to hide a flaky test.</p>
+timeouts to hide a flaky test. A convention the project documents wins on layout and tooling (file names,
+the mock library, the fixture format); it never permits a regression test that was not seen red, a skipped
+test or a raised retry.</p>
     <h3 id="monitoring-conventions">monitoring-conventions</h3>
     <p><a href="../../skills/monitoring-conventions.html">Source</a>. Loads for infrastructure code, CI,
 metrics and alerts. Alert on symptoms (error rate, p99, queue growth), not causes; tune or remove an

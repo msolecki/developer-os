@@ -215,7 +215,7 @@
       </div>
       <div class="hooks">
         <div class="hook"><span class="event">SessionStart <span class="badge info">loads</span></span><p>Prints the core rules; after a compaction, resume or fork, a second hook adds the state card of at most 1 KB.</p></div>
-        <div class="hook"><span class="event">PreToolUse · Bash, Edit, Write, MultiEdit <span class="badge ask">asks</span></span><p>Asks before installs with a package argument, force pushes, git-hook bypasses, commands that destroy uncommitted work, cloud, database and publish commands, and edits of secret or agent-config files; a project can add its own questions. It never denies; in headless <code>claude -p</code> an ask becomes a denial.</p></div>
+        <div class="hook"><span class="event">PreToolUse · Bash, Edit, Write, MultiEdit <span class="badge ask">asks</span></span><p>Asks before installs with a package argument, force pushes, git-hook bypasses, commands that destroy uncommitted work, cloud deletes, database drops, publish and merge commands, and edits of secret or agent-config files; a project can add its own questions. It never denies; in headless <code>claude -p</code> an ask becomes a denial.</p></div>
         <div class="hook"><span class="event">PostToolUse · Edit, Write, MultiEdit <span class="badge info">notes</span></span><p>When an edit adds a known risky construct such as <code>eval(</code>, <code>shell=True</code> or <code>verify=False</code>, tells the agent once per pattern and file, with the safer form. It never blocks.</p></div>
         <div class="hook"><span class="event">PostToolUseFailure <span class="badge info">reminds</span></span><p>At the third identical failed call within 10 minutes of the last, tells the agent to stop retrying it unchanged and find the cause.</p></div>
         <div class="hook"><span class="event">Stop <span class="badge info">suggests</span></span><p>Once per long session, suggests session-retro. Reads tool-call counts and background-task ids, paths and times, never message content.</p></div>
@@ -267,7 +267,7 @@
         </div>
         <div>
           <h3>Project hygiene and sessions</h3>
-          <p class="wf-chips"><a href="skills/docs-sync.html">docs-sync</a><a href="skills/project-init.html">project-init</a><a href="skills/project-baseline.html">project-baseline</a><a href="skills/instruction-review.html">instruction-review</a><a href="skills/plan-status.html">plan-status</a><a href="skills/session-retro.html">session-retro</a><a href="skills/skill-usage.html">skill-usage</a><a href="skills/client-reply.html">client-reply</a></p>
+          <p class="wf-chips"><a href="skills/docs-sync.html">docs-sync</a><a href="skills/project-init.html">project-init</a><a href="skills/project-baseline.html">project-baseline</a><a href="skills/instruction-review.html">instruction-review</a><a href="skills/plan-status.html">plan-status</a><a href="skills/session-retro.html">session-retro</a><a href="skills/skill-usage.html">skill-usage</a><a href="skills/setup-check.html">setup-check</a><a href="skills/client-reply.html">client-reply</a></p>
         </div>
         <div>
           <h3>Agents for independent passes</h3>

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@ea11c829f7f2">
+<meta name="dos-source" content="docs/architecture/overview.md@d45da13606f4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,7 +68,7 @@ plugin/                           the installed payload
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
 evals/                            claude plugin eval cases (not installed)
-eval-history/                     eval scores per release, written by scripts/eval-summary.py
+eval-history/                     eval scores per release; scripts/eval-summary.py creates it on its first run
 tests/*.test.sh                   script tests: hooks, skill scripts, check.sh, skill-usage block
 .agnix.toml                       agnix lint settings for CI
 scripts/check.sh                  the repository suite, also run by CI
@@ -86,9 +86,9 @@ site/                             public documentation site, published by .githu
           <tr><td>State card</td><td>After a compaction, resume or fork inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
           <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing; a skill with <code>disable-model-invocation: true</code> lists no description</td><td>About 11,200 characters for 33 skills</td><td>80–1024 each, 12000 total of the listed ones (<code>scripts/check.sh</code>); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10)</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
-          <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.8–14.2 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
-          <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–4.7 KB per file</td><td>—</td></tr>
-          <tr><td>An output style</td><td>When selected; replaces the default style but keeps coding instructions</td><td>0.6–2.0 KB</td><td>—</td></tr>
+          <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.8–17.5 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
+          <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–5.3 KB per file</td><td>—</td></tr>
+          <tr><td>An output style</td><td>When selected; replaces the default style but keeps coding instructions</td><td>0.7–2.2 KB</td><td>—</td></tr>
         </tbody>
       </table>
     </div>

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@2843ab194833">
+<meta name="dos-source" content="docs/development.md@4fed54e15cc3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -143,9 +143,11 @@ which installs ripgrep;
 error and none for the negatives (a permission-rule denial, an <code>api-request-blob</code> copy, a single error,
 an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines;
 <code>tests/lanes.test.sh</code> runs parallel-lanes' <code>lanes.py</code> in a temporary repository with a stub <code>claude</code> first on
-<code>PATH</code> and checks the launch (one <code>pids.txt</code> line per lane, a second launch, a moved worktree <code>HEAD</code> and a
-lane without a budget refused), the status table (a changed prompt, the summed cost), the resume refusals and
-the conflict preview;
+<code>PATH</code> and checks the launch (one <code>pids.txt</code> line per lane, the <code>.git</code> deny rules, and a second launch, a
+moved worktree <code>HEAD</code>, a lane without a budget or with an infinite one, a duplicate or path-like lane name and
+a <code>fast_check</code> with a bracket refused), the status table (a changed prompt, a rewritten worktree <code>.git</code> file,
+the session's total cost, not counted twice after a resume), the resume refusals (a forged <code>pids.txt</code> line
+never reaches <code>claude</code>) and the conflict preview;
 <code>tests/patterns.test.sh</code> feeds edits to <code>patterns.py</code> and expects the note for each pattern and silence
 for a test path, a Markdown file and an edit that adds nothing;
 <code>tests/setup-check.test.sh</code> runs setup-check's <code>check.py</code> with a fake <code>PATH</code> and config directory and checks
@@ -187,7 +189,7 @@ and add a fixture for the case you changed.</p>
 the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request. After the release's eval
 run, keep its scores: <code>python3 scripts/eval-summary.py evals/results/&lt;run&gt;/aggregate-result.json</code> writes
 <code>eval-history/&lt;version&gt;.json</code> (tracked), and <code>--diff &lt;old&gt; &lt;new&gt;</code> on two of those files exits 1 when a
-case's with-plugin score fell by more than 0.1. In
+case's with-plugin score fell by more than 0.1 or the case is missing from the new summary. In
 <code>site/docs/changelog.html</code>, add the version's <code>&lt;h2&gt;</code> under <code>[Unreleased]</code> and rename that section's
 <code>unreleased-*</code> heading ids to <code>&lt;version&gt;-*</code> (e.g. <code>025-added</code>); the Site stage compares the words, not
 the ids. Set the release in the landing page's "Is it stable?" answer; the Counts stage compares it

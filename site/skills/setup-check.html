@@ -68,16 +68,21 @@
     <ol>
       <li><strong>Runs the check.</strong> One script prints one line per check with the status <code>ok</code>, <code>missing</code> or <code>warn</code>: <code>python3</code> 3.8 or later, <code>rg</code>, <code>jq</code>, <code>gh</code> and its login, <code>git</code> 2.38 or later, the vault path and whether it is a readable directory, <code>autoMemoryEnabled</code>, and the <code>claude</code> command. The vault path comes from the user level only (the <code>brain_vault</code> option, else the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code>), never from a project file.</li>
       <li><strong>Reports with a fix.</strong> Every line as printed, then one fix per line that is not <code>ok</code>, with what breaks without it. Without <code>python3</code>, every hook except the core rules fails open and says nothing, which is the usual answer to "why do the hooks not run". Install commands are named for you to run; the skill does not run them.</li>
-      <li><strong>Says what it cannot see.</strong> When every line is <code>ok</code>, it points to <code>/plugin</code> (is the plugin enabled), <code>/hooks</code> (which hooks are registered) and the <code>DEVELOPER_OS_&lt;HOOK&gt;=off</code> variables.</li>
+      <li><strong>Says what it cannot see.</strong> When every line is <code>ok</code> and you asked why a hook does not run, it points to <code>/plugin</code> (is the plugin enabled), <code>/hooks</code> (which hooks are registered) and the <code>DEVELOPER_OS_&lt;HOOK&gt;=off</code> variables.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>
     <div class="terminal">
       <div class="terminal-bar"><i></i><i></i><i></i><span>setup-check</span></div>
     <pre><code>ok python3: 3.12.4
-missing rg: not on PATH
+missing rg: not found on PATH
 ok jq: 1.7.1
+ok gh: 2.60.1
+ok gh auth: logged in
+ok git: 2.45.2
 warn vault: not configured
+ok autoMemoryEnabled: false
+ok claude: 2.1.300
 
 rg: install ripgrep; the brain skills, project-init and skill-usage search with it.
 vault: optional; ask for brain-setup to create or connect one.

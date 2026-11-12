@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/error-handling-conventions/SKILL.md@d7c079b4a60f">
+<meta name="dos-source" content="plugin/skills/error-handling-conventions/SKILL.md@e66f0ddac510">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -71,7 +71,7 @@
       <li><strong>Do not log and throw.</strong> Either handle and log an error, or propagate it. Both at once means duplicate logs and false alerts.</li>
       <li><strong>No swallowed error.</strong> No empty catch, no bare <code>except: pass</code>, no discarded error return. Swallowing an error needs a one-line comment explaining why it is correct, and it almost never is.</li>
       <li><strong>Exceptions are not control flow.</strong> An expected missing record is a typed result, not an exception handler around the happy path.</li>
-      <li><strong>The project's convention wins.</strong> A convention the project documents (its <code>docs/reference/conventions.md</code>, a decision record) wins over a rule here.</li>
+      <li><strong>The project's convention wins on shape and naming.</strong> A convention the project documents (its <code>docs/reference/conventions.md</code>, a decision record) wins over a rule here on the error type, the envelope's field names and the logging library. It never permits a swallowed error, a lost cause or internals in a response.</li>
     </ul>
     <p>Examples and probes for TypeScript, Python, Go and PHP are in <code>references/&lt;lang&gt;.md</code> beside the skill. In TypeScript:</p>
     <pre><code>throw new AppError("...", { cause: err })

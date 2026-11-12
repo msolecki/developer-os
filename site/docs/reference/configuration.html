@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/configuration.md@fdfd3c7890ae">
+<meta name="dos-source" content="docs/reference/configuration.md@50c0b32ea0fb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -65,6 +65,7 @@ optional file of guard rules. This page lists every one of them.</p>
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code></td><td>Shell environment</td><td>The <code>Stop</code> hook (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
 <tr><td><code>DEVELOPER_OS_GUARD_LOG</code></td><td>Shell environment</td><td>The <code>PreToolUse</code> guard; <code>off</code> disables the ask log, a local record of which rule asked, without the command (<a href="hooks.html#ask-log--asksjsonl">hooks.md</a>)</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_NOTICES</code></td><td>Shell environment</td><td>The <code>SessionStart</code> notices hook; <code>off</code> disables the version and upkeep notices (<a href="hooks.html#sessionstart-on-startup--noticespy">hooks.md</a>)</td><td>The user</td></tr>
+<tr><td><code>DEVELOPER_OS_PATTERNS</code></td><td>Shell environment</td><td>The <code>PostToolUse</code> patterns hook; <code>off</code> disables the risky-construct note (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_REPEAT_FAILURE</code></td><td>Shell environment</td><td>The <code>PostToolUseFailure</code> hook; <code>off</code> disables the repeated-failure reminder (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
         </tbody>
       </table>

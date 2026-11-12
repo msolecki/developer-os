@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-review/SKILL.md@e7698e237928">
+<meta name="dos-source" content="plugin/skills/brain-review/SKILL.md@bbccd102a00b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -53,7 +53,7 @@
       <div class="fact"><dt>Group</dt><dd>Memory</dd></div>
       <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
       <div class="fact"><dt>Writes</dt><dd>Moves named notes to a topic folder or <code>_archive/</code>; edits the surviving note in a merge; marks a named note superseded; after a separate yes to the shown diff, updates project-hub lines that link a reviewed note with the <code>(waiting for review)</code> marker</dd></div>
-      <div class="fact"><dt>Asks before</dt><dd>Each note, by name; "looks good" is not approval</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Each note by name, by a range on the shown page, or as the shown expired group; "looks good" is not approval</dd></div>
       <div class="fact"><dt>Needs</dt><dd>The <code>brain_vault</code> option or a <code>Brain vault:</code> line</dd></div>
     </dl>
 
@@ -91,7 +91,7 @@ Approve which ones? (e.g. "promote 1 and 2", "promote 1 to TOOLS/", "merge 1 int
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>The proposal list is shown with the question "Approve which ones?". After you answer, it promotes, merges, archives or supersedes only the named notes and reports what moved where and what stayed in <code>_inbox/</code>; when a hub links one of them with the <code>(waiting for review)</code> marker, the report ends with the hub diff and "Apply these hub edits?".</p>
+      <p>The proposal list is shown with the question "Approve which ones?". After you answer, it promotes, merges, archives or supersedes only the notes you named, by name, by a range on the page shown or as the shown expired group (which belongs to that page), and reports what moved where and what stayed in <code>_inbox/</code>; when a hub links one of them with the <code>(waiting for review)</code> marker, the report ends with the hub diff and "Apply these hub edits?".</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>

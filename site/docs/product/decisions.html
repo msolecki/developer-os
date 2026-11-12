@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@319ce7e251da">
+<meta name="dos-source" content="docs/product/decisions.md@9809843b7fbe">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -126,6 +126,11 @@ reason (D5, D16: no project text reaches the model, and a malformed file adds no
 appended to a local log (<code>guard/asks.jsonl</code> in the plugin data directory: time, reason, rule, tool,
 never the command), so the noise of each rule can be measured; the ask is printed first and a log
 failure changes nothing. Still <code>ask</code> only, and every new check fails open.</li>
+<li><strong>Amended 2026-11-12:</strong> a Bash command the guard cannot scan inside the hook timeout asks (<code>slow</code>)
+instead of failing open: the scan is quadratic in command-position words, a hook that times out lets
+Claude Code run the command unchecked, and a command padded to that size is the one case built to
+get past the guard. The bound is the command's size (command-position words times words in one view
+above 1,500,000, computed in linear time before the scan), with a 4-second backstop between views.</li>
 <li><strong>Amended 2026-11-12:</strong> a seventh hook, <code>patterns.py</code> on <code>PostToolUse</code> for Edit, Write and MultiEdit,
 adds <code>additionalContext</code> (no decision, no block) when an edit adds one of a closed table of risky
 constructs; once per pattern and file in a session, fail open, <code>DEVELOPER_OS_PATTERNS=off</code>.</li>
@@ -154,6 +159,8 @@ constructs; once per pattern and file in a session, fail open, <code>DEVELOPER_O
 <li><strong>Date:</strong> 2026-10-15 · <strong>Commit:</strong> <code>1c324a89</code></li>
 <li><strong>Decision:</strong> every skill that can write, send or change git state ends with <code>## Stop point</code> and <code>## Never</code>. Read-only skills (<code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>) and <code>*-conventions</code> are exempt. <code>scripts/check.sh</code> enforces it.</li>
 <li><strong>Why:</strong> the stop point and the forbidden side effects are the contract a user relies on; a check keeps new skills from omitting them.</li>
+<li><strong>Amended 2026-11-12:</strong> <code>setup-check</code> joins the read-only skills in <code>scripts/check.sh</code>; it reads the
+machine's tools and user-level config and writes nothing. It still carries both sections.</li>
 </ul>
 <h2 id="d10-fixed-per-session-budget">D10. Fixed per-session budget</h2>
 <ul>
@@ -261,9 +268,20 @@ constructs; once per pattern and file in a session, fail open, <code>DEVELOPER_O
 instead of a <code>launch.sh</code>; <code>lanes.py</code> (stdlib, beside the skill, tested by <code>tests/lanes.test.sh</code>)
 launches, reports and resumes the lanes. Every lane runs under a <code>--max-budget-usd</code> the user names
 per lane, with no default, and <code>--output-format json</code>; a lane cut off by its budget ends without
-<code>DONE</code> and is resumed like one cut off by <code>--max-turns</code>, with a new budget. Integrate previews
-conflicts between <code>DONE</code> lanes read-only before the first merge. The guard's worktree rule (D6) does
+<code>DONE</code> and is resumed like one cut off by <code>--max-turns</code>, with the same <code>--max-budget-usd</code> passed
+again. Integrate previews conflicts between <code>DONE</code> lanes before the first merge, moving no ref and
+changing no working-tree file. The guard's worktree rule (D6) does
 not block a lane: its report path is inside its own worktree.</li>
+<li><strong>Amended 2026-11-12:</strong> a lane's tool list always denies edits of <code>.git</code> and anything under it, and
+<code>lanes.py</code> runs git with <code>core.fsmonitor</code> and hooks off, with a timeout: a lane that rewrote its
+worktree's <code>.git</code> file could point git at a config of its own, whose commands would then run in the
+lane's <code>git status</code> and in the orchestrator's. Status marks such a lane without running git in it and
+Resume refuses it. A <code>pids.txt</code> line counts only with a lane name, a numeric PID and a UUID session id,
+since a lane can write that file through an allowed git output path (<code>git diff --output=&lt;file&gt;</code>, a
+risk the launch question names) and its words would otherwise reach <code>claude</code> as options. <code>lanes.json</code>
+is refused when a budget or turn cap is not a finite number, a <code>fast_check</code> holds a bracket or a
+comma, or an <code>allow</code> entry is not one tool rule: each would grant more than the approved file shows.</li>
+
 </ul>
 <h2 id="d24-the-vault-is-the-one-long-term-store-auto-memory-is-off-by-recommendation">D24. The vault is the one long-term store; auto memory is off by recommendation</h2>
 <ul>
@@ -353,6 +371,11 @@ not block a lane: its report path is inside its own worktree.</li>
 <tr><td>2026-11-12</td><td>brain-capture writes <code>expires:</code>, <code>refs:</code> and <code>verified:</code>; brain-search skips expired inbox notes and marks a claim whose <code>refs:</code> file changed since <code>verified</code>; brain-garden and brain-project-refresh report both</td><td><code>brain-capture</code>, <code>brain-search</code>, <code>brain-garden</code>, <code>brain-project-refresh</code></td><td>Unreviewed notes stayed answerable forever, and a note about changed code read as current</td></tr>
 <tr><td>2026-11-12</td><td>Check candidates may propose one entry for the project's <code>.claude/developer-os-guard.json</code> when the repeated mistake is a command or a path to ask about first</td><td><code>session-retro</code></td><td>A mechanical correction had no destination but prose; the guard now reads tighten-only project rules (D6)</td></tr>
 <tr><td>2026-11-12</td><td>The skill writes <code>lanes.json</code>, asks for a budget per lane and runs <code>lanes.py</code> for launch, status, resume and the conflict preview</td><td><code>parallel-lanes</code></td><td>The launch and resume scripts were retyped by the model on every run and had no test; a lane had no cost cap (D23)</td></tr>
+<tr><td>2026-11-12</td><td>Only an <code>active</code> note that contradicts an item's <code>Problem</code> fails triage point 4; an inbox note is reported as context and the item stays</td><td><code>implement-backlog</code></td><td>An unreviewed inbox note is a draft, not a fact (D4), and it could drop an item from a batch (PR #141 review)</td></tr>
+<tr><td>2026-11-12</td><td>A documented project convention wins over a skill rule only on shape and naming (error-handling) or layout and tooling (testing); it never permits a swallowed error, a lost cause, internals in a response, an unseen-red regression test, a skipped test or a raised retry</td><td><code>error-handling-conventions</code>, <code>testing-conventions</code></td><td>The override had no limit, so one line in a project doc could switch a safety rule off (PR #141 review)</td></tr>
+<tr><td>2026-11-12</td><td>The <code>Expired</code> group belongs to the page shown, so its numbers are in range like the others</td><td><code>brain-review</code></td><td>A number in the group read either as in range or as outside the page, and two readings gave different actions (PR #141 review)</td></tr>
+<tr><td>2026-11-12</td><td>The changed-ref check runs as <code>git -C &lt;repository root&gt;</code></td><td><code>brain-project-refresh</code></td><td>Run from a subdirectory, the relative path matched nothing and read as "no change" (PR #141 review)</td></tr>
+<tr><td>2026-11-12</td><td>A lane never edits <code>.git</code>; <code>fast_check</code> holds no bracket or comma and each <code>allow</code> entry is one tool rule; Status and Resume refuse a lane whose worktree <code>.git</code> file changed; the launch question names the <code>git diff --output</code> risk</td><td><code>parallel-lanes</code></td><td>A lane could run its own commands through a rewritten <code>.git</code> file, or reach <code>claude</code> options through <code>pids.txt</code> (PR #141 security review, D23)</td></tr>
 </table>
 </div>
 <nav class="doc-foot" aria-label="Pagination">

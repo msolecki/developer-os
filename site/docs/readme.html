@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@bcea898fb2b2">
+<meta name="dos-source" content="README.md@2faab9b0d08c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -51,7 +51,7 @@
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
-agents, output styles and rules) plus five small Python 3 hook scripts (standard library only), with no server, no database and
+agents, output styles and rules) plus six small Python 3 hook scripts (standard library only), with no server, no database and
 nothing to install beyond <code>python3</code>.</p>
     <h2 id="install-claude-code">Install (Claude Code)</h2>
     <pre><code>/plugin marketplace add msolecki/developer-os
@@ -126,7 +126,7 @@ also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of i
 that destroys uncommitted or untracked work: <code>rm</code> with both a recursive and a force flag (<code>rm -rf</code>),
 <code>git reset --hard</code>, <code>git clean -f</code>, <code>git checkout</code>/<code>git restore</code> of <code>.</code>, <code>:/</code> or <code>*</code>, <code>git checkout -f</code>,
 <code>git switch -f</code>/<code>--discard-changes</code>, <code>git worktree remove --force</code>, <code>git rm -f</code>, <code>git stash drop</code>/<code>clear</code> or <code>find … -delete</code> (<code>git restore --staged .</code> and <code>git clean -n</code> pass), and an infrastructure, data or deploy destroy (<code>terraform destroy</code>, <code>prisma migrate reset</code>, <code>kubectl delete</code>, <code>vercel --prod</code> and the like), a cloud delete (<code>aws s3 rm --recursive</code>, <code>gcloud … delete</code>), a database drop (<code>psql -c "DROP …"</code>, <code>redis-cli FLUSHALL</code>), <code>docker system prune</code>, a publish or merge command (<code>npm publish</code>, <code>gh pr merge</code>, <code>gh release create</code>, <code>gh repo delete</code>) and a downloaded script piped into a shell (<code>curl … | sh</code>). A session in a linked git worktree is asked before an Edit or Write into the main checkout or a sibling worktree. A project can add its own questions in <code>.claude/developer-os-guard.json</code> (literal command prefixes and path globs; it can never remove one), and every ask is logged locally with its reason and rule, never the command (<code>DEVELOPER_OS_GUARD_LOG=off</code> disables the log). An Edit or Write asks when its file is a <code>.env</code>, <code>.envrc</code> or <code>.env.*</code> (not
-<code>.example</code>, <code>.sample</code>, <code>.template</code>, <code>.dist</code>), is under <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, or <code>~/.claude/</code> <code>hooks</code>,
+<code>.example</code>, <code>.sample</code>, <code>.template</code>, <code>.dist</code>), is under <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.kube</code> or <code>~/.config/gh</code>, is <code>~/.npmrc</code>, <code>~/.pypirc</code>, <code>~/.git-credentials</code> or <code>~/.docker/config.json</code>, is under <code>~/.claude/</code> <code>hooks</code>,
 <code>rules</code>, <code>agents</code>, <code>skills</code>, <code>commands</code>, <code>plugins</code> or <code>output-styles</code>, or is <code>~/.claude.json</code>, <code>~/.claude/CLAUDE.md</code>, <code>~/.claude/settings.json</code> or <code>settings.local.json</code> (also under <code>$CLAUDE_CONFIG_DIR</code>). An Edit that adds a skip or focus marker (<code>it.skip(</code>, <code>.only(</code>, <code>@pytest.mark.skip</code>) to a test file asks, and so does <code>rm</code>, <code>git rm</code> or <code>mv … .bak</code> of one. Inside the six read-only agents (the five reviewers and dependency-upgrader), a Bash
 call that writes outside the temp directories (<code>sed -i</code>, <code>tee</code>, <code>rm</code>, <code>mv</code>, <code>cp</code>, a redirect into a file, <code>prettier --write</code>, <code>eslint --fix</code>, <code>gh pr checkout</code>, a git command that changes the
 tree, history or remotes) asks too. A <code>git commit</code> that asks for nothing gets a one-line reminder, as context for
@@ -170,8 +170,8 @@ nextjs-conventions, testing-conventions, typescript-conventions.</li>
 performance-engineer, qa-expert, research-analyst, security-auditor, verifier.</li>
 <li><strong>Output styles:</strong> architect, debug, direct-objective, tdd-enforcer. Select one with
 <code>/output-style</code>, or set <code>"outputStyle": "developer-os:architect"</code> in settings (the plugin prefix is required).</li>
-<li><strong>Six hooks on four events:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), <code>Stop</code> suggests a session wrap-up
-once per long session, <code>PreToolUse</code> asks before installs, force pushes, hook bypasses, destructive commands and edits of secret or agent-config files, and <code>PostToolUseFailure</code>
+<li><strong>Seven hooks on five events:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), <code>Stop</code> suggests a session wrap-up
+once per long session, <code>PreToolUse</code> asks before installs, force pushes, hook bypasses, destructive commands and edits of secret or agent-config files, <code>PostToolUse</code> notes a risky construct an edit adds, and <code>PostToolUseFailure</code>
 tells the agent to stop retrying a call that failed three times (see above).</li>
 <li><strong>Evals:</strong> behavior checks for the brain skills, the review, backlog, PR, lanes and session skills, the
 agents, prompt-injection resistance and the skill triggers in <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md"><code>evals/</code></a>, run by hand with

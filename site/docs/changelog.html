@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@8a7b631220d1">
+<meta name="dos-source" content="CHANGELOG.md@263a463a7294">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -65,6 +65,9 @@ and path globs, at most 50 entries); it can never remove one, the reason is a fi
 the file asks. session-retro can propose an entry for it.</li>
 <li>Guard: every ask is logged to <code>${CLAUDE_PLUGIN_DATA}/guard/asks.jsonl</code> with the time, reason, rule and
 tool, never the command; <code>DEVELOPER_OS_GUARD_LOG=off</code> disables it.</li>
+<li>Guard: a Bash command too large to scan inside the hook timeout asks (<code>slow</code>) instead of running
+unchecked: the bound is the command's size (command-position words times words in one view above
+1,500,000), with a 4-second backstop.</li>
 <li>A <code>PostToolUse</code> hook, <code>patterns.py</code>, tells the agent once per pattern and file when an edit adds a known
 risky construct (<code>eval(</code>, <code>exec(</code>, <code>pickle.load</code>, <code>yaml.load(</code> without a safe loader, <code>verify=False</code>,
 <code>shell=True</code>, <code>.innerHTML =</code>, <code>dangerouslySetInnerHTML</code>, <code>${{ github.event.</code> in a workflow <code>run:</code> line,
@@ -76,6 +79,11 @@ the vault path, <code>autoMemoryEnabled</code>, the Claude Code CLI) with the fi
 default; launch refuses a lane without one) and <code>--output-format json</code>; Status has a Cost column, quotes
 the lane's result text and marks a lane cut off by its budget. Integrate previews merge conflicts between
 <code>DONE</code> lanes (<code>lanes.py conflicts</code>, git 2.38+), and the merge plan carries a <code>Conflicts:</code> line.</li>
+<li>parallel-lanes: a lane can never edit <code>.git</code> or a file under it; <code>lanes.py</code> runs git with
+<code>core.fsmonitor</code> and hooks off, and Status and Resume refuse a lane whose worktree <code>.git</code> file changed.
+A <code>pids.txt</code> line counts only with a lane name, a numeric PID and a UUID session id; <code>fast_check</code> takes no
+brackets or commas, each <code>allow</code> entry is one tool rule, and a budget or turn cap that is not a finite
+number is refused.</li>
 <li>Inbox notes expire 30 days after <code>created</code> (brain-capture writes <code>expires:</code>; a note without the key uses
 <code>created</code> + 30 days). brain-search skips expired inbox notes and reports only their count; brain-review
 shows them as one group that "archive the expired ones" names; brain-garden lists them. Active notes
@@ -88,8 +96,8 @@ brain-capture. In the repository with that slug, brain-search appends
 <code>(verify: &lt;path&gt; changed since &lt;date&gt;)</code> to a claim whose file has a later commit; brain-project-refresh
 reports it as a changed ref; brain-garden checks the keys' shape.</li>
 <li><code>spec</code>, <code>bug-triage</code>, <code>audit-to-backlog</code> and <code>implement-backlog</code> run <code>brain-search</code> on the topic when a
-vault is configured and read the top note; without a vault they skip silently. In <code>implement-backlog</code>, a
-note that contradicts an item's <code>Problem</code> fails triage point 4.</li>
+vault is configured and read the top note; without a vault they skip silently. In <code>implement-backlog</code>, an
+<code>active</code> note that contradicts an item's <code>Problem</code> fails triage point 4; an inbox note is context only.</li>
 <li><code>spec</code> shows a <code>Research map</code> (files, data flow, existing tests; at most 15 lines) before its first
 question, writes unknowns as <code>[NEEDS CLARIFICATION: …]</code> and lists them under Open questions, and writes
 acceptance criteria as <code>WHEN &lt;event&gt; THEN &lt;observable result&gt;</code>.</li>
@@ -99,8 +107,8 @@ the audit gains Python, Go and PHP probes. New template <code>templates/project/
 <li><code>project-baseline</code> rows: CI actions pinned to a commit SHA, a workflow audit step, a lockfile
 vulnerability scan, and <code>enableAllProjectMcpServers</code> not <code>true</code>.</li>
 <li><code>scripts/eval-summary.py</code> keeps eval scores between releases in <code>eval-history/&lt;version&gt;.json</code>, and
-<code>--diff &lt;old&gt; &lt;new&gt;</code> exits 1 when a case's with-plugin score fell by more than 0.1; it refuses to compare
-runs of different agent or judge models.</li>
+<code>--diff &lt;old&gt; &lt;new&gt;</code> exits 1 and names each case whose with-plugin score fell by more than 0.1 or that is
+missing from the new summary; it refuses to compare runs of different agent or judge models.</li>
 <li>Evals: eighteen new cases, none run yet: the security-auditor, database-reviewer and infra-reviewer agents
 on a planted defect and on clean input; four <code>core.md</code> rules (<code>core-asks-before-install</code>,
 <code>core-evidence-before-fixed</code>, <code>core-no-skipped-test</code>, <code>core-status-block</code>); <code>brain-search-expired-inbox</code>,

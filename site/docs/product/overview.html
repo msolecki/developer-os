@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/overview.md@41417af534e1">
+<meta name="dos-source" content="docs/product/overview.md@5d69d237ff0b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -56,7 +56,9 @@
 <li><strong>An engineering operating model.</strong> Core rules loaded into every session, workflow skills (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up), conventions skills, ten agents (nine specialists and a verifier), four output styles and small hooks, among them a guard on Bash, Edit, Write and MultiEdit.</li>
 </ol>
 <p>The plugin is Markdown and JSON plus six Python 3 hook scripts (standard library only). There is no server, database,
-index, binary, background job or network call in the plugin itself.</p>
+index, binary or network call in the plugin's hooks. Two skill scripts start other programs: setup-check runs
+<code>gh auth status</code>, which asks GitHub whether the login works, and parallel-lanes starts the <code>claude -p</code> lanes
+the user approved.</p>
 <h2 id="who-it-is-for">Who it is for</h2>
 <ul>
 <li>The primary user is a developer working alone or in a small team on several client and product repositories with Claude Code, who wants decisions to outlive sessions and repositories.</li>
@@ -79,11 +81,11 @@ index, binary, background job or network call in the plugin itself.</p>
 <tbody>
 <tr><td>Brain skills</td><td>8</td><td><code>plugin/skills/brain-*</code></td></tr>
 <tr><td>Engineering skills</td><td>15</td><td><code>plugin/skills/</code></td></tr>
-<tr><td>Session skills</td><td>2 (session-retro, skill-usage)</td><td><code>plugin/skills/</code></td></tr>
+<tr><td>Session skills</td><td>3 (session-retro, skill-usage, setup-check)</td><td><code>plugin/skills/</code></td></tr>
 <tr><td>Conventions skills</td><td>7 (<code>*-conventions</code>)</td><td><code>plugin/skills/</code></td></tr>
 <tr><td>Agents</td><td>10</td><td><code>plugin/agents/</code></td></tr>
 <tr><td>Output styles</td><td>4</td><td><code>plugin/output-styles/</code></td></tr>
-<tr><td>Hooks</td><td>6 (three on <code>SessionStart</code>, one on <code>Stop</code>, one on <code>PreToolUse</code> for Bash, Edit, Write and MultiEdit, one on <code>PostToolUseFailure</code>)</td><td><code>plugin/hooks/hooks.json</code></td></tr>
+<tr><td>Hooks</td><td>7 (three on <code>SessionStart</code>, one on <code>Stop</code>, one on <code>PreToolUse</code> for Bash, Edit, Write and MultiEdit, one on <code>PostToolUse</code> for Edit, Write and MultiEdit, one on <code>PostToolUseFailure</code>)</td><td><code>plugin/hooks/hooks.json</code></td></tr>
 <tr><td>Core rules</td><td>1 file</td><td><code>plugin/rules/core.md</code></td></tr>
 <tr><td>Vault template</td><td>1</td><td><code>plugin/vault-template/</code></td></tr>
 <tr><td>Project template</td><td>1</td><td><code>templates/project/</code> (in the repository, not in the installed plugin)</td></tr>
