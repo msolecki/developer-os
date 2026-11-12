@@ -10,7 +10,7 @@ cleanup() {
     [ -f "$f" ] || continue
     while read -r l pid rest; do
       case $pid in '' | *[!0-9]*) continue ;; esac
-      kill -TERM -- "-$pid" 2>/dev/null
+      case $(ps -o command= -p "$pid" 2>/dev/null) in *'claude -p'*) kill -TERM -- "-$pid" 2>/dev/null ;; esac
     done < "$f"
   done
   rm -rf "$T"
