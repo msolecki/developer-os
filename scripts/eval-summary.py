@@ -39,7 +39,7 @@ def load(path):
 
 
 def number(v):
-    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float("inf") else None
 
 
 def run_key(path, data):
@@ -121,13 +121,16 @@ def diff(old_path, new_path):
         a, b = old_cases.get(name), new_cases.get(name)
         if a is None or b is None:
             print("%s: not in %s" % (name, (old if a is None else new)["version"]))
+            # A case that errored or was dropped in the new run must not look like a pass.
+            fell += b is None
             continue
         # Rounded first: 0.4 - 0.3 is 0.10000000000000003 in floats, and a fall of exactly 0.1 is allowed.
         drop = round(a - b, 6)
         if drop > DROP:
             fell += 1
             print("%s %g -> %g (-%g)" % (name, a, b, drop))
-    print("%s to %s: %d case%s fell by more than %g" % (old["version"], new["version"], fell, "" if fell == 1 else "s", DROP))
+    print("%s to %s: %d case%s fell by more than %g or left the summary"
+          % (old["version"], new["version"], fell, "" if fell == 1 else "s", DROP))
     return 1 if fell else 0
 
 

@@ -120,6 +120,18 @@ expect "a lane without budget_usd is refused" 1 $?
 has "the refusal names budget_usd" "b: budget_usd" "$err"
 [ ! -e "$R/pids.txt" ] && ok "nothing starts without a budget" || bad "pids.txt written without a budget"
 
+mkrepo infbudget
+sed 's/"budget_usd": 1.5/"budget_usd": Infinity/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+err=$(l launch "$R" 2>&1)
+expect "an infinite budget_usd is refused" 1 $?
+has "the refusal names the infinite budget" "b: budget_usd" "$err"
+
+mkrepo infturns
+sed 's/"max_turns": [0-9]*/"max_turns": Infinity/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+err=$(l launch "$R" 2>&1)
+expect "an infinite max_turns is refused" 1 $?
+has "the refusal names max_turns, without a traceback" "lanes.json: max_turns" "$err"
+
 mkrepo flag
 sed 's/"Bash(node checks\/a.mjs:\*)"/"--dangerously-skip-permissions"/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
 err=$(l launch "$R" 2>&1)

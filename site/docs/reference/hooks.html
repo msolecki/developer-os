@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@80b6a60ab973">
+<meta name="dos-source" content="docs/reference/hooks.md@54949b36b2ea">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -251,6 +251,7 @@ like the other protected paths, so an agent cannot edit a rule away without a qu
 <tr><td><code>publish</code></td><td><code>npm-publish</code> (npm, pnpm and yarn), <code>cargo-publish</code>, <code>twine-upload</code>, <code>gem-push</code>, <code>gh-repo-delete</code>, <code>gh-release-create</code>, <code>gh-release-delete</code>, <code>gh-pr-merge</code></td></tr>
 <tr><td><code>remote-code</code></td><td><code>curl-pipe-shell</code></td></tr>
 <tr><td><code>project</code></td><td><code>project-command</code>, <code>project-path</code></td></tr>
+<tr><td><code>slow</code></td><td><code>slow</code>: the command was too long to check within 4 seconds, so the guard asks instead of letting the hook time out</td></tr>
 </tbody>
 </table>
 </div>

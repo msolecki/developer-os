@@ -816,5 +816,8 @@ unset CLAUDE_PLUGIN_DATA; export DEVELOPER_OS_GUARD_LOG=off
 rm -rf "$ld"
 
 
+# A command too long to check inside the hook timeout asks instead of passing unchecked.
+check ask "$(fx "$(python3 -c 'print("a=1 " * 6000 + "ls")')")" "too long"
+
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

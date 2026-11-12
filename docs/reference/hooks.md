@@ -245,6 +245,7 @@ Every ask appends one line to `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-o
 | `publish` | `npm-publish` (npm, pnpm and yarn), `cargo-publish`, `twine-upload`, `gem-push`, `gh-repo-delete`, `gh-release-create`, `gh-release-delete`, `gh-pr-merge` |
 | `remote-code` | `curl-pipe-shell` |
 | `project` | `project-command`, `project-path` |
+| `slow` | `slow`: the command was too long to check within 4 seconds, so the guard asks instead of letting the hook time out |
 
 Asks per rule, most frequent first:
 

@@ -74,6 +74,7 @@ REASONS = {
     "worktree": "This writes into another worktree of this repository (the main checkout or a sibling); write inside your own worktree.",
     "rules": "This file holds the project's guard rules; change it only on your request.",
     "project": "This project asks before this command or path.",
+    "slow": "This command is too long for the guard to check in time; read it before running it.",
     "install": "Dependency install, update or removal rewrites dependencies and the lockfile.",
     "push": "Force push can overwrite others' commits; use --force-with-lease alone.",
     "destroy": "This deletes files or discards uncommitted work that git cannot bring back.",
@@ -909,6 +910,7 @@ def safe(check, *args):
 
 
 LOG_BYTES = 1 << 20
+SCAN_SECONDS = 4  # the hook timeout is 10 s; one more view of a long command may still run after this
 
 
 def log(reason, rule, tool):
@@ -1001,7 +1003,13 @@ def main():
     # Quotes are not tracked: an extra ask is the price.
     views = [view(cmd, ";"), view(cmd, " "), view(cmd, ";", True), view(cmd, " ", True), view(cmd, " ", join_commas=True),
              view(cmd, ";", shell_ws=True), view(cmd, ";", True, shell_ws=True)]
+    began = time.monotonic()
     for v in views:
+        # The scan is quadratic in command-position words; past the hook timeout Claude Code would run the
+        # command unchecked, so a command that cannot be checked in time asks instead.
+        if time.monotonic() - began > SCAN_SECONDS:
+            ask("slow")
+            return
         hit = scan(v)
         if hit:
             ask(*(hit if isinstance(hit, tuple) else (hit, hit)))

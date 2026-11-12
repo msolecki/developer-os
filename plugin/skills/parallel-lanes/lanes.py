@@ -44,7 +44,8 @@ def git(cwd, *args):
 
 
 def number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    # json.load accepts Infinity and NaN: an infinite budget would lift the cap the user approved.
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value and abs(value) < 1e9
 
 
 def strings(value):

@@ -40,7 +40,7 @@ expect "diff with a regression exits 1" 1 $?
 expect "diff names only the fallen case" "beta 0.9 -> 0.5 (-0.4)" "$(printf '%s\n' "$out" | grep -e '->')"
 expect "diff notes a case that is new" "delta: not in 9.0.0" "$(printf '%s\n' "$out" | grep '^delta')"
 out=$(s --diff "$T/h/9.1.0.json" "$v1")
-expect "diff without a regression exits 0" 0 $?
+expect "diff where a case is gone from the new summary exits 1" 1 $?
 expect "diff notes a case that is gone" "delta: not in 9.0.0" "$(printf '%s\n' "$out" | grep '^delta')"
 s --diff "$v1" "$v1" >/dev/null
 expect "diff of a summary with itself exits 0" 0 $?

@@ -38,7 +38,7 @@ Script: `${CLAUDE_PLUGIN_ROOT}/skills/parallel-lanes/lanes.py`. If that still re
 
    Every lane runs `claude -p` with `--permission-mode acceptEdits`, `--max-turns`, `--max-budget-usd <budget_usd>` and `--output-format json`, allowed `Read Edit Write Glob Grep`, `Bash(git status:*)`, `Bash(git diff:*)`, `Bash(git add:*)`, `Bash(git commit:*)`, `Bash(<fast_check>:*)` and its `allow`, and denied `Edit` and `Write` on the manifests, `Makefile`, `.husky/**`, `.githooks/**` and `.claude/**`, less its `drop_deny`. The deny list keeps a lane from rewriting what its allowed fast check and `git commit` run and then running it unprompted.
 
-   Show the lanes table, the whole `lanes.json` and the command below, then ask: **Launch these N lanes? A: yes  B: change lanes  C: no.** The question names each lane's budget (a lane without one is refused; Claude Code checks the cap after each response, so spend can pass it: leave headroom) and the residual risk: a lane can still edit any other file the fast check reads (a test config, a script it calls). Run only after A:
+   Show the lanes table, the whole `lanes.json` and the command below, then ask: **Launch these N lanes? A: yes  B: change lanes  C: no.** The question names each lane's budget (a lane without one is refused; Claude Code checks the cap after each response, so spend can pass it: leave headroom) and the residual risk: a lane can still edit any other file the fast check reads (a test config, a script it calls), and the allowed git commands take an output path (`git diff --output=<file>`), so a lane can write a file outside its worktree. Run only after A:
 
 ```bash
 python3 -I "${CLAUDE_PLUGIN_ROOT}/skills/parallel-lanes/lanes.py" launch "$R"
