@@ -6,6 +6,7 @@ T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 failed=0
 F=tests/fixtures/eval-summary
+tracked=$(ls eval-history 2>/dev/null)
 s() { python3 -I scripts/eval-summary.py "$@"; }
 # expect NAME WANT GOT
 expect() {
@@ -51,8 +52,11 @@ expect "diff across models says which" 1 "$(grep -c 'judge-model-a.*judge-model-
 
 s --out-dir "$T/mixed" "$F/v1-baseline/aggregate-result.json" "$F/v2/aggregate-result.json" >/dev/null 2>&1
 expect "runs of two versions exit 2" 2 $?
-s --out-dir "$T/mixed" "$F/v2/aggregate-result.json" "$F/v3-other-model/aggregate-result.json" >/dev/null 2>&1
+# The same version with another agent model, so only the model check can refuse it.
+sed 's/"modelOverride": "agent-model-a"/"modelOverride": "agent-model-b"/' "$F/v2/aggregate-result.json" > "$T/v2-other-agent.json"
+s --out-dir "$T/mixed" "$F/v2/aggregate-result.json" "$T/v2-other-agent.json" >/dev/null 2>"$T/err"
 expect "runs of two models exit 2" 2 $?
+expect "and the refusal names both models" 1 "$(grep -c 'agent-model-a.*agent-model-b' "$T/err")"
 expect "a refused merge writes nothing" "" "$(ls "$T/mixed" 2>/dev/null)"
 s --out-dir "$T/h" "$F/v1-errored/aggregate-result.json" >/dev/null 2>&1
 expect "only errored runs exit 2" 2 $?
@@ -63,6 +67,6 @@ s --diff "$v1" "$T/none.json" >/dev/null 2>&1
 expect "a missing summary exits 2" 2 $?
 s >/dev/null 2>&1
 expect "no argument exits 2" 2 $?
-expect "nothing written into the repository" "" "$(ls eval-history 2>/dev/null)"
+expect "eval-history/ in the repository is as it was" "$tracked" "$(ls eval-history 2>/dev/null)"
 
 exit $failed

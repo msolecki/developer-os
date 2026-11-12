@@ -25,7 +25,7 @@ Show every line as printed, then one fix per line that is not `ok`. Name the ins
 
 | Line | What breaks | Fix |
 |---|---|---|
-| `python3` missing or older than 3.8 | Every hook except the core rules: guard, notices, state card, repeat-failure, wrap-up nudge. They fail open, so nothing is reported at the time. This is the usual answer to "why do the hooks not run". | Install Python 3.8 or later so that `python3` is on `PATH`, then restart Claude Code. |
+| `python3` missing or older than 3.8 | Every hook except the core rules: guard, notices, state card, patterns, repeat-failure, wrap-up nudge. They fail open, so nothing is reported at the time. This is the usual answer to "why do the hooks not run". | Install Python 3.8 or later so that `python3` is on `PATH`, then restart Claude Code. |
 | `rg` missing | The skills that search with ripgrep: skill-usage, project-baseline, project-init and the brain skills. | Install ripgrep. |
 | `jq` missing | brain-setup and brain-import-memory, which edit `settings.json` through `jq`, and pr-cycle. | Install jq. |
 | `gh` missing | The pull-request skills (pr-cycle, fix-pr) and the open-PR check in session-retro. | Install the GitHub CLI. |
