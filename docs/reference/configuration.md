@@ -24,6 +24,7 @@ optional file of guard rules. This page lists every one of them.
 | `DEVELOPER_OS_CAPTURE_NUDGE`, `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | Shell environment | The `Stop` hook ([hooks.md](hooks.md#environment-variables)) | The user |
 | `DEVELOPER_OS_GUARD_LOG` | Shell environment | The `PreToolUse` guard; `off` disables the ask log, a local record of which rule asked, without the command ([hooks.md](hooks.md#ask-log--asksjsonl)) | The user |
 | `DEVELOPER_OS_NOTICES` | Shell environment | The `SessionStart` notices hook; `off` disables the version and upkeep notices ([hooks.md](hooks.md#sessionstart-on-startup--noticespy)) | The user |
+| `DEVELOPER_OS_PATTERNS` | Shell environment | The `PostToolUse` patterns hook; `off` disables the risky-construct note ([hooks.md](hooks.md#environment-variables)) | The user |
 | `DEVELOPER_OS_REPEAT_FAILURE` | Shell environment | The `PostToolUseFailure` hook; `off` disables the repeated-failure reminder ([hooks.md](hooks.md#environment-variables)) | The user |
 
 brain-setup and the brain skills' vault lookup resolve the config directory

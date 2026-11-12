@@ -30,7 +30,7 @@ plugin/                           the installed payload
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
 evals/                            claude plugin eval cases (not installed)
-eval-history/                     eval scores per release, written by scripts/eval-summary.py
+eval-history/                     eval scores per release; scripts/eval-summary.py creates it on its first run
 tests/*.test.sh                   script tests: hooks, skill scripts, check.sh, skill-usage block
 .agnix.toml                       agnix lint settings for CI
 scripts/check.sh                  the repository suite, also run by CI
@@ -51,9 +51,9 @@ What occupies the context of a session, and when:
 | State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
 | Skill names and descriptions | Every session, by Claude Code's skill listing; a skill with `disable-model-invocation: true` lists no description | About 11,200 characters for 33 skills | 80–1024 each, 12000 total of the listed ones (`scripts/check.sh`); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10) |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
-| A skill's body | When the model or the user invokes it | 0.8–14.2 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
-| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–4.7 KB per file | — |
-| An output style | When selected; replaces the default style but keeps coding instructions | 0.6–2.0 KB | — |
+| A skill's body | When the model or the user invokes it | 0.8–17.5 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
+| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–5.3 KB per file | — |
+| An output style | When selected; replaces the default style but keeps coding instructions | 0.7–2.2 KB | — |
 
 The fixed cost per session is the core rules plus the listings. Everything else is paid only on
 use, which is why conventions live in skills and not in the core rules.
@@ -67,6 +67,7 @@ sequenceDiagram
   participant SS as SessionStart: state-card.py
   participant NO as SessionStart: notices.py
   participant G as PreToolUse: guard.py
+  participant P as PostToolUse: patterns.py
   participant F as PostToolUseFailure: repeat-failure.py
   participant N as Stop: capture-nudge.py
   CC->>R: session starts / resumes / compacts
@@ -77,6 +78,8 @@ sequenceDiagram
   NO-->>CC: nothing or systemMessage (user) + additionalContext (agent)
   CC->>G: every Bash, Edit, Write and MultiEdit call, JSON on stdin
   G-->>CC: nothing (allow normal flow), {"permissionDecision":"ask", reason} or additionalContext (fast-check reminder) on git commit
+  CC->>P: after every Edit, Write and MultiEdit call, JSON on stdin
+  P-->>CC: nothing, or additionalContext naming a risky construct the edit added
   CC->>F: a tool call failed, JSON on stdin
   F-->>CC: nothing, or additionalContext "stop retrying" at the third identical failure
   CC->>N: agent finishes a turn, JSON on stdin

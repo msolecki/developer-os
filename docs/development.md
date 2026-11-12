@@ -139,9 +139,11 @@ which installs ripgrep;
 error and none for the negatives (a permission-rule denial, an `api-request-blob` copy, a single error,
 an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines;
 `tests/lanes.test.sh` runs parallel-lanes' `lanes.py` in a temporary repository with a stub `claude` first on
-`PATH` and checks the launch (one `pids.txt` line per lane, a second launch, a moved worktree `HEAD` and a
-lane without a budget refused), the status table (a changed prompt, the summed cost), the resume refusals and
-the conflict preview;
+`PATH` and checks the launch (one `pids.txt` line per lane, the `.git` deny rules, and a second launch, a
+moved worktree `HEAD`, a lane without a budget or with an infinite one, a duplicate or path-like lane name and
+a `fast_check` with a bracket refused), the status table (a changed prompt, a rewritten worktree `.git` file,
+the session's total cost, not counted twice after a resume), the resume refusals (a forged `pids.txt` line
+never reaches `claude`) and the conflict preview;
 `tests/patterns.test.sh` feeds edits to `patterns.py` and expects the note for each pattern and silence
 for a test path, a Markdown file and an edit that adds nothing;
 `tests/setup-check.test.sh` runs setup-check's `check.py` with a fake `PATH` and config directory and checks
@@ -199,7 +201,7 @@ Release, by hand:
    the Site stage names, run `bash scripts/check.sh`, and merge the pull request. After the release's eval
    run, keep its scores: `python3 scripts/eval-summary.py evals/results/<run>/aggregate-result.json` writes
    `eval-history/<version>.json` (tracked), and `--diff <old> <new>` on two of those files exits 1 when a
-   case's with-plugin score fell by more than 0.1. In
+   case's with-plugin score fell by more than 0.1 or the case is missing from the new summary. In
    `site/docs/changelog.html`, add the version's `<h2>` under `[Unreleased]` and rename that section's
    `unreleased-*` heading ids to `<version>-*` (e.g. `025-added`); the Site stage compares the words, not
    the ids. Set the release in the landing page's "Is it stable?" answer; the Counts stage compares it

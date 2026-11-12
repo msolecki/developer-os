@@ -58,7 +58,8 @@ and audit skills below in one pass.
 ### project-baseline
 
 [Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 21 engineering
-practices; each one has a probe that reads files only, and a missing one becomes a `BASE-NN` backlog item.
+practices; each one has a probe that reads files only, except the dependency probe, which runs the package
+manager's outdated report, and a missing one becomes a `BASE-NN` backlog item.
 
 | Practice | Present when |
 |---|---|
@@ -233,7 +234,7 @@ clarification marker under open questions. It can turn the steps into `FEAT-` ba
   now (exit 126 or 127, a grep exit 2 or a "no such file" or "no tests found" message is a broken
   `Check`, so the item is stale; a failure on authentication, quota or a missing secret blocks the
   item for you), no open pull request touches its files (skipped when `gh` is
-  unavailable), and no project decision record, doc or vault note read at the start contradicts it. A failing item leaves the
+  unavailable), and no project decision record, doc or `active` vault note read at the start contradicts it (an inbox note is unreviewed: it is reported as context and the item stays). A failing item leaves the
   batch, is never claimed or dispatched, and is reported as `stale: <ID> · <point> · <evidence>`
   for you to close, amend or keep; the batch is topped up from the next ready items.
 - **Git-ignored backlog:** the `Owner` lines stay uncommitted in the orchestrator's checkout, and
@@ -270,8 +271,8 @@ the observation that would falsify the leader, each claim graded `[hypothesis]`,
 `[ruled out: X because Y]` or `[demonstrated]`. A root cause is `[demonstrated]` only when toggling
 one condition switches the failure on and off. Library or vendor behaviour goes to
 `research-analyst` for a sourced answer. Proposes mitigation, root-cause fix, regression test and
-rollback criteria; applies none of them. With a vault configured it first runs brain-search on the
-symptom and reads the top note; without one it skips that silently.
+rollback criteria; applies none of them. With a vault configured it runs brain-search on the
+symptom, after the repro and before the hypotheses, and reads the top note; without one it skips that silently.
 
 ### deploy-checklist
 
@@ -297,24 +298,31 @@ git-ignored run directory and `.worktrees/`. The skill writes `lanes.json` (the 
 the turn cap and, per lane, its budget, fast check and extra tools) and shows it with one command;
 `lanes.py`, a standard-library script beside the skill, launches, reports and resumes the lanes. Each
 lane is a detached `claude -p` in its own worktree and session, so it outlives the turn; the worktree
-starts from the base commit recorded in `LANES.md`, which the launch checks. Each lane runs with a
+starts from the base commit recorded in `lanes.json`, which the launch checks. Each lane runs with a
 recorded `--session-id`, a `--max-turns` cap, `--max-budget-usd`, `--output-format json`, and
 `--disallowedTools` for edits to the manifest,
-`Makefile`, hook directories and `.claude/` unless it owns them; its prompt allows only the lane's
+`Makefile`, hook directories and `.claude/` unless it owns them, and always for `.git` and anything under
+it: a lane that rewrote its worktree's `.git` file could point git at a config of its own. `lanes.py`
+refuses a `lanes.json` with an unknown key, a budget or turn cap that is not a finite number, a
+`fast_check` holding a bracket or a comma, or an `allow` entry that is not one tool rule; its prompt allows only the lane's
 paths and commits in the worktree, and its report starts with a final status and lists what is not
 started, what is not verified and If-X-then-Y contingencies. The status table reads
 the PIDs, the `EXIT=` line and the result in each log, what the lane spent (Cost), the time since the
 worktree last changed, the report's first
 line, the lane's commits, any changed file outside its owned paths, and a `LANES.md`, `lanes.json` or
-prompt whose hash differs from the one recorded at launch. The budget is checked after a response, so a
+prompt whose hash differs from the one recorded at launch. `lanes.py` runs git with `core.fsmonitor` and
+hooks off, reads a `pids.txt` line only when it holds a lane name, a numeric PID and a UUID session id,
+and marks a lane whose worktree `.git` file no longer points into the repository's own `.git/worktrees`,
+without running git there. The budget is checked after a response, so a
 lane can pass it; a lane cut off by it is marked. A finished lane with no report or a `CONTINUING` one
-can be resumed: `lanes.py resume` continues its session with `claude -p --resume` and a new budget after
-the user's yes. Each lane has a runnable `Check` next to its `Done when`; the
+can be resumed: `lanes.py resume` continues its session with `claude -p --resume` and the same
+`--max-budget-usd` after the user's yes, and refuses a lane with a changed `LANES.md`, `lanes.json`,
+prompt or worktree `.git` file. Each lane has a runnable `Check` next to its `Done when`; the
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished `DONE` lanes whose fast check and `Check` pass when the
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
 other lane goes to Needs you. Before the first merge it previews conflicts between the `DONE` lanes
-(`lanes.py conflicts`, read-only, git 2.38 or later) and puts them on a `Conflicts:` line of the merge
+(`lanes.py conflicts`, git 2.38 or later; it moves no ref and changes no working-tree file, though git stores the trial merge's tree objects) and puts them on a `Conflicts:` line of the merge
 plan. After each lane merge it runs the project's regeneration command for
 derived files (in developer-os, `scripts/site-hashes.py`). After merging, it runs every merged lane's `Check` and the
 repository-wide gate on `lanes/<run>`, and stops on a `REQUEST_CHANGES` review.
@@ -384,7 +392,7 @@ then smoke-tests with brain-search, passing it the vault path.
 
 [Source](../../plugin/skills/brain-search/SKILL.md). Finds the vault from the path you give, the
 plugin's `brain_vault` option or the `Brain vault:` line of the user-level `CLAUDE.md` (never a project file, never by searching the disk), searches content and frontmatter with `rg`, drops archived notes,
-skips inbox notes that have expired (30 days after `created`, or a passed `expires:`) and ends with
+skips inbox notes that have expired (a passed `expires:`, or 30 days after `created` when the note has no such key) and ends with
 their count, ranks by `summary`/`tags`/name match, project slug, `active` over `inbox` and recency, reads the
 top five, follows a superseded note's `superseded_by` chain to the current note (a broken or looping
 chain is incomplete history, with no note named current), and answers only from them with a path
@@ -409,7 +417,8 @@ checks the name (`^[a-z0-9-]+$`) and that no other note has it, case-insensitive
 a named active note by another active one (not itself, not one already superseded; the old note
 stays in its folder). When a project hub links a promoted, merged or rejected note as
 `(waiting for review)`, it shows the hub-line change as a diff and applies it only after a yes.
-Expired inbox notes are shown as one group that "archive the expired ones" names. Above 20 notes it
+Expired inbox notes are shown as one group that "archive the expired ones" names; the group belongs to the
+page shown, so its numbers can be answered like the others. Above 20 notes it
 shows pages of 20 grouped by proposed folder, each line with `recommend: promote | merge into <note> |
 reject` and a reason, and takes range answers (`1-12 promote, 13 reject`) for the page shown.
 
@@ -439,7 +448,7 @@ hub against the README, the docs map, `CURRENT-STATE.md`, the decision records a
 commits (claims the repository contradicts, repository paths that no longer exist) and against the
 vault (active or superseded notes of the slug it does not link, links to notes that do not exist, a
 summary or status that no longer fits). A note of the slug whose `refs:` file changed since its
-`verified` date is listed under Verify, with a `Changed refs` count; the skill does not edit it. A drifted code fact is usually replaced by a link to the
+`verified` date (checked with `git -C <repository root>`, so the working directory does not matter) is listed under Verify, with a `Changed refs` count; the skill does not edit it. A drifted code fact is usually replaced by a link to the
 repository doc, since the hub keeps only what outlives the repository. A claim it cannot check is
 listed as unchecked, not changed.
 
@@ -485,7 +494,9 @@ server and library code, in any language. An error raised while handling another
 its cause; a typed result instead of a null or zero value as failure; one error envelope
 `{ error: { code, message, details? } }` with a `SCREAMING_SNAKE_CASE` code and no stack trace;
 never log and re-raise the same error; no swallowed error without a one-line comment saying why; exceptions are
-not control flow. A convention the project documents wins over a rule here. Examples and probes for
+not control flow. A convention the project documents wins over a rule here on shape and naming (the error
+type, the envelope's field names, the logging library); it never permits a swallowed error, a lost cause or
+internals in a response. Examples and probes for
 TypeScript, Python, Go and PHP are in `references/<lang>.md` beside the skill.
 
 ### testing-conventions
@@ -494,7 +505,9 @@ TypeScript, Python, Go and PHP are in `references/<lang>.md` beside the skill.
 contract, not current behavior; fixtures pin an absolute instant (`2030-01-01T08:00:00Z`); partial
 module mocks built on the original; a regression test seen red before the fix; the boundary that
 could be wrong is not faked; failure messages show the missing record; no raised retries or
-timeouts to hide a flaky test.
+timeouts to hide a flaky test. A convention the project documents wins on layout and tooling (file names,
+the mock library, the fixture format); it never permits a regression test that was not seen red, a skipped
+test or a raised retry.
 
 ### monitoring-conventions
 

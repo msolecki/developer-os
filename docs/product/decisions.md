@@ -194,6 +194,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   appended to a local log (`guard/asks.jsonl` in the plugin data directory: time, reason, rule, tool,
   never the command), so the noise of each rule can be measured; the ask is printed first and a log
   failure changes nothing. Still `ask` only, and every new check fails open.
+- **Amended 2026-11-12:** a Bash command the guard cannot scan inside the hook timeout asks (`slow`)
+  instead of failing open: the scan is quadratic in command-position words, a hook that times out lets
+  Claude Code run the command unchecked, and a command padded to that size is the one case built to
+  get past the guard. The bound is the command's size (command-position words times words in one view
+  above 1,500,000, computed in linear time before the scan), with a 4-second backstop between views.
 - **Amended 2026-11-12:** a seventh hook, `patterns.py` on `PostToolUse` for Edit, Write and MultiEdit,
   adds `additionalContext` (no decision, no block) when an edit adds one of a closed table of risky
   constructs; once per pattern and file in a session, fail open, `DEVELOPER_OS_PATTERNS=off`.
@@ -237,6 +242,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `*-conventions` are exempt. `scripts/check.sh` enforces it.
 - **Why:** the stop point and the forbidden side effects are the contract a user relies on; a
   check keeps new skills from omitting them.
+- **Amended 2026-11-12:** `setup-check` joins the read-only skills in `scripts/check.sh`; it reads the
+  machine's tools and user-level config and writes nothing. It still carries both sections.
 
 ## D10. Fixed per-session budget
 
@@ -435,9 +442,19 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   instead of a `launch.sh`; `lanes.py` (stdlib, beside the skill, tested by `tests/lanes.test.sh`)
   launches, reports and resumes the lanes. Every lane runs under a `--max-budget-usd` the user names
   per lane, with no default, and `--output-format json`; a lane cut off by its budget ends without
-  `DONE` and is resumed like one cut off by `--max-turns`, with a new budget. Integrate previews
-  conflicts between `DONE` lanes read-only before the first merge. The guard's worktree rule (D6) does
+  `DONE` and is resumed like one cut off by `--max-turns`, with the same `--max-budget-usd` passed
+  again. Integrate previews conflicts between `DONE` lanes before the first merge, moving no ref and
+  changing no working-tree file. The guard's worktree rule (D6) does
   not block a lane: its report path is inside its own worktree.
+- **Amended 2026-11-12:** a lane's tool list always denies edits of `.git` and anything under it, and
+  `lanes.py` runs git with `core.fsmonitor` and hooks off, with a timeout: a lane that rewrote its
+  worktree's `.git` file could point git at a config of its own, whose commands would then run in the
+  lane's `git status` and in the orchestrator's. Status marks such a lane without running git in it and
+  Resume refuses it. A `pids.txt` line counts only with a lane name, a numeric PID and a UUID session id,
+  since a lane can write that file through an allowed git output path (`git diff --output=<file>`, a
+  risk the launch question names) and its words would otherwise reach `claude` as options. `lanes.json`
+  is refused when a budget or turn cap is not a finite number, a `fast_check` holds a bracket or a
+  comma, or an `allow` entry is not one tool rule: each would grant more than the approved file shows.
 
 ## D24. The vault is the one long-term store; auto memory is off by recommendation
 
@@ -571,3 +588,8 @@ here before reversing a rule.
 | 2026-11-12 | brain-capture writes `expires:`, `refs:` and `verified:`; brain-search skips expired inbox notes and marks a claim whose `refs:` file changed since `verified`; brain-garden and brain-project-refresh report both | `brain-capture`, `brain-search`, `brain-garden`, `brain-project-refresh` | Unreviewed notes stayed answerable forever, and a note about changed code read as current |
 | 2026-11-12 | Check candidates may propose one entry for the project's `.claude/developer-os-guard.json` when the repeated mistake is a command or a path to ask about first | `session-retro` | A mechanical correction had no destination but prose; the guard now reads tighten-only project rules (D6) |
 | 2026-11-12 | The skill writes `lanes.json`, asks for a budget per lane and runs `lanes.py` for launch, status, resume and the conflict preview | `parallel-lanes` | The launch and resume scripts were retyped by the model on every run and had no test; a lane had no cost cap (D23) |
+| 2026-11-12 | Only an `active` note that contradicts an item's `Problem` fails triage point 4; an inbox note is reported as context and the item stays | `implement-backlog` | An unreviewed inbox note is a draft, not a fact (D4), and it could drop an item from a batch (PR #141 review) |
+| 2026-11-12 | A documented project convention wins over a skill rule only on shape and naming (error-handling) or layout and tooling (testing); it never permits a swallowed error, a lost cause, internals in a response, an unseen-red regression test, a skipped test or a raised retry | `error-handling-conventions`, `testing-conventions` | The override had no limit, so one line in a project doc could switch a safety rule off (PR #141 review) |
+| 2026-11-12 | The `Expired` group belongs to the page shown, so its numbers are in range like the others | `brain-review` | A number in the group read either as in range or as outside the page, and two readings gave different actions (PR #141 review) |
+| 2026-11-12 | The changed-ref check runs as `git -C <repository root>` | `brain-project-refresh` | Run from a subdirectory, the relative path matched nothing and read as "no change" (PR #141 review) |
+| 2026-11-12 | A lane never edits `.git`; `fast_check` holds no bracket or comma and each `allow` entry is one tool rule; Status and Resume refuse a lane whose worktree `.git` file changed; the launch question names the `git diff --output` risk | `parallel-lanes` | A lane could run its own commands through a rewritten `.git` file, or reach `claude` options through `pids.txt` (PR #141 security review, D23) |

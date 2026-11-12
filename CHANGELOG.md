@@ -20,6 +20,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the file asks. session-retro can propose an entry for it.
 - Guard: every ask is logged to `${CLAUDE_PLUGIN_DATA}/guard/asks.jsonl` with the time, reason, rule and
   tool, never the command; `DEVELOPER_OS_GUARD_LOG=off` disables it.
+- Guard: a Bash command too large to scan inside the hook timeout asks (`slow`) instead of running
+  unchecked: the bound is the command's size (command-position words times words in one view above
+  1,500,000), with a 4-second backstop.
 - A `PostToolUse` hook, `patterns.py`, tells the agent once per pattern and file when an edit adds a known
   risky construct (`eval(`, `exec(`, `pickle.load`, `yaml.load(` without a safe loader, `verify=False`,
   `shell=True`, `.innerHTML =`, `dangerouslySetInnerHTML`, `${{ github.event.` in a workflow `run:` line,
@@ -31,6 +34,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   default; launch refuses a lane without one) and `--output-format json`; Status has a Cost column, quotes
   the lane's result text and marks a lane cut off by its budget. Integrate previews merge conflicts between
   `DONE` lanes (`lanes.py conflicts`, git 2.38+), and the merge plan carries a `Conflicts:` line.
+- parallel-lanes: a lane can never edit `.git` or a file under it; `lanes.py` runs git with
+  `core.fsmonitor` and hooks off, and Status and Resume refuse a lane whose worktree `.git` file changed.
+  A `pids.txt` line counts only with a lane name, a numeric PID and a UUID session id; `fast_check` takes no
+  brackets or commas, each `allow` entry is one tool rule, and a budget or turn cap that is not a finite
+  number is refused.
 - Inbox notes expire 30 days after `created` (brain-capture writes `expires:`; a note without the key uses
   `created` + 30 days). brain-search skips expired inbox notes and reports only their count; brain-review
   shows them as one group that "archive the expired ones" names; brain-garden lists them. Active notes
@@ -43,8 +51,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `(verify: <path> changed since <date>)` to a claim whose file has a later commit; brain-project-refresh
   reports it as a changed ref; brain-garden checks the keys' shape.
 - `spec`, `bug-triage`, `audit-to-backlog` and `implement-backlog` run `brain-search` on the topic when a
-  vault is configured and read the top note; without a vault they skip silently. In `implement-backlog`, a
-  note that contradicts an item's `Problem` fails triage point 4.
+  vault is configured and read the top note; without a vault they skip silently. In `implement-backlog`, an
+  `active` note that contradicts an item's `Problem` fails triage point 4; an inbox note is context only.
 - `spec` shows a `Research map` (files, data flow, existing tests; at most 15 lines) before its first
   question, writes unknowns as `[NEEDS CLARIFICATION: …]` and lists them under Open questions, and writes
   acceptance criteria as `WHEN <event> THEN <observable result>`.
@@ -54,8 +62,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `project-baseline` rows: CI actions pinned to a commit SHA, a workflow audit step, a lockfile
   vulnerability scan, and `enableAllProjectMcpServers` not `true`.
 - `scripts/eval-summary.py` keeps eval scores between releases in `eval-history/<version>.json`, and
-  `--diff <old> <new>` exits 1 when a case's with-plugin score fell by more than 0.1; it refuses to compare
-  runs of different agent or judge models.
+  `--diff <old> <new>` exits 1 and names each case whose with-plugin score fell by more than 0.1 or that is
+  missing from the new summary; it refuses to compare runs of different agent or judge models.
 - Evals: eighteen new cases, none run yet: the security-auditor, database-reviewer and infra-reviewer agents
   on a planted defect and on clean input; four `core.md` rules (`core-asks-before-install`,
   `core-evidence-before-fixed`, `core-no-skipped-test`, `core-status-block`); `brain-search-expired-inbox`,
