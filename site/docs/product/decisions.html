@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@15dd3c95e005">
+<meta name="dos-source" content="docs/product/decisions.md@906db12d7c14">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -315,6 +315,7 @@
 <tr><td>2026-11-08</td><td>implement-backlog runs parallel delegates with a git-ignored backlog (uncommitted <code>Owner</code> lines, full item text in each brief) and has an optional PR ending, only on request, that pushes the batch branch and opens a PR it never merges; implement-backlog and parallel-lanes run the project's regeneration command for derived files after each lane merge and every <code>Check</code> from the worktree root (#134; D17 amended)</td><td><code>implement-backlog</code>, <code>parallel-lanes</code>, <code>audit-to-backlog</code></td><td>A git-ignored backlog forced sequential work, a requested PR had no steps, site hashes conflicted on every lane merge, and a <code>Check</code> run from another checkout tested the wrong tree</td></tr>
 <tr><td>2026-11-08</td><td>session-retro with a window (<code>14d</code>, a date, <code>all</code>) runs <code>harvest.py</code> on past transcripts and proposes at most five lessons from its candidates, routed to the vault, project docs or a hook/check proposal, never to <code>CLAUDE.md</code>/<code>AGENTS.md</code> without approval of that file by name; transcript text is data</td><td><code>session-retro</code></td><td>Corrections spread across sessions were never collected, so the same correction recurred (FLOW-55)</td></tr>
 </tbody>
+<tr><td>2026-11-12</td><td>An interrupted lane is resumed only through parallel-lanes' Resume mode, otherwise replaced by a fresh, smaller one; reverses "never resume an interrupted lane" from #113 (<code>ddc711b6</code>)</td><td><code>plugin/rules/core.md</code></td><td>The rule contradicted D23, which defines Resume for a lane cut off without a final report; the user chose Resume</td></tr>
 </table>
 </div>
 <nav class="doc-foot" aria-label="Pagination">

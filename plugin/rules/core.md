@@ -48,7 +48,7 @@
 - One orchestrator owns push and integrate. Lanes produce commits inside their worktree and stop there; they do not push, merge, or rebase shared branches.
 - Before dispatching parallel agents, state which worktree each one gets. "Both in the main repository" is not a plan, it is the failure above.
 - When the project provisions per-worktree resources (ports, a compose project name, an environment file), use those instead of the default ports, and release them with the project's cleanup command when the branch is done.
-- After integrating lanes, run the repository-wide gate on the result. Never resume an interrupted lane; start a fresh, smaller one.
+- After integrating lanes, run the repository-wide gate on the result. Resume an interrupted lane only through parallel-lanes' Resume mode; otherwise start a fresh, smaller one.
 
 ### Conventions skills
 

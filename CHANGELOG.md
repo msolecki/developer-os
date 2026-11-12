@@ -4,6 +4,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Core rules: an interrupted lane is resumed only through parallel-lanes' Resume mode; the rule no longer
+  forbids what that mode does (D23).
+
 ## [0.2.9] - 2026-11-09
 
 ### Added
