@@ -26,4 +26,4 @@ paths = ["plugin/skills/deploy-checklist/SKILL.md"]
 disabled_rules = ["CC-SK-006"]
 
 [tool_versions]
-claude_code = "2.1.300"
+claude_code = "2.1.322"
