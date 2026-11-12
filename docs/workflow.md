@@ -105,6 +105,9 @@ Each project repository: `AGENTS.md` with the project's commands and rules, `CLA
 | Check what loads | `/memory` lists the instruction files and shows the auto-memory toggle; `/context` shows what loaded |
 | Move existing auto memory into the vault | `brain-import-memory`, once per project; the files stay where they are |
 | Fewer reminders | `DEVELOPER_OS_NOTICES=off`, `DEVELOPER_OS_CAPTURE_NUDGE=off` ([hooks](reference/hooks.md#environment-variables)) |
+| Skill descriptions that are not cut | Claude Code drops the descriptions of the least-used skills when the listing exceeds 1% of the context window; raise it with `"skillListingBudgetFraction": 0.02` in `~/.claude/settings.json`, or disable plugins you do not use |
+| Room for this plugin's descriptions | Set your own rarely used skills to `"name-only"` in `skillOverrides`; the setting does not apply to plugin skills, so developer-os skills keep their descriptions |
+| See what the listing costs | `/doctor` estimates the listing's context cost; `/skill-doctor` shows the cost and use of each skill |
 
 Turning auto memory off does not delete anything: the files stay in
 `~/.claude/projects/<project>/memory/` until you remove them.

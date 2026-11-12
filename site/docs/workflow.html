@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@6c8a10c66ac2">
+<meta name="dos-source" content="docs/workflow.md@85d06f8facd4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -132,6 +132,9 @@ because every imported line loads into every session.</p>
 <tr><td>Check what loads</td><td><code>/memory</code> lists the instruction files and shows the auto-memory toggle; <code>/context</code> shows what loaded</td></tr>
 <tr><td>Move existing auto memory into the vault</td><td><code>brain-import-memory</code>, once per project; the files stay where they are</td></tr>
 <tr><td>Fewer reminders</td><td><code>DEVELOPER_OS_NOTICES=off</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE=off</code> (<a href="reference/hooks.html#environment-variables">hooks</a>)</td></tr>
+<tr><td>Skill descriptions that are not cut</td><td>Claude Code drops the descriptions of the least-used skills when the listing exceeds 1% of the context window; raise it with <code>"skillListingBudgetFraction": 0.02</code> in <code>~/.claude/settings.json</code>, or disable plugins you do not use</td></tr>
+<tr><td>Room for this plugin's descriptions</td><td>Set your own rarely used skills to <code>"name-only"</code> in <code>skillOverrides</code>; the setting does not apply to plugin skills, so developer-os skills keep their descriptions</td></tr>
+<tr><td>See what the listing costs</td><td><code>/doctor</code> estimates the listing's context cost; <code>/skill-doctor</code> shows the cost and use of each skill</td></tr>
 </tbody>
 </table>
 </div>
