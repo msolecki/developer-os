@@ -57,8 +57,33 @@ s --diff "$v1" "$T/h/9.2.0.json" >/dev/null 2>"$T/err"
 expect "diff across models exits 2" 2 $?
 expect "diff across models says which" 1 "$(grep -c 'judge-model-a.*judge-model-b' "$T/err")"
 
+# The same summary with another agent model only: the judge check cannot be what refuses it.
+sed 's/"agentModel": "agent-model-a"/"agentModel": "agent-model-b"/' "$v1" > "$T/other-agent-summary.json"
+expect "the copied summary differs only in its agent model" "agent-model-b judge-model-a" "$(field "$T/other-agent-summary.json" 'd["agentModel"] + " " + d["judgeModel"]')"
+s --diff "$v1" "$T/other-agent-summary.json" >/dev/null 2>"$T/err"
+expect "diff across agent models exits 2" 2 $?
+expect "diff across agent models says which" 1 "$(grep -c 'agent model differs.*agent-model-a.*agent-model-b' "$T/err")"
+s --diff "$v1" >/dev/null 2>&1
+expect "diff with one summary exits 2" 2 $?
+s --diff "$v1" "$v1" "$v1" >/dev/null 2>&1
+expect "diff with three summaries exits 2" 2 $?
+
+# A partial run is summarized, with a warning on stderr; a complete one prints none.
+sed 's/"partial": false/"partial": true/' "$F/v2/aggregate-result.json" > "$T/v2-partial.json"
+s --out-dir "$T/partial" "$T/v2-partial.json" >/dev/null 2>"$T/err"
+expect "a partial run still exits 0" 0 $?
+expect "a partial run warns on stderr" 1 "$(grep -c '^warning: run .* is partial$' "$T/err")"
+s --out-dir "$T/partial" "$F/v2/aggregate-result.json" >/dev/null 2>"$T/err"
+expect "a complete run prints no warning" 0 "$(grep -c 'partial' "$T/err")"
+
 s --out-dir "$T/mixed" "$F/v1-baseline/aggregate-result.json" "$F/v2/aggregate-result.json" >/dev/null 2>&1
 expect "runs of two versions exit 2" 2 $?
+# The same version with another judge model, so only the judge half of the model check can refuse it.
+sed 's/"judgeModel": "judge-model-a"/"judgeModel": "judge-model-b"/' "$F/v2/aggregate-result.json" > "$T/v2-other-judge.json"
+s --out-dir "$T/mixed" "$F/v2/aggregate-result.json" "$T/v2-other-judge.json" >/dev/null 2>"$T/err"
+expect "runs of two judge models exit 2" 2 $?
+expect "and the refusal names both judge models" 1 "$(grep -c 'judge-model-a.*judge-model-b' "$T/err")"
+expect "a refused judge merge writes nothing" "" "$(ls "$T/mixed" 2>/dev/null)"
 # The same version with another agent model, so only the model check can refuse it.
 sed 's/"modelOverride": "agent-model-a"/"modelOverride": "agent-model-b"/' "$F/v2/aggregate-result.json" > "$T/v2-other-agent.json"
 s --out-dir "$T/mixed" "$F/v2/aggregate-result.json" "$T/v2-other-agent.json" >/dev/null 2>"$T/err"

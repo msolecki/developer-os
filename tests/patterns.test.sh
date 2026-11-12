@@ -189,5 +189,32 @@ fresh; mkdir -p "$tmp/data/patterns" && printf '{"x":' > "$tmp/data/patterns/$si
 run "$(input "$sid" Edit src/a.py 'x = eval(data)')"
 check "a truncated state file is reset" "$(result 'eval(')" fire
 
+# State upkeep: the directory is private, a session file 8 days old goes on the next note and a fresh one stays,
+# and one session's list of shown notes is cut to its newest 5000.
+fresh; run "$(input "$sid" Edit src/a.py 'x = eval(data)')" CLAUDE_PLUGIN_DATA="$tmp/private-data"
+check "a note with a new data directory" "$(result 'eval(')" fire
+check "the state directory is mode 700" "$(python3 -c 'import os, sys
+print(oct(os.stat(sys.argv[1]).st_mode & 0o777))' "$tmp/private-data/patterns")" 0o700
+check "the state file is mode 600" "$(python3 -c 'import os, sys
+print(oct(os.stat(sys.argv[1]).st_mode & 0o777))' "$tmp/private-data/patterns/$sid")" 0o600
+printf '[]' > "$tmp/data/patterns/old-session"
+printf '[]' > "$tmp/data/patterns/week-session"
+python3 -c 'import os, sys, time
+now = time.time()
+os.utime(sys.argv[1], (now - 9 * 86400, now - 9 * 86400))
+os.utime(sys.argv[2], (now - 7 * 86400, now - 7 * 86400))' "$tmp/data/patterns/old-session" "$tmp/data/patterns/week-session"
+fresh; run "$(input "$sid" Edit src/a.py 'x = eval(data)')"
+check "a note that triggers the upkeep" "$(result 'eval(')" fire
+check "a session file 9 days old is removed" "$([ -e "$tmp/data/patterns/old-session" ] && echo kept || echo removed)" removed
+check "a session file 7 days old stays" "$([ -e "$tmp/data/patterns/week-session" ] && echo kept || echo removed)" kept
+check "this session's file stays" "$([ -e "$tmp/data/patterns/$sid" ] && echo kept || echo removed)" kept
+fresh; python3 -c 'import json, sys
+json.dump(["k%015d" % i for i in range(6000)], open(sys.argv[1], "w"))' "$tmp/data/patterns/$sid"
+run "$(input "$sid" Edit src/a.py 'x = eval(data)')"
+check "a note in a session with 6000 shown notes" "$(result 'eval(')" fire
+check "the list keeps its newest 5000, the new note last" "$(python3 -c 'import json, sys
+d = json.load(open(sys.argv[1]))
+print(len(d), d[0], d[-1].startswith("k"))' "$tmp/data/patterns/$sid")" "5000 k000000000001001 False"
+
 [ "$failed" -eq 0 ] && echo "patterns: all passed"
 exit "$failed"

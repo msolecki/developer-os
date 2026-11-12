@@ -133,6 +133,22 @@ check "invalid settings.json still exits 0" "$code" 0
 rm "$cfg/settings.json"
 run
 check "no settings.json warns" "$(status autoMemoryEnabled)" warn
+run CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+check "the environment switch turns auto memory off without settings.json" "$(line autoMemoryEnabled)" "ok autoMemoryEnabled: off (CLAUDE_CODE_DISABLE_AUTO_MEMORY=1)"
+printf '{"autoMemoryEnabled": true}\n' > "$cfg/settings.json"
+run CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+check "the environment switch wins over autoMemoryEnabled: true" "$(status autoMemoryEnabled)" ok
+run CLAUDE_CODE_DISABLE_AUTO_MEMORY=0
+check "the switch set to 0 does not turn it off" "$(status autoMemoryEnabled)" warn
+
+# A `gh auth status` that never answers is cut by the 10-second timeout: the check warns and the rest still prints.
+# The stub spins in the shell, since the fake PATH holds no sleep.
+stub gh 'if [ "$1" = auth ]; then while :; do :; done; fi; echo "gh version 2.60.0 (2030-01-01)"'
+run
+check "a hanging gh auth status exits 0" "$code" 0
+check "a hanging gh auth status warns" "$(line 'gh auth')" "warn gh auth: not logged in"
+check "the checks after it still print" "$(status claude)" ok
+tools
 
 # Without CLAUDE_CONFIG_DIR the config directory is ~/.claude.
 mkdir -p "$tmp/home/.claude"

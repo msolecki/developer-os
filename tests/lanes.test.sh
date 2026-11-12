@@ -277,11 +277,67 @@ l launch "$R" > /dev/null 2>&1
 expect "a lane name that leaves .worktrees is refused" 1 $?
 [ ! -e "$R/pids.txt" ] && ok "nothing starts with a path as a lane name" || bad "pids.txt written with a path as a lane name"
 
+mkrepo dropout
+sed 's|"drop_deny": \[".claude/\*\*"\]|"drop_deny": ["src/**"]|' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+has "the fixture names a path outside the deny list" '"drop_deny": ["src/**"]' "$(cat "$R/lanes.json")"
+err=$(l launch "$R" 2>&1)
+expect "a drop_deny path outside the deny list is refused" 1 $?
+has "the refusal names drop_deny" "a: drop_deny names a path outside the deny list" "$err"
+[ ! -e "$R/pids.txt" ] && ok "nothing starts with a foreign drop_deny path" || bad "pids.txt written with a foreign drop_deny path"
+
+# .git is denied to every lane and is not on the list a lane may drop from.
+mkrepo dropgit
+sed 's|"drop_deny": \[".claude/\*\*"\]|"drop_deny": [".git"]|' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+has "the fixture asks to drop .git" '"drop_deny": [".git"]' "$(cat "$R/lanes.json")"
+err=$(l launch "$R" 2>&1)
+expect "dropping the .git deny is refused" 1 $?
+has "the refusal names drop_deny for .git" "a: drop_deny names a path outside the deny list" "$err"
+[ ! -e "$R/pids.txt" ] && ok "nothing starts without the .git deny" || bad "pids.txt written without the .git deny"
+
+mkrepo shortbase
+sed 's/"base": "[0-9a-f]*"/"base": "abc1234"/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+err=$(l launch "$R" 2>&1)
+expect "a short commit id as base is refused" 1 $?
+has "the refusal names base" "lanes.json: base is not a full commit id" "$err"
+mkrepo namebase
+sed 's/"base": "[0-9a-f]*"/"base": "main"/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+err=$(l launch "$R" 2>&1)
+expect "a branch name as base is refused" 1 $?
+has "the refusal names base for a branch name" "lanes.json: base is not a full commit id" "$err"
+[ ! -e "$R/pids.txt" ] && ok "nothing starts on a base that is no commit id" || bad "pids.txt written on a base that is no commit id"
+
 mkrepo paren
 sed 's/"fast_check": "sh check.sh", "allow"/"fast_check": "sh check.sh:*) Bash(curl", "allow"/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
 err=$(l launch "$R" 2>&1)
 expect "a fast_check that closes its own rule is refused" 1 $?
 has "the refusal names fast_check" "a: fast_check" "$err"
+
+# --- status: the cost of a session whose latest result is a zero-cost crash, and a PID another process reused
+mkrepo zerocost
+rm -f "$STUB/result-a" "$STUB/exit-a" "$STUB/runs-a" "$STUB/runs-b"
+l launch "$R" > /dev/null 2>&1
+settle
+idz=$(awk '$(1) == "a" { print $(3) }' "$R/pids.txt")
+idy=$(awk '$(1) == "b" { print $(3) }' "$R/pids.txt")
+has "the first run costs 0.25" '$0.25' "$(l status "$R" | grep '^| ⚠ a |')"
+printf '{"type":"result","subtype":"error_during_execution","is_error":true,"session_id":"%s","errors":["crashed"],"total_cost_usd":0}\n' "$idz" > "$STUB/result-a"
+echo 1 > "$STUB/exit-a"
+l resume "$R" a > /dev/null 2>&1
+settle
+row=$(l status "$R" | grep '^| ⚠ a |')
+has "the latest run of the lane is the crash" "finished EXIT=1" "$row"
+has "a zero-cost crash result keeps the session's highest total" '$0.25' "$row"
+hasnt "the zero of the latest result does not replace the total" '$0.00' "$row"
+rm -f "$STUB/result-a" "$STUB/exit-a"
+# The lane's process is gone and another program got a PID: only a `claude -p` command line counts as running.
+sleep 30 &
+reused=$!
+echo "b $reused $idy" >> "$R/pids.txt"
+out=$(l status "$R")
+has "a reused PID is not a running lane" "| finished " "$(printf '%s\n' "$out" | grep '^| ⚠ b |')"
+has "status counts no lane as running on a reused PID" "0 running, 2 finished" "$out"
+kill "$reused" 2>/dev/null
+wait "$reused" 2>/dev/null
 
 # --- conflicts, on a run directory without lanes.json (one made before lanes.py)
 mkrepo merge
@@ -308,6 +364,28 @@ expect "conflicts moves no ref and changes no file" "$before" "$after"
 printf 'REVIEW\n' > "$repo/.worktrees/b/docs/plans/lanes/run/REPORT-b.md"
 expect "conflicts prints nothing for disjoint lanes" "" "$(l conflicts "$R" 2>&1)"
 has "status works without lanes.json" "| DONE |" "$(l status "$R" | grep '^| ⚠ a |')"
+
+# A DONE report from a lane that is still running is not final: the pair is left out until the lane ends.
+printf 'DONE\n' > "$repo/.worktrees/b/docs/plans/lanes/run/REPORT-b.md"
+expect "with b finished again, the a b conflict is back" "a b: f.txt" "$(l conflicts "$R" 2>&1)"
+# One process whose command line holds `claude -p`, so killing it leaves no child behind.
+python3 -c 'import time; time.sleep(30)' claude -p &
+live=$!
+echo "b $live" >> "$R/pids.txt"
+has "the stand-in reads as a running lane" "| running " "$(l status "$R" | grep '^| b |')"
+expect "conflicts leaves out a lane that is still running" "" "$(l conflicts "$R" 2>&1)"
+kill "$live" 2>/dev/null
+wait "$live" 2>/dev/null
+expect "after it ends, the conflict is reported" "a b: f.txt" "$(l conflicts "$R" 2>&1)"
+
+# A merge-tree that fails for another reason than a conflict (exit above 1) is an error, not "no conflict".
+realgit=$(command -v git)
+mkdir "$T/failgit"
+printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = merge-tree ] && exit 2; done\nexec "%s" "$@"\n' "$realgit" > "$T/failgit/git"
+chmod +x "$T/failgit/git"
+err=$(PATH="$T/failgit:$PATH" python3 -I "$lanes" conflicts "$R" 2>&1 >/dev/null)
+expect "a failing merge-tree exits 1" 1 $?
+has "and names the pair and the exit code" "a b: git merge-tree failed (exit 2)" "$err"
 
 mkdir "$T/oldgit"
 printf '#!/bin/sh\necho "git version 2.30.1"\n' > "$T/oldgit/git"
