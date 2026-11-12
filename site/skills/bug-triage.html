@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/bug-triage/SKILL.md@313f2981067c">
+<meta name="dos-source" content="plugin/skills/bug-triage/SKILL.md@49d04078258e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -70,7 +70,7 @@
       <li><strong>Sets severity first.</strong> P0 is an exploitable security defect, data loss or production down; P1 wrong behavior on a common path; P2 an edge-case defect or real maintainability risk; P3 minor or cleanup.</li>
       <li><strong>Gathers the facts.</strong> The exact symptom, stack trace, reproduction steps, affected users, frequency, environment and first-known time. It asks you only for what the repository and observability tools cannot give.</li>
       <li><strong>Reproduces it first.</strong> Before any hypothesis it needs one repro command it has already run that fails on your exact symptom, repeatably and without a human, and it shrinks that command to the inputs and steps the failure needs. Without one it stops, lists what it tried and asks for the access or artifact that would reproduce it; for P0 and P1 it still proposes the immediate mitigation.</li>
-      <li><strong>Inspects</strong> the relevant logs and traces, recent commits and data invariants.</li>
+      <li><strong>Inspects</strong> the relevant logs and traces, recent commits and data invariants. With a vault configured, it also runs brain-search on the symptom and reads the top note.</li>
       <li><strong>Ranks hypotheses.</strong> Each has a likelihood and evidence, with at least one real alternative to the leader, so the leader is tested rather than assumed. It names the observation that would falsify the leader, and grades every claim <code>[hypothesis]</code>, <code>[evidence: X]</code>, <code>[ruled out: X because Y]</code> or <code>[demonstrated]</code>. A cause is the root cause only when toggling one condition switches the repro's failure on and off. When a hypothesis depends on library or vendor behavior, it asks the <code>developer-os:research-analyst</code> agent for a sourced answer instead of relying on memory; without one the hypothesis stays unverified.</li>
       <li><strong>Proposes the way out.</strong> An immediate mitigation for P0 and P1, the root-cause fix, a regression test built from the shrunk repro that would have caught the defect, and rollback criteria with monitoring.</li>
       <li><strong>Reports.</strong> Severity with reasoning, the repro command with its failing output, graded hypotheses, the confirmed root cause or the missing evidence, mitigation, permanent fix, regression test and a communication checklist. Internal or client communication is drafted only when you ask. It offers <a href="spec.html">spec</a> when the permanent fix exceeds 50 lines, and <a href="brain-capture.html">brain-capture</a> when the defect taught a lasting lesson.</li>

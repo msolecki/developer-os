@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@fd2ada1bfc0d">
+<meta name="dos-source" content="CHANGELOG.md@8a7b631220d1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -49,10 +49,80 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+<h3 id="added">Added</h3>
+<ul>
+<li>Guard: asks before cloud deletes (<code>aws … delete-*</code>/<code>terminate-*</code>, <code>aws s3 rm --recursive</code>, <code>aws s3 rb</code>,
+<code>gcloud … delete</code>, <code>az … delete</code>), database drops (<code>psql</code>/<code>mysql</code>/<code>sqlite3</code> with <code>DROP</code> or <code>TRUNCATE</code>,
+<code>redis-cli FLUSHALL</code>/<code>FLUSHDB</code>), <code>docker system prune</code> and <code>docker volume rm</code>/<code>prune</code>, publish and merge
+commands (<code>npm</code>/<code>pnpm</code>/<code>yarn publish</code>, <code>cargo publish</code>, <code>twine upload</code>, <code>gem push</code>, <code>gh repo delete</code>,
+<code>gh release create</code>/<code>delete</code>, <code>gh pr merge</code>) and a downloaded script piped into a shell (<code>curl … | sh</code>).
+Each reason names the safer form; a mention in <code>grep</code> or <code>echo</code> passes. More protected files: <code>~/.kube</code>,
+<code>~/.config/gh</code>, <code>~/.npmrc</code>, <code>~/.pypirc</code>, <code>~/.git-credentials</code>, <code>~/.docker/config.json</code>.</li>
+<li>Guard: a session in a linked git worktree is asked before an Edit, Write or MultiEdit into the main
+checkout or a sibling worktree; the main checkout is never asked.</li>
+<li>Guard: a project can add its own questions in <code>.claude/developer-os-guard.json</code> (literal command prefixes
+and path globs, at most 50 entries); it can never remove one, the reason is a fixed string, and editing
+the file asks. session-retro can propose an entry for it.</li>
+<li>Guard: every ask is logged to <code>${CLAUDE_PLUGIN_DATA}/guard/asks.jsonl</code> with the time, reason, rule and
+tool, never the command; <code>DEVELOPER_OS_GUARD_LOG=off</code> disables it.</li>
+<li>A <code>PostToolUse</code> hook, <code>patterns.py</code>, tells the agent once per pattern and file when an edit adds a known
+risky construct (<code>eval(</code>, <code>exec(</code>, <code>pickle.load</code>, <code>yaml.load(</code> without a safe loader, <code>verify=False</code>,
+<code>shell=True</code>, <code>.innerHTML =</code>, <code>dangerouslySetInnerHTML</code>, <code>${{ github.event.</code> in a workflow <code>run:</code> line,
+<code>curl … | sh</code>) and names the safer form. Context only, never a decision; test paths, Markdown and vendored
+directories are skipped. <code>DEVELOPER_OS_PATTERNS=off</code> turns it off (D6).</li>
+<li>A <code>setup-check</code> skill reports what the machine lacks (python3 3.8+, rg, jq, gh and its login, git 2.38+,
+the vault path, <code>autoMemoryEnabled</code>, the Claude Code CLI) with the fix for each gap. Read-only.</li>
+<li>parallel-lanes: every lane runs under <code>--max-budget-usd</code> with a budget the user names per lane (no
+default; launch refuses a lane without one) and <code>--output-format json</code>; Status has a Cost column, quotes
+the lane's result text and marks a lane cut off by its budget. Integrate previews merge conflicts between
+<code>DONE</code> lanes (<code>lanes.py conflicts</code>, git 2.38+), and the merge plan carries a <code>Conflicts:</code> line.</li>
+<li>Inbox notes expire 30 days after <code>created</code> (brain-capture writes <code>expires:</code>; a note without the key uses
+<code>created</code> + 30 days). brain-search skips expired inbox notes and reports only their count; brain-review
+shows them as one group that "archive the expired ones" names; brain-garden lists them. Active notes
+never expire, and nothing is archived without the user's answer (D4).</li>
+<li>brain-review pages an inbox above 20 notes: 20 per page grouped by proposed folder, each line with
+<code>recommend: promote | merge into &lt;note&gt; | reject</code> and a reason, and range answers such as
+<code>1-12 promote, 13 reject, 14-20 skip</code> that cover only the page shown.</li>
+<li>Notes can carry <code>refs: ["&lt;project slug&gt;:&lt;repo-relative path&gt;"]</code> and <code>verified: &lt;date&gt;</code>, written by
+brain-capture. In the repository with that slug, brain-search appends
+<code>(verify: &lt;path&gt; changed since &lt;date&gt;)</code> to a claim whose file has a later commit; brain-project-refresh
+reports it as a changed ref; brain-garden checks the keys' shape.</li>
+<li><code>spec</code>, <code>bug-triage</code>, <code>audit-to-backlog</code> and <code>implement-backlog</code> run <code>brain-search</code> on the topic when a
+vault is configured and read the top note; without a vault they skip silently. In <code>implement-backlog</code>, a
+note that contradicts an item's <code>Problem</code> fails triage point 4.</li>
+<li><code>spec</code> shows a <code>Research map</code> (files, data flow, existing tests; at most 15 lines) before its first
+question, writes unknowns as <code>[NEEDS CLARIFICATION: …]</code> and lists them under Open questions, and writes
+acceptance criteria as <code>WHEN &lt;event&gt; THEN &lt;observable result&gt;</code>.</li>
+<li><code>project-init</code> step 4, Discover the project's conventions: proposes <code>docs/reference/conventions.md</code> from
+the linter, formatter and test config, the test layout and three modules, each rule with its <code>file:line</code>;
+the audit gains Python, Go and PHP probes. New template <code>templates/project/docs/reference/conventions.md</code>.</li>
+<li><code>project-baseline</code> rows: CI actions pinned to a commit SHA, a workflow audit step, a lockfile
+vulnerability scan, and <code>enableAllProjectMcpServers</code> not <code>true</code>.</li>
+<li><code>scripts/eval-summary.py</code> keeps eval scores between releases in <code>eval-history/&lt;version&gt;.json</code>, and
+<code>--diff &lt;old&gt; &lt;new&gt;</code> exits 1 when a case's with-plugin score fell by more than 0.1; it refuses to compare
+runs of different agent or judge models.</li>
+<li>Evals: eighteen new cases, none run yet: the security-auditor, database-reviewer and infra-reviewer agents
+on a planted defect and on clean input; four <code>core.md</code> rules (<code>core-asks-before-install</code>,
+<code>core-evidence-before-fixed</code>, <code>core-no-skipped-test</code>, <code>core-status-block</code>); <code>brain-search-expired-inbox</code>,
+<code>brain-review-pages</code>, <code>brain-search-stale-ref</code>, <code>spec-reads-vault</code>, <code>spec-research-map</code>,
+<code>error-handling-python</code>, <code>project-init-python</code> and <code>project-baseline-unpinned-action</code>. The fixture inbox
+notes get relative dates.</li>
+<li><code>docs/workflow.md</code>: how to keep skill descriptions from being cut (<code>skillListingBudgetFraction</code>,
+<code>skillOverrides</code> for your own skills) and how to see the listing's cost (<code>/doctor</code>, <code>/skill-doctor</code>).</li>
+</ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
 <li>Core rules: an interrupted lane is resumed only through parallel-lanes' Resume mode; the rule no longer
 forbids what that mode does (D23).</li>
+<li>parallel-lanes: <code>lanes.py</code> beside the skill replaces the <code>launch.sh</code> and <code>resume.sh</code> listings and the
+Status block; the skill writes <code>lanes.json</code> and shows it with one command for approval.</li>
+<li><code>error-handling-conventions</code> and <code>testing-conventions</code> state their rules for any language; TypeScript,
+Python, Go and PHP examples and probes are in <code>references/&lt;lang&gt;.md</code> beside each skill. The
+error-handling description says "in server and library code".</li>
+<li><code>project-baseline</code> rows name the practice first and tools as examples; the Agent sandbox row also requires
+<code>sandbox.allowUnsandboxedCommands: false</code> and denies <code>~/.kube</code>, <code>~/.npmrc</code> and <code>~/.config/gh</code>; the
+decisions list no longer names npm, pnpm, Jest or Vitest. <code>project-init</code> Audit is now step 5 and Report
+step 6.</li>
     </ul>
     <h2 id="029---2026-11-09">[0.2.9] - 2026-11-09</h2>
     <h3 id="029-added">Added</h3>

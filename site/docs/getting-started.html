@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/getting-started.md@c40d054f6955">
+<meta name="dos-source" content="docs/getting-started.md@d41fdccd01d7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -46,7 +46,7 @@
 
   <main id="main" class="prose">
     <h1 id="your-first-30-minutes">Your first 30 minutes</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/getting-started.md">docs/getting-started.md</a></span><span>Verified 2026-11-08</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/getting-started.md">docs/getting-started.md</a></span><span>Verified 2026-11-12</span></p>
     <p>A guided path from an empty install to a first review. Each step says what to type and what you
 should see. Examples of output are marked as examples; your text will differ.</p>
     <h2 id="install">Install</h2>
@@ -88,7 +88,9 @@ The note stays an unreviewed draft until you run brain-review on it.</p>
     <h2 id="bring-a-project-in">Bring a project in</h2>
     <p>In a terminal, copy the project template into your repository:</p>
 <pre><code>cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/</code></pre>
-    <p><code>-n</code> keeps any file that already exists. Then ask Claude Code to run <code>project-init</code> in that
+    <p><code>-n</code> keeps any file that already exists. Without the copy, project-init and docs-sync propose the
+missing files one by one, and <code>setup-check</code> reports what the machine itself lacks (<code>python3</code>, <code>rg</code>, <code>jq</code>,
+<code>gh</code>, the vault path). Then ask Claude Code to run <code>project-init</code> in that
 repository. It detects the stack, runs project-baseline, docs-sync and instruction-review, audits
 the code against the conventions that apply, and gives one numbered report. It writes nothing until
 you approve items from that one report.</p>

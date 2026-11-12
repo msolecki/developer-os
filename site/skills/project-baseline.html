@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/project-baseline/SKILL.md@e927e8b192db">
+<meta name="dos-source" content="plugin/skills/project-baseline/SKILL.md@89de469d53ed">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -69,12 +69,12 @@
       <li><strong>Reads the context.</strong> The stack, the package manager the lockfile selects, the CI workflows and the validation commands. It finds the backlog files the way audit-to-backlog does and continues their numbering under the ID prefix <code>BASE</code>. It reads <code>AGENTS.md</code>, <code>docs/pitfalls.md</code> and the decision records: a practice the project rejected or deferred on purpose is reported as <code>deliberate</code>, never proposed.</li>
       <li><strong>Probes each practice.</strong> Each probe and its result is recorded as evidence; an unsure result is listed as a question, not as missing. Missing practices get these severities:
         <ul>
-          <li>Env read through one schema-validated module, with no direct env reads elsewhere: P2.</li>
+          <li>Env read through one schema-validated module (zod, pydantic-settings, envconfig, a typed config class), with no direct env reads elsewhere: P2.</li>
           <li>An agent deny-list for <code>.env*</code> and key files in <code>.claude/settings.json</code>: P2.</li>
           <li>Secret scanning in CI (gitleaks, trufflehog or the host's scanning): P2.</li>
           <li>A coverage floor that CI enforces and that only rises: P2.</li>
           <li>A guard that fails CI on destructive migrations without an explicit marker: P2, skipped without a database.</li>
-          <li>Dependency or boundary rules that fail CI: P3.</li>
+          <li>Dependency or boundary rules that fail CI on an import crossing a module boundary: P3.</li>
           <li>Tests against a real database, not only mocks: P2, skipped without a database.</li>
           <li>Safe error responses in one envelope, with no stack traces or internal fields: P1 when a stack trace reaches a response, otherwise P2; skipped without an API.</li>
           <li>A <code>CHANGELOG.md</code> in Keep a Changelog format: P3.</li>
@@ -83,8 +83,12 @@
           <li>Runtime dependencies no more than one major version behind, from the package manager's outdated report: P2 for a framework or runtime dependency, otherwise P3; skipped when the report needs credentials or the network. <code>bundle outdated</code> evaluates the <code>Gemfile</code> and <code>yarn</code> runs the file a <code>.yarnrc*</code> names as its yarn path, so it asks before either. After a second question, the three furthest behind get an upgrade plan from the dependency-upgrader agent as their fix; the plan reads changelogs on the web, and its install commands are for you to run.</li>
           <li>A minimum release age that the update bot or package manager enforces before taking a new version (Dependabot <code>cooldown</code>, Renovate <code>minimumReleaseAge</code>, pnpm <code>minimumReleaseAge</code>, uv <code>exclude-newer</code>): P3, skipped without dependencies.</li>
           <li>A <code>PostToolUse</code> hook on <code>Edit|Write</code> that reads <code>tool_input.file_path</code> from stdin, lints that file, and exits 2 with only the failures on stderr: P3; skipped without a linter.</li>
-          <li>Claude Code's sandbox enabled in <code>.claude/settings.json</code>, with reads of <code>~/.ssh</code> and <code>~/.aws</code> denied, in <code>sandbox.filesystem.denyRead</code> or as <code>sandbox.credentials.files</code> deny entries (the sandbox allows them by default): P2. The guard and permission rules match text; the sandbox restricts every command.</li>
+          <li>Claude Code's sandbox enabled in <code>.claude/settings.json</code>, with <code>sandbox.allowUnsandboxedCommands: false</code> and reads of <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.kube</code>, <code>~/.npmrc</code> and <code>~/.config/gh</code> denied, in <code>sandbox.filesystem.denyRead</code> or as <code>sandbox.credentials.files</code> deny entries (the sandbox allows them by default): P2. The guard and permission rules match text; the sandbox restricts every command.</li>
           <li>Every stdio server in <code>.mcp.json</code> pinned to a version, with no <code>@latest</code> or bare package name, since its tool descriptions reach the model: P2; skipped without <code>.mcp.json</code>.</li>
+          <li>No settings file in the repository sets <code>enableAllProjectMcpServers: true</code>, which approves every server in <code>.mcp.json</code> without a prompt: P2.</li>
+          <li>Every third-party CI action and reusable workflow referenced by a full commit SHA, not a tag or a branch: P2; skipped without <code>.github/workflows</code>.</li>
+          <li>A CI step that audits the workflow files for script injection, broad token permissions and unpinned actions (zizmor or an equal tool): P3.</li>
+          <li>A CI step that scans the lockfile for known vulnerabilities and fails on a finding (osv-scanner or the ecosystem's audit): P2; skipped without a lockfile.</li>
           <li>Every CI and validation gate exits non-zero on failure: P2.</li>
         </ul>
       </li>

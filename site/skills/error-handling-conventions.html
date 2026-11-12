@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/error-handling-conventions/SKILL.md@3f82cbb4932e">
+<meta name="dos-source" content="plugin/skills/error-handling-conventions/SKILL.md@d7c079b4a60f">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,26 +52,28 @@
     <dl class="facts">
       <div class="fact"><dt>Group</dt><dd>Conventions</dd></div>
       <div class="fact"><dt>Kind</dt><dd>Read-only</dd></div>
-      <div class="fact"><dt>Loads when</dt><dd>Writing or reviewing error handling in TypeScript</dd></div>
+      <div class="fact"><dt>Loads when</dt><dd>Writing or reviewing error handling in server and library code, in any language</dd></div>
     </dl>
 
     <h2 id="when-it-runs">When it runs</h2>
-    <p>When error handling is being written or reviewed in TypeScript files. Claude loads it on its own when the description matches the file or the task; it never writes anything itself. It matches:</p>
+    <p>When error handling is being written or reviewed in server and library code. Claude loads it on its own when the description matches the file or the task; it never writes anything itself. It matches:</p>
     <ul class="chips">
-      <li class="chip">TypeScript files</li>
+      <li class="chip">server and library code</li>
       <li class="chip">error handling</li>
       <li class="chip">API error responses</li>
     </ul>
 
     <h2 id="the-conventions">The conventions</h2>
     <ul>
-      <li><strong>Keep the cause chain.</strong> Rethrow with <code>cause</code> rather than replacing the original error with a bare <code>throw new Error(msg)</code>.</li>
-      <li><strong>Return an explicit result.</strong> A function that can fail returns a typed result or union, or throws. Never untyped <code>null</code> or <code>undefined</code> as the failure signal.</li>
+      <li><strong>Keep the cause chain.</strong> An error raised while handling another carries the original as its cause, in the language's own mechanism (a <code>cause</code> field, <code>raise … from</code>, <code>%w</code> wrapping, a <code>previous</code> argument), never a new error built from the message alone.</li>
+      <li><strong>Return an explicit result.</strong> A function that can fail returns a typed result (a tagged union, a result type, an error return value), or raises. Never an untyped null, <code>None</code>, <code>false</code> or zero value as the failure signal.</li>
       <li><strong>One API error envelope.</strong> The machine code is <code>SCREAMING_SNAKE_CASE</code>, the message is for humans, and a stack trace never reaches the client.</li>
       <li><strong>Do not log and throw.</strong> Either handle and log an error, or propagate it. Both at once means duplicate logs and false alerts.</li>
-      <li><strong>No empty catch.</strong> Swallowing an error needs a one-line comment explaining why it is correct, and it almost never is.</li>
-      <li><strong>Exceptions are not control flow.</strong> An expected missing record is a typed result, not a try/catch around the happy path.</li>
+      <li><strong>No swallowed error.</strong> No empty catch, no bare <code>except: pass</code>, no discarded error return. Swallowing an error needs a one-line comment explaining why it is correct, and it almost never is.</li>
+      <li><strong>Exceptions are not control flow.</strong> An expected missing record is a typed result, not an exception handler around the happy path.</li>
+      <li><strong>The project's convention wins.</strong> A convention the project documents (its <code>docs/reference/conventions.md</code>, a decision record) wins over a rule here.</li>
     </ul>
+    <p>Examples and probes for TypeScript, Python, Go and PHP are in <code>references/&lt;lang&gt;.md</code> beside the skill. In TypeScript:</p>
     <pre><code>throw new AppError("...", { cause: err })
 
 { ok: true, data? } | { ok: false, error }

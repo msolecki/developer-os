@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@a418356ea478">
+<meta name="dos-source" content="docs/development.md@2843ab194833">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -46,7 +46,7 @@
 
   <main id="main" class="prose">
     <h1 id="development-guide">Development guide</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/development.md">docs/development.md</a></span><span>Verified 2026-11-08</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/development.md">docs/development.md</a></span><span>Verified 2026-11-12</span></p>
     <p>How to change the plugin, check it and ship it. The rules for contributions are in
     <a href="contributing.html">CONTRIBUTING.md</a>; this page explains the mechanics behind them.</p>
     <h2 id="setup">Setup</h2>
@@ -66,7 +66,7 @@
           <tr><td>Frontmatter</td><td>Frontmatter in <code>plugin/</code>, <code>templates/</code>, <code>evals/</code> or <code>docs/</code> Markdown does not parse; a <code>docs/*.md</code> lacks <code>status</code> (<code>current</code>, <code>draft</code>, <code>deprecated</code>), <code>owner</code> or a <code>last-verified</code> date; a skill, agent or output style lacks <code>name</code>/<code>description</code> or its <code>name</code> differs from the folder or file name; a line inside the frontmatter of an <code>evals/</code> file contains <code>---</code> (the eval loader ends frontmatter there)</td></tr>
           <tr><td>Skill fields</td><td>A skill lacks <code>license</code> or <code>compatibility</code>, or its name does not match <code>^[a-z0-9-]{1,64}$</code></td></tr>
           <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or the descriptions of skills without <code>disable-model-invocation: true</code> together exceed 12000</td></tr>
-          <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>); any skill body holds a bare <code>$&lt;digits&gt;</code>, which Claude Code replaces with the skill&#8217;s argument (write <code>$(N)</code> in awk, <code>${N}</code> in sh)</td></tr>
+          <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>setup-check</code>, <code>skill-usage</code>, <code>*-conventions</code>); any skill body holds a bare <code>$&lt;digits&gt;</code>, which Claude Code replaces with the skill's argument (write <code>$(N)</code> in awk, <code>${N}</code> in sh)</td></tr>
           <tr><td>Last-verified (warning)</td><td>A <code>docs/*.md</code> committed after its <code>last-verified</code> date prints a warning; the exit status does not change</td></tr>
           <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code>, <code>brain-import-memory</code>, <code>brain-project-refresh</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>
           <tr><td>Docs standard</td><td>A <code>## </code> heading or bold field of <code>templates/project/docs/decisions/0001-template.md</code>, a bold field of <code>templates/project/docs/pitfalls.md</code>, or a <code>## </code> heading of <code>templates/project/docs/CURRENT-STATE.md</code> does not appear whole, as a fixed string, on that template file's own line of <code>## The standard</code> in <code>docs-sync</code> (the plugin does not ship <code>templates/</code>, so the skill restates them)</td></tr>
@@ -126,20 +126,34 @@
     <p><code>.github/workflows/pages.yml</code> publishes <code>site/</code> to GitHub Pages on a push to <code>main</code> that changes it, or by hand; its job runs only on <code>main</code>, so a dispatch from another branch publishes nothing. The repository's Pages source must be "GitHub Actions".</p>
     <h2 id="script-tests">Script tests</h2>
     <p><code>tests/state-card.test.sh</code> runs <code>state-card.py</code> in a temporary git repository and checks that it
-    prints nothing outside <code>compact</code>/<code>resume</code>/<code>fork</code>, that the card holds the plan and state file only when they are
-    safe to show, and that the card is cut to its cap; <code>tests/guard.test.sh</code> feeds command fixtures to <code>guard.py</code> and expects <code>ask</code> or silence;
-    <code>tests/repeat-failure.test.sh</code> feeds failed tool calls to <code>repeat-failure.py</code> and expects the reminder only at the third failure of the same call;
-    <code>tests/capture-nudge.test.sh</code> builds synthetic transcripts and checks the exit code, the JSON output and the message;
-    <code>tests/notices.test.sh</code> runs <code>notices.py</code> with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's <code>CLAUDE.md</code> is ignored, that the <code>brain_vault</code> option in the user-level <code>settings.json</code> wins over the line, an empty one falls back to it and its environment variable is ignored, and that no note name is printed;
-    <code>tests/check.test.sh</code> breaks a copy of the repository once per stage it covers and expects that
-    stage's message; it runs the whole check once per case (several minutes), so <code>scripts/check.sh</code> runs it
-    only when <code>CI</code> is set (GitHub Actions sets it): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;
-    <code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
-    transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
-    and expects one count per message; when <code>rg</code> is missing it prints SKIP locally and fails in CI, which installs ripgrep;
-    <code>tests/session-retro-harvest.test.sh</code> runs session-retro's <code>harvest.py</code> on the synthetic transcript in <code>tests/fixtures/session-retro/</code> and expects one line per seeded rejection, retraction and repeated error and none for the negatives (a permission-rule denial, an <code>api-request-blob</code> copy, a single error, an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines.
-    After changing a hook, run its test from the repository root, for example <code>sh tests/guard.test.sh</code>,
-    and add a fixture for the case you changed.</p>
+prints nothing outside <code>compact</code>/<code>resume</code>/<code>fork</code>, that the card holds the plan and state file only when they are
+safe to show, and that the card is cut to its cap; <code>tests/guard.test.sh</code> feeds command fixtures to <code>guard.py</code> and expects <code>ask</code> or silence;
+<code>tests/repeat-failure.test.sh</code> feeds failed tool calls to <code>repeat-failure.py</code> and expects the reminder only at the third failure of the same call;
+<code>tests/capture-nudge.test.sh</code> builds synthetic transcripts and checks the exit code, the JSON output and the message;
+<code>tests/notices.test.sh</code> runs <code>notices.py</code> with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's <code>CLAUDE.md</code> is ignored, that the <code>brain_vault</code> option in the user-level <code>settings.json</code> wins over the line, an empty one falls back to it and its environment variable is ignored, and that no note name is printed;
+<code>tests/check.test.sh</code> breaks a copy of the repository once per stage it covers and expects that
+stage's message; it runs the whole check once per case (several minutes), so <code>scripts/check.sh</code> runs it
+only when <code>CI</code> is set (GitHub Actions sets it): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;
+<code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
+transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
+and expects one count per message; when <code>rg</code> is missing it prints SKIP locally and fails in CI,
+which installs ripgrep;
+<code>tests/session-retro-harvest.test.sh</code> runs session-retro's <code>harvest.py</code> on the synthetic transcript in
+<code>tests/fixtures/session-retro/</code> and expects one line per seeded rejection, retraction and repeated
+error and none for the negatives (a permission-rule denial, an <code>api-request-blob</code> copy, a single error,
+an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines;
+<code>tests/lanes.test.sh</code> runs parallel-lanes' <code>lanes.py</code> in a temporary repository with a stub <code>claude</code> first on
+<code>PATH</code> and checks the launch (one <code>pids.txt</code> line per lane, a second launch, a moved worktree <code>HEAD</code> and a
+lane without a budget refused), the status table (a changed prompt, the summed cost), the resume refusals and
+the conflict preview;
+<code>tests/patterns.test.sh</code> feeds edits to <code>patterns.py</code> and expects the note for each pattern and silence
+for a test path, a Markdown file and an edit that adds nothing;
+<code>tests/setup-check.test.sh</code> runs setup-check's <code>check.py</code> with a fake <code>PATH</code> and config directory and checks
+each line, and that a vault path in a project's <code>CLAUDE.md</code> is ignored;
+<code>tests/eval-summary.test.sh</code> runs <code>scripts/eval-summary.py</code> on result fixtures and expects exit 1 with the
+case name for a seeded regression and exit 2 for summaries of different models.
+After changing a hook, run its test from the repository root, for example <code>sh tests/guard.test.sh</code>,
+and add a fixture for the case you changed.</p>
     <h2 id="evals">Evals</h2>
     <p>Behavior checks with <code>claude plugin eval</code>, run by hand before a release or after changing a tested
     skill, never in CI: <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md">evals/README.md</a>. A case must fail when the skill breaks;
@@ -168,7 +182,16 @@
     </ul>
     <p>Release, by hand:</p>
     <ol>
-      <li>On a branch from <code>development</code>: bump <code>version</code> in both manifests, rename <code>[Unreleased]</code> in <code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request. In <code>site/docs/changelog.html</code>, add the version&#8217;s <code>&lt;h2&gt;</code> under <code>[Unreleased]</code> and rename that section&#8217;s <code>unreleased-*</code> heading ids to <code>&lt;version&gt;-*</code> (e.g. <code>025-added</code>); the Site stage compares the words, not the ids. Set the release in the landing page's &quot;Is it stable?&quot; answer; the Counts stage compares it with <code>plugin.json</code>.</li>
+      <li>On a branch from <code>development</code>: bump <code>version</code> in both manifests, rename <code>[Unreleased]</code> in
+<code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages
+the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request. After the release's eval
+run, keep its scores: <code>python3 scripts/eval-summary.py evals/results/&lt;run&gt;/aggregate-result.json</code> writes
+<code>eval-history/&lt;version&gt;.json</code> (tracked), and <code>--diff &lt;old&gt; &lt;new&gt;</code> on two of those files exits 1 when a
+case's with-plugin score fell by more than 0.1. In
+<code>site/docs/changelog.html</code>, add the version's <code>&lt;h2&gt;</code> under <code>[Unreleased]</code> and rename that section's
+<code>unreleased-*</code> heading ids to <code>&lt;version&gt;-*</code> (e.g. <code>025-added</code>); the Site stage compares the words, not
+the ids. Set the release in the landing page's "Is it stable?" answer; the Counts stage compares it
+with <code>plugin.json</code>.</li>
       <li>When <code>check</code> is green on <code>development</code>: <code>git push origin origin/development:main</code>. Only a fast-forward is accepted; the <code>main</code> ruleset lets the repository admin push without a pull request (bypass mode "Always"), so <code>main</code> keeps the same SHAs as <code>development</code>.</li>
       <li><code>git tag -a v&lt;version&gt; -m v&lt;version&gt; origin/main &amp;&amp; git push origin v&lt;version&gt;</code> at once (a fetch prunes an unpushed tag; a lightweight <code>git tag</code> stops with "no tag message?" where <code>tag.gpgSign</code> is set), then <code>gh release create v&lt;version&gt; --notes-file &lt;the changelog section&gt;</code>. The <code>release-tags</code> ruleset forbids moving or deleting a <code>v*</code> tag.</li>
       <li>Pushing <code>main</code> publishes <code>site/</code> to GitHub Pages.</li>

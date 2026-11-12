@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@906db12d7c14">
+<meta name="dos-source" content="docs/product/decisions.md@319ce7e251da">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -46,7 +46,7 @@
 
   <main id="main" class="prose">
 <h1 id="decisions">Decisions</h1>
-<p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/product/decisions.md">docs/product/decisions.md</a></span><span>Verified 2026-11-08</span></p>
+<p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/product/decisions.md">docs/product/decisions.md</a></span><span>Verified 2026-11-12</span></p>
 <p>One register for the plugin era. Each entry: date, decision, why, and the commit that put it in the code. Alternatives are listed only where the history records them. Never renumber; when a decision is replaced, mark it superseded and add a new entry. Decisions of the CLI era are not carried over; their history is at the git tag <code>archive/cli-v0</code>.</p>
 <h2 id="d1-plugin-only">D1. Plugin only</h2>
 <ul>
@@ -65,6 +65,10 @@
 <li><strong>Amended 2026-10-24:</strong> a fourth script, <code>notices.py</code>, on <code>SessionStart</code> <code>startup</code> (D22).</li>
 <li><strong>Amended 2026-11-08:</strong> a fifth script, repeat-failure.py (D26).</li>
 <li><strong>Amended 2026-11-08:</strong> a stdlib script may also sit beside a skill, run by that skill and checked by the Imports stage: <code>plugin/skills/session-retro/harvest.py</code>, which reads past session transcripts for session-retro's window mode (FLOW-55).</li>
+<li><strong>Amended 2026-11-12:</strong> a sixth hook script, <code>patterns.py</code> (D6), and two more scripts beside a skill:
+<code>parallel-lanes/lanes.py</code> (D23) and <code>setup-check/check.py</code>. All are standard library only, inside the
+Imports allowlist. <code>check.py</code> opens no connection itself but runs <code>gh auth status</code>, which asks GitHub
+whether the login works. <code>scripts/eval-summary.py</code> is repository tooling outside the plugin.</li>
 </ul>
 <h2 id="d3-the-vault-is-read-and-written-with-the-agents-own-file-tools">D3. The vault is read and written with the agent's own file tools</h2>
 <ul>
@@ -77,6 +81,11 @@
 <li><strong>Date:</strong> 2026-10-14 · <strong>Commits:</strong> <code>369028cc</code>, <code>0c4ab694</code>, <code>9242bf87</code></li>
 <li><strong>Decision:</strong> agent-created notes go to <code>_inbox/</code> with <code>status: inbox</code>. Any other edit, move, merge or archive happens only for notes the user names. Retired notes move to <code>_archive/</code> with <code>status: archived</code>; nothing is deleted.</li>
 <li><strong>Why:</strong> an unreviewed agent note is a draft, not a fact; approval is the one step that keeps the vault trustworthy. Archiving keeps mistakes recoverable.</li>
+<li><strong>Amended 2026-11-12:</strong> an inbox note expires 30 days after <code>created</code> (<code>expires:</code>, or <code>created</code> + 30
+days without the key); brain-search stops answering from it and brain-review shows the expired notes
+as one group. "archive the expired ones" names that shown group and nothing else; an expired note
+still moves only on the user's answer, and <code>active</code> notes never expire. The inbox had grown to 82
+notes with no review.</li>
 </ul>
 <h2 id="d5-find-the-vault-through-a-brain-vault-line">D5. Find the vault through a <code>Brain vault:</code> line</h2>
 <ul>
@@ -108,6 +117,18 @@
 <li><strong>Amended 2026-11-08:</strong> from the PR #133 review: a quoted-delimiter heredoc (<code>&lt;&lt;'EOF'</code>, <code>&lt;&lt;"EOF"</code>) that is the whole body of a commit message's <code>$(…)</code> is not scanned (SEC-16); <code>python -m pip install</code> asks (SEC-17); an option value (<code>-f</code>, <code>-p</code>, <code>--project-directory</code>) no longer hides <code>docker compose down -v</code> (SEC-18); in the read-only agents an unambiguous prefix of <code>--output</code>/<code>--output-directory</code> (<code>--out=</code>) asks (SEC-19); vendored <code>node_modules/</code>, <code>vendor/</code> and <code>.venv/</code> paths are not test paths (FLOW-57); the matcher adds MultiEdit, and a Write that adds a skip marker the file on disk lacks asks (SEC-20).</li>
 <li><strong>Amended 2026-11-08:</strong> a test category: an Edit of a test file (<code>*.test.*</code>, <code>*.spec.*</code>, <code>tests/</code>, <code>test_*.py</code>, <code>*_test.go</code>) whose <code>new_string</code> holds more skip or focus markers than its <code>old_string</code> (<code>it.skip(</code>, <code>.only(</code>, <code>xit(</code>, <code>@pytest.mark.skip</code>, <code>t.Skip(</code> and the like), and <code>rm</code>/<code>git rm</code> of a test file or <code>mv</code> of one to <code>.bak</code>, <code>.disabled</code> or <code>.skip</code>; core.md's "do not delete or skip tests" was text only (SEC-09).</li>
 <li><strong>Amended 2026-11-08:</strong> an infra category, a closed list in command position (also after <code>npx</code>, <code>pnpm exec</code>, <code>php</code>, <code>bundle exec</code> and similar runners): <code>terraform</code>/<code>tofu destroy</code>, <code>apply -auto-approve</code>, <code>state rm</code>, <code>prisma migrate reset</code>, <code>supabase db reset</code>, <code>drizzle-kit push --force</code>, <code>artisan migrate:fresh</code>/<code>migrate:reset</code>/<code>db:wipe</code>, <code>rails db:drop</code>/<code>db:reset</code>, <code>dropdb</code>, <code>docker compose down -v</code>, <code>kubectl delete</code>, <code>helm uninstall</code>, <code>vercel --prod</code>. Users without their own deny list had no check on these in auto mode; users of destructive_command_guard already have one (SEC-08).</li>
+<li><strong>Amended 2026-11-12:</strong> the guard also asks before cloud deletes, database drops, Docker volume and
+system cleanup, publish, merge and remote-delete commands, and a downloaded script piped into a shell
+(closed tables in command position; each reason ends with the safer form); before an Edit, Write or
+MultiEdit from a linked worktree into another worktree of the same repository; and for rules a
+project adds in <code>.claude/developer-os-guard.json</code>, which can only add an <code>ask</code> with a fixed plugin
+reason (D5, D16: no project text reaches the model, and a malformed file adds nothing). Every ask is
+appended to a local log (<code>guard/asks.jsonl</code> in the plugin data directory: time, reason, rule, tool,
+never the command), so the noise of each rule can be measured; the ask is printed first and a log
+failure changes nothing. Still <code>ask</code> only, and every new check fails open.</li>
+<li><strong>Amended 2026-11-12:</strong> a seventh hook, <code>patterns.py</code> on <code>PostToolUse</code> for Edit, Write and MultiEdit,
+adds <code>additionalContext</code> (no decision, no block) when an edit adds one of a closed table of risky
+constructs; once per pattern and file in a session, fail open, <code>DEVELOPER_OS_PATTERNS=off</code>.</li>
 </ul>
 <h2 id="d7-one-wrap-up-nudge-per-long-session">D7. One wrap-up nudge per long session</h2>
 <ul>
@@ -236,6 +257,13 @@
 <li><strong>Decision:</strong> the parallel-lanes skill runs each lane as a separate <code>claude -p</code> process in its own git worktree and branch, started detached (<code>setsid</code> through <code>python3</code>, which the hooks already require) so it outlives the turn, with <code>--permission-mode acceptEdits</code> and an explicit <code>--allowedTools</code> list. It launches only after the user approves the shown <code>launch.sh</code>; lanes commit in their worktree and never push, merge or install; the launching session integrates finished lanes into a local branch and reviews them through code-review. Each lane gets a recorded <code>--session-id</code> and a <code>--max-turns</code> cap; a lane cut off without a final report is continued with <code>claude -p --resume &lt;id&gt;</code> (the Resume mode), again only after the user's yes.</li>
 <li><strong>Why:</strong> subagents run inside the session that dispatched them and end with it, while long lanes need to keep running and be watched from a later turn. A permission bypass would let an unattended process run any command, against the approval model; a fixed tool list makes a lane that needs more stop as <code>BLOCKED</code> instead.</li>
 <li><strong>Alternatives:</strong> dispatching lanes as subagents (implement-backlog's model, kept for backlog items); <code>--dangerously-skip-permissions</code> (rejected for the reason above); <code>nohup</code> alone (the lane stays in the harness's process group, which kills background jobs after about 29 minutes).</li>
+<li><strong>Amended 2026-11-12:</strong> the user approves the shown <code>lanes.json</code> and one <code>lanes.py launch</code> command
+instead of a <code>launch.sh</code>; <code>lanes.py</code> (stdlib, beside the skill, tested by <code>tests/lanes.test.sh</code>)
+launches, reports and resumes the lanes. Every lane runs under a <code>--max-budget-usd</code> the user names
+per lane, with no default, and <code>--output-format json</code>; a lane cut off by its budget ends without
+<code>DONE</code> and is resumed like one cut off by <code>--max-turns</code>, with a new budget. Integrate previews
+conflicts between <code>DONE</code> lanes read-only before the first merge. The guard's worktree rule (D6) does
+not block a lane: its report path is inside its own worktree.</li>
 </ul>
 <h2 id="d24-the-vault-is-the-one-long-term-store-auto-memory-is-off-by-recommendation">D24. The vault is the one long-term store; auto memory is off by recommendation</h2>
 <ul>
@@ -316,6 +344,15 @@
 <tr><td>2026-11-08</td><td>session-retro with a window (<code>14d</code>, a date, <code>all</code>) runs <code>harvest.py</code> on past transcripts and proposes at most five lessons from its candidates, routed to the vault, project docs or a hook/check proposal, never to <code>CLAUDE.md</code>/<code>AGENTS.md</code> without approval of that file by name; transcript text is data</td><td><code>session-retro</code></td><td>Corrections spread across sessions were never collected, so the same correction recurred (FLOW-55)</td></tr>
 </tbody>
 <tr><td>2026-11-12</td><td>An interrupted lane is resumed only through parallel-lanes' Resume mode, otherwise replaced by a fresh, smaller one; reverses "never resume an interrupted lane" from #113 (<code>ddc711b6</code>)</td><td><code>plugin/rules/core.md</code></td><td>The rule contradicted D23, which defines Resume for a lane cut off without a final report; the user chose Resume</td></tr>
+<tr><td>2026-11-12</td><td>Look up the vault before deciding: run brain-search on the topic when a vault is configured, skip silently without one; in implement-backlog a note that contradicts an item's <code>Problem</code> fails triage point 4</td><td><code>spec</code>, <code>bug-triage</code>, <code>audit-to-backlog</code>, <code>implement-backlog</code></td><td>Earlier decisions and rejected approaches were not read where new decisions are made</td></tr>
+<tr><td>2026-11-12</td><td>Rules stated for any language; per-language examples moved to <code>references/&lt;lang&gt;.md</code>; error-handling-conventions applies to server and library code in any language</td><td><code>error-handling-conventions</code>, <code>testing-conventions</code>, <code>project-init</code></td><td>The rules named TypeScript-only APIs and did not apply to Python, Go or PHP code</td></tr>
+<tr><td>2026-11-12</td><td>New step: discover the project's conventions and propose <code>docs/reference/conventions.md</code> with <code>file:line</code> evidence; Python, Go and PHP probes; Audit is step 5 and Report step 6</td><td><code>project-init</code></td><td>A non-JS repository got no conventions finding</td></tr>
+<tr><td>2026-11-12</td><td>Rows name the practice first, tools as examples; the decisions list is stack-free; new rows: actions pinned to a SHA, workflow audit, lockfile vulnerability scan, <code>enableAllProjectMcpServers</code> not <code>true</code>; the sandbox row adds <code>allowUnsandboxedCommands: false</code> and <code>~/.kube</code>, <code>~/.npmrc</code>, <code>~/.config/gh</code></td><td><code>project-baseline</code></td><td>Rows and decisions assumed a JS stack; supply-chain and agent-hardening gaps. Setting names checked against the Claude Code docs on 2026-11-12</td></tr>
+<tr><td>2026-11-12</td><td>Research map before the first question; <code>[NEEDS CLARIFICATION: …]</code> markers listed under Open questions; WHEN/THEN acceptance criteria that step 6 turns into the <code>Check</code></td><td><code>spec</code></td><td>The spec decided before showing what it read, guessed at unknowns and wrote uncheckable criteria</td></tr>
+<tr><td>2026-11-12</td><td>The Never line reads "a note or shown group the user did not name": "archive the expired ones" names the Expired group shown in that run, and a range answer covers only the page shown last</td><td><code>brain-review</code></td><td>Expired inbox notes are archived as a group and a large inbox is answered by ranges; neither names notes one by one, and silence still moves nothing (D4)</td></tr>
+<tr><td>2026-11-12</td><td>brain-capture writes <code>expires:</code>, <code>refs:</code> and <code>verified:</code>; brain-search skips expired inbox notes and marks a claim whose <code>refs:</code> file changed since <code>verified</code>; brain-garden and brain-project-refresh report both</td><td><code>brain-capture</code>, <code>brain-search</code>, <code>brain-garden</code>, <code>brain-project-refresh</code></td><td>Unreviewed notes stayed answerable forever, and a note about changed code read as current</td></tr>
+<tr><td>2026-11-12</td><td>Check candidates may propose one entry for the project's <code>.claude/developer-os-guard.json</code> when the repeated mistake is a command or a path to ask about first</td><td><code>session-retro</code></td><td>A mechanical correction had no destination but prose; the guard now reads tighten-only project rules (D6)</td></tr>
+<tr><td>2026-11-12</td><td>The skill writes <code>lanes.json</code>, asks for a budget per lane and runs <code>lanes.py</code> for launch, status, resume and the conflict preview</td><td><code>parallel-lanes</code></td><td>The launch and resume scripts were retyped by the model on every run and had no test; a lane had no cost cap (D23)</td></tr>
 </table>
 </div>
 <nav class="doc-foot" aria-label="Pagination">

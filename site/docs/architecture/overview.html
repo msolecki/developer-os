@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@61f0c9f6a4db">
+<meta name="dos-source" content="docs/architecture/overview.md@ea11c829f7f2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -46,7 +46,7 @@
 
   <main id="main" class="prose">
     <h1 id="architecture-overview">Architecture overview</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/architecture/overview.md">docs/architecture/overview.md</a></span><span>Verified 2026-11-08</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/architecture/overview.md">docs/architecture/overview.md</a></span><span>Verified 2026-11-12</span></p>
     <p>developer-os has no process of its own. Its architecture is what Claude Code loads, when, and what
     the agent then reads and writes on the user's behalf.</p>
     <h2 id="1-repository-layout">1. Repository layout</h2>
@@ -55,19 +55,21 @@ plugin/                           the installed payload
   .claude-plugin/plugin.json      name, version, description, license, keywords
   rules/core.md                   core rules, printed by a SessionStart cat hook
   SURFACE.txt                     public names, checked against the disk
-  hooks/hooks.json                6 hooks, 10-second timeouts
+  hooks/hooks.json                7 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
   hooks/guard.py                  PreToolUse guard for Bash, Edit, Write and MultiEdit
+  hooks/patterns.py               PostToolUse: a note when an edit adds a risky construct
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/&lt;name&gt;/SKILL.md          32 skills
+  skills/&lt;name&gt;/SKILL.md          33 skills
   agents/&lt;name&gt;.md                10 agents
   output-styles/&lt;name&gt;.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
 evals/                            claude plugin eval cases (not installed)
-tests/*.test.sh                   script tests: hooks, check.sh, skill-usage block
+eval-history/                     eval scores per release, written by scripts/eval-summary.py
+tests/*.test.sh                   script tests: hooks, skill scripts, check.sh, skill-usage block
 .agnix.toml                       agnix lint settings for CI
 scripts/check.sh                  the repository suite, also run by CI
 docs/                             this documentation; docs/plans/ is git-ignored
@@ -80,9 +82,9 @@ site/                             public documentation site, published by .githu
       <table>
         <thead><tr><th scope="col">Part</th><th scope="col">When it loads</th><th scope="col">Size today</th><th scope="col">Limit</th></tr></thead>
         <tbody>
-          <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>About 8.1 KB</td><td>8900 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
+          <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>About 8.3 KB</td><td>8900 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
           <tr><td>State card</td><td>After a compaction, resume or fork inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
-          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing; a skill with <code>disable-model-invocation: true</code> lists no description</td><td>About 11,000 characters for 32 skills</td><td>80–1024 each, 12000 total of the listed ones (<code>scripts/check.sh</code>); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10)</td></tr>
+          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing; a skill with <code>disable-model-invocation: true</code> lists no description</td><td>About 11,200 characters for 33 skills</td><td>80–1024 each, 12000 total of the listed ones (<code>scripts/check.sh</code>); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10)</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
           <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.8–14.2 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
           <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–4.7 KB per file</td><td>—</td></tr>
@@ -153,10 +155,13 @@ site/                             public documentation site, published by .githu
       <li>A <code>cat</code> hook prints <code>core.md</code> on every source, without Python. <code>state-card.py</code>, for <code>source</code> <code>compact</code>, <code>resume</code> or <code>fork</code> inside a git repository, prints the branch, the newest plan, <code>docs/plans/.devos-state.md</code> (skipped when older than 7 days) and the worktrees, cut to whole lines within 1024 bytes.</li>
       <li><code>notices.py</code>, for <code>source</code> <code>startup</code>, compares the plugin version with a marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/notices/</code> (Claude Code has no install or update hook) and, when the user-level <code>CLAUDE.md</code> names a vault, counts <code>_inbox/</code> notes older than 7 days and reads the last line of <code>_reports/garden-log.md</code>. It shows due notices to the user as a <code>systemMessage</code>, each throttled by its own marker.</li>
       <li><code>guard.py</code> extracts <code>tool_input.command</code> with a regular expression, unescapes JSON, joins line continuations, drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on purpose, so a mention such as <code>echo "pnpm add zod"</code> also asks; a quoted commit message (<code>-m "..."</code>, or a quoted-delimiter heredoc inside <code>$(…)</code>) is read as one word. Any parse failure prints nothing. For Edit, Write and MultiEdit it reads <code>tool_input.file_path</code> (and an Edit's <code>old_string</code>/<code>new_string</code>, a MultiEdit's <code>edits</code>, a Write's <code>content</code>) instead and asks when the path is a secret file or part of the user-level Claude config (also under <code>CLAUDE_CONFIG_DIR</code>), compared without case and through up to 8 symlink hops, or when an Edit, MultiEdit or Write adds a skip or focus marker to a test file (a Write against the file on disk; vendored <code>node_modules/</code>, <code>vendor/</code> and <code>.venv/</code> paths are not test files). A Bash call from one of the read-only review agents, named by <code>agent_type</code>, also asks when it writes. A <code>git commit</code> that hits no category gets an <code>additionalContext</code> reminder to run the fast check, with no decision.</li>
+<li><code>patterns.py</code>, after an Edit, Write or MultiEdit, scans only the text the edit adds against a closed
+table of risky constructs keyed by file extension and adds a note as <code>additionalContext</code>, once per
+pattern and file in a session; it never decides or blocks.</li>
       <li><code>capture-nudge.py</code> reads <code>session_id</code> and <code>transcript_path</code> from the input, counts the <code>tool_use</code> blocks of the transcript's assistant lines, defers while a background task launched in the session has no <code>&lt;task-notification&gt;</code> and a fresh output file under a <code>tasks/</code> directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/capture-nudge/</code> so it fires once. Markers 8 days old or older are removed.</li>
       <li><code>repeat-failure.py</code> hashes the agent, tool and input of each failed call (for Bash, the command), keeps the counts per session in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/repeat-failure/</code>, and at the third failure of the same hash, each within 10 minutes of the last, adds a "stop retrying" reminder. It stores no command text.</li>
     </ul>
-    <p>The five scripts are Python 3, standard library only; without <code>python3</code> they fail open. Exact inputs, outputs and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
+    <p>The six scripts are Python 3, standard library only; without <code>python3</code> they fail open. Exact inputs, outputs and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
     <h2 id="4-skill-composition">4. Skill composition</h2>
     <p>Skills call each other by name and dispatch agents. The dependencies that exist today:</p>
     <div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-flow-title" viewBox="0 0 1040 940" style="display:block;width:100%;min-width:860px;height:auto">

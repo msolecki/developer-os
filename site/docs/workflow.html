@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@85d06f8facd4">
+<meta name="dos-source" content="docs/workflow.md@70dca1ea4bae">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -96,7 +96,9 @@ the project has no UI. <code>TODO.md</code> shows the backlog item format with o
 <code>.gitignore</code> keeps <code>docs/plans/</code> out of git; merge it into an existing one.
 The marketplace install keeps the templates on disk:
 <code>cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/</code> copies
-them and, with <code>-n</code>, skips every file the project already has.
+them and, with <code>-n</code>, skips every file the project already has. Without the copy, project-init and
+docs-sync propose the missing files one by one; the setup-check skill reports what the machine itself
+lacks (<code>python3</code>, <code>rg</code>, <code>jq</code>, <code>gh</code>, the vault path).
 <code>docs/</code> holds the index (task → doc routing), <code>CURRENT-STATE.md</code> (verified at a commit),
 <code>pitfalls.md</code>, <code>decisions/</code> and <code>runbooks/</code>. The docs-sync skill scaffolds missing pieces, refreshes
 <code>CURRENT-STATE.md</code> and reports docs-vs-code drift; project-baseline proposes missing engineering
