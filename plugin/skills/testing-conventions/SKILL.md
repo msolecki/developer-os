@@ -13,6 +13,7 @@ compatibility: "Claude Code"
 - A regression test must fail on the unfixed code: run it before the fix and see it red. A test written after the fix and only ever seen green may not exercise the bug at all.
 - Do not fake the boundary that could be wrong. A fake database that returns ready records hides a broken query; test that path against a real test database or the real call.
 - A failure message names the missing record or shows the actual response, so the next reader can fix it without rerunning. Never raise retries or timeouts to hide a flaky test; find the race instead.
+- To see a test fail, mutate the code with one edit, run the test, then undo that same edit by hand. Never revert with `git checkout`, `git restore` or `git stash`: they discard or hide other uncommitted work, and a command guard may block them.
 - A convention the project documents (its `docs/reference/conventions.md`, a decision record) wins over a rule here on layout and tooling: file names, the mock library, the fixture format. It never permits a regression test that was not seen red, a skipped test or a raised retry to hide a flake.
 
 Examples and probes for your language: `references/<lang>.md` beside this file (`typescript`, `python`, `go`, `php`); read the one for the code at hand.
