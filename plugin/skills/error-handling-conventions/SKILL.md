@@ -13,6 +13,6 @@ compatibility: "Claude Code"
 - Do not log and re-raise the same error. Either handle and log it, or propagate it. Doing both creates duplicate logs and false alerts.
 - Do not swallow an error: no empty catch, no bare `except: pass`, no discarded error return. Swallowing requires a one-line comment that explains why it is correct, and it is almost never correct.
 - Exceptions are not control flow. An expected missing record is a typed result, not an exception handler around the happy path.
-- A convention the project documents (its `docs/reference/conventions.md`, a decision record) wins over a rule here.
+- A convention the project documents (its `docs/reference/conventions.md`, a decision record) wins over a rule here on shape and naming: the error type, the envelope's field names, the logging library. It never permits a swallowed error, a lost cause or internals in a response.
 
 Examples and probes for your language: `references/<lang>.md` beside this file (`typescript`, `python`, `go`, `php`); read the one for the code at hand.

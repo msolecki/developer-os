@@ -425,6 +425,16 @@ def drops_tests(words):
                for sub, rest in git_subs(words, pos))
 
 
+def scan_cost(line):
+    """What scan() will spend on this view: each check walks a segment's words once per command-position word.
+    Linear to compute, so a command built to outlast the hook timeout is caught before the scan starts."""
+    total = 0
+    for seg in re.split(r"[;&|()`]", line):
+        words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+        total += len(starts(words)) * len(words)
+    return total
+
+
 def scan(line):
     """Word scanner: the REASONS key of the first hit (install, push, noverify, destroy, tests, infra), or a
     (key, rule name) pair for the classes(), drops_data() and runs_download() hits; None otherwise."""
@@ -910,7 +920,8 @@ def safe(check, *args):
 
 
 LOG_BYTES = 1 << 20
-SCAN_SECONDS = 4  # the hook timeout is 10 s; one more view of a long command may still run after this
+SCAN_SECONDS = 4  # a backstop for the cost bound: the hook timeout is 10 s
+SCAN_COST = 1500000  # command-position words times words in one view: about a quarter second of scanning
 
 
 def log(reason, rule, tool):
@@ -1007,7 +1018,7 @@ def main():
     for v in views:
         # The scan is quadratic in command-position words; past the hook timeout Claude Code would run the
         # command unchecked, so a command that cannot be checked in time asks instead.
-        if time.monotonic() - began > SCAN_SECONDS:
+        if time.monotonic() - began > SCAN_SECONDS or scan_cost(v) > SCAN_COST:
             ask("slow")
             return
         hit = scan(v)

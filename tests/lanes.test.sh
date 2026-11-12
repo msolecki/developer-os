@@ -162,6 +162,8 @@ args=$(tr '\n' ' ' < "$STUB/args-a")
 has "the lane gets its session id" "--session-id $ida " "$args"
 has "the lane gets max turns" "--max-turns 50 " "$args"
 has "the lane gets its budget" "--max-budget-usd 3 " "$args"
+has "the lane may not rewrite its .git file" "Write(.git) " "$args"
+has "the lane may not write inside a .git directory" "Write(.git/**)" "$args"
 has "the lane prints a JSON result" "--output-format json " "$args"
 has "the lane runs under acceptEdits" "--permission-mode acceptEdits " "$args"
 has "the fast check is allowed" "Bash(sh check.sh:*) " "$args"
@@ -240,6 +242,46 @@ sed 's/^\(a [0-9]*\) .*/\1/' "$R/pids.txt" > "$R/pids.tmp" && mv "$R/pids.tmp" "
 err=$(l resume "$R" a 2>&1)
 expect "resume refuses a lane without a session id" 1 $?
 has "the refusal names the session id" "a: no session id in pids.txt" "$err"
+
+# A lane can write pids.txt through an allowed git output path: a session id that is an option must not reach claude.
+mkrepo badid
+l launch "$R" > /dev/null 2>&1
+settle
+idb=$(awk '$(1) == "a" { print $(3); exit }' "$R/pids.txt")
+echo " a 999999 --settings=/tmp/evil.json" >> "$R/pids.txt"
+l resume "$R" a > /dev/null 2>&1
+settle
+has "resume keeps the launch session id past a forged pids.txt line" "$idb" "$(cat "$STUB/args-a")"
+hasnt "an option in pids.txt never reaches claude" "--settings" "$(cat "$STUB/args-a")"
+
+# A lane that rewrote its worktree's .git file could make git run its own config: status must not run git there.
+mkrepo gitdir
+l launch "$R" > /dev/null 2>&1
+settle
+printf 'gitdir: fk\n' > "$repo/.worktrees/a/.git"
+out=$(l status "$R")
+has "status flags a rewritten .git file" "worktree .git file changed" "$(printf '%s\n' "$out" | grep ' a: ')"
+hasnt "a lane with a rewritten .git is not resumable" "Resumable: a" "$out"
+err=$(l resume "$R" a 2>&1)
+expect "resume refuses a lane with a rewritten .git" 1 $?
+
+mkrepo dupname
+sed 's/"name": "b"/"name": "a"/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+l launch "$R" > /dev/null 2>&1
+expect "two lanes with one name are refused" 1 $?
+[ ! -e "$R/pids.txt" ] && ok "nothing starts with a duplicate name" || bad "pids.txt written with a duplicate name"
+
+mkrepo dotname
+sed 's|"name": "b"|"name": "../x"|' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+l launch "$R" > /dev/null 2>&1
+expect "a lane name that leaves .worktrees is refused" 1 $?
+[ ! -e "$R/pids.txt" ] && ok "nothing starts with a path as a lane name" || bad "pids.txt written with a path as a lane name"
+
+mkrepo paren
+sed 's/"fast_check": "sh check.sh", "allow"/"fast_check": "sh check.sh:*) Bash(curl", "allow"/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+err=$(l launch "$R" 2>&1)
+expect "a fast_check that closes its own rule is refused" 1 $?
+has "the refusal names fast_check" "a: fast_check" "$err"
 
 # --- conflicts, on a run directory without lanes.json (one made before lanes.py)
 mkrepo merge

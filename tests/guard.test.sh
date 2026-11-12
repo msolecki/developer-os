@@ -818,6 +818,9 @@ rm -rf "$ld"
 
 # A command too long to check inside the hook timeout asks instead of passing unchecked.
 check ask "$(fx "$(python3 -c 'print("a=1 " * 6000 + "ls")')")" "too long"
+check ask "$(fx "$(python3 -c 'print("env " * 12000 + "rm -rf x")')")" "too long"
+check pass "$(fx "$(python3 -c 'print("echo " + "word " * 4000)')")"
+check ask "$(fx "$(python3 -c 'print("echo " + "word " * 4000 + "; pnpm add zod")')")" "lockfile"
 
 [ $fail -eq 0 ] && echo "guard: all passed"
 exit $fail

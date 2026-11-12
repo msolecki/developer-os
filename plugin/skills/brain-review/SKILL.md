@@ -81,7 +81,7 @@ INFRA/
 Approve which ones? Ranges work: "1-12 promote, 13 reject, 14-20 skip". "next" shows page 2.
 ```
 
-A number or range covers only the page shown last: for a number outside it, change nothing for that number and ask. `skip` leaves a note in `_inbox/`, and a number the answer does not mention is skipped. A recommendation is yours, not the user's approval. Read a note in full before promoting or merging it: the frontmatter and secret checks above still apply to it. After acting on an answer (steps 4–6), or on "next", show the next page (numbers 21–40) with the same question.
+A number or range covers only the page shown last, the `Expired` group shown with it included: for a number outside it, change nothing for that number and ask. `skip` leaves a note in `_inbox/`, and a number the answer does not mention is skipped. A recommendation is yours, not the user's approval. Read a note in full before promoting or merging it: the frontmatter and secret checks above still apply to it. After acting on an answer (steps 4–6), or on "next", show the next page (numbers 21–40) with the same question.
 
 ## 4. Promote only approved notes
 

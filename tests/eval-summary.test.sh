@@ -34,6 +34,13 @@ expect "no local path in the summary" 0 "$(grep -c -e /work/demo -e /tmp/t "$v1"
 s --out-dir "$T/h" "$F/v2/aggregate-result.json" >/dev/null 2>&1
 expect "second version written" yes "$([ -f "$T/h/9.1.0.json" ] && echo yes)"
 
+# The version becomes the file name: one that is a path must not write outside the output directory.
+mkdir -p "$T/evil"
+sed 's/"version": *"9.1.0"/"version": "..\/escaped"/' "$F/v2/aggregate-result.json" > "$T/evil/aggregate-result.json"
+s --out-dir "$T/h" "$T/evil/aggregate-result.json" >/dev/null 2>&1
+expect "a version that is a path exits 2" 2 $?
+expect "nothing is written outside the output directory" no "$([ -e "$T/escaped.json" ] && echo yes || echo no)"
+
 # beta fell 0.9 -> 0.5 (seeded regression); gamma fell 0.4 -> 0.3, exactly 0.1, which is not "more than 0.1".
 out=$(s --diff "$v1" "$T/h/9.1.0.json")
 expect "diff with a regression exits 1" 1 $?

@@ -21,6 +21,13 @@ TOOLS = ["Read", "Edit", "Write", "Glob", "Grep",
          "Bash(git status:*)", "Bash(git diff:*)", "Bash(git add:*)", "Bash(git commit:*)"]
 # What the allowed fast check and `git commit` run; a lane must not rewrite it and then run it unprompted.
 DENY = ["Makefile", ".husky/**", ".githooks/**", ".claude/**"]
+# Never dropped: a lane that rewrites its worktree's .git file points git at a config of its own, and git runs
+# commands that config names (core.fsmonitor, filters) for the lane's `git status` and for the orchestrator's.
+GIT_DENY = [".git", ".git/**"]
+# No lane-chosen config may run a command when this script itself calls git.
+GIT_SAFE = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null")
+LANE = r"[a-z0-9][a-z0-9-]*"
+SESSION = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 FINAL = ("DONE", "REVIEW", "BLOCKED")
 START = 'p=${1}; shift; claude -p "$@" < "$p"; echo "EXIT=$?"'
 CONTINUE = 'echo "Continue the task; your final report is not written yet." | claude -p "$@"; echo "EXIT=$?"'
@@ -36,9 +43,9 @@ def fail(*lines):
 def git(cwd, *args):
     """Returns (exit code, stdout); (-1, "") when git cannot run there."""
     try:
-        p = subprocess.run(("git", "-C", cwd) + args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                           universal_newlines=True)
-    except OSError:
+        p = subprocess.run(("git",) + GIT_SAFE + ("-C", cwd) + args, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, universal_newlines=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
         return -1, ""
     return p.returncode, p.stdout
 
@@ -83,10 +90,12 @@ def validate(cfg):
         if not (number(lane.get("budget_usd")) and lane["budget_usd"] > 0):
             errors.append("%s: budget_usd is required: a positive number of US dollars, there is no default" % name)
         check = lane.get("fast_check")
-        if not (isinstance(check, str) and check.strip() and "\n" not in check):
-            errors.append("%s: fast_check is not a one-line command" % name)
-        if not strings(lane.get("allow", [])):
-            errors.append("%s: allow is not a list of tool rules (none may start with -)" % name)
+        # Claude Code splits tool rules on commas and spaces: a bracket or comma would close this rule and open another.
+        if not (isinstance(check, str) and check.strip() and not re.search(r"[\n(),]", check)):
+            errors.append("%s: fast_check is not a one-line command without ( ) or ," % name)
+        allow = lane.get("allow", [])
+        if not (strings(allow) and all(re.fullmatch(r"[A-Za-z_]+(\([^(),\n]+\))?", x) for x in allow)):
+            errors.append("%s: allow is not a list of single tool rules such as Bash(node check.mjs:*)" % name)
         drop = lane.get("drop_deny", [])
         known = DENY + (cfg["manifests"] if strings(cfg.get("manifests")) else [])
         if not (strings(drop) and all(p in known for p in drop)):
@@ -134,7 +143,8 @@ def locate(run):
 def lane_args(cfg, lane):
     tools = TOOLS + ["Bash(%s:*)" % lane["fast_check"].strip()] + lane.get("allow", [])
     drop = lane.get("drop_deny", [])
-    deny = [rule % p for p in cfg["manifests"] + DENY if p not in drop for rule in ("Edit(%s)", "Write(%s)")]
+    paths = [p for p in cfg["manifests"] + DENY if p not in drop] + GIT_DENY
+    deny = [rule % p for p in paths for rule in ("Edit(%s)", "Write(%s)")]
     args = ["--max-turns", str(int(cfg["max_turns"])), "--max-budget-usd", str(lane["budget_usd"]),
             "--output-format", "json", "--permission-mode", "acceptEdits", "--allowedTools"] + tools
     return args + (["--disallowedTools"] + deny if deny else [])
@@ -178,11 +188,28 @@ def pids(run):
         with open(os.path.join(run, "pids.txt"), encoding="utf-8") as f:
             for line in f:
                 parts = line.split()
-                if len(parts) >= 2 and parts[1].isdigit():
+                # A lane can write this file through an allowed git output path: only a lane name, a PID and a
+                # UUID count, so no word of it can reach `claude` as an option or the file system as a path.
+                if len(parts) in (2, 3) and re.fullmatch(LANE, parts[0]) and parts[1].isdigit() and not line[:1].isspace() \
+                        and (len(parts) == 2 or re.fullmatch(SESSION, parts[2])):
                     last[parts[0]] = (parts[1], parts[2] if len(parts) > 2 else "")
     except OSError:
         pass
     return last
+
+
+def own_gitdir(root, name):
+    """The lane's worktree still has the .git file `git worktree add` wrote: a pointer into the repository's own
+    .git/worktrees. Anything else is a lane-made git directory, and git must not run in it."""
+    try:
+        with open(os.path.join(root, ".worktrees", name, ".git"), "rb") as f:
+            text = f.read(4096).decode("utf-8", "replace").strip()
+    except OSError:
+        return False
+    if not text.startswith("gitdir: ") or "\n" in text:
+        return False
+    want = os.path.join(os.path.realpath(root), ".git", "worktrees")
+    return os.path.dirname(os.path.realpath(text[len("gitdir: "):])) == want
 
 
 def ps(pid, field):
@@ -261,6 +288,8 @@ def resume(run, name):
         fail("%s is still running" % name)
     if report_line(root, rel, name).startswith(FINAL):
         fail("%s has a final report" % name)
+    if not own_gitdir(root, name):
+        fail("%s: worktree .git file changed; do not resume it, inspect the worktree" % name)
     log = os.path.join(run, "log-%s.txt" % name)
     with open(log, "a", encoding="utf-8") as f:
         f.write("--- resumed %s\n" % time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
@@ -368,6 +397,11 @@ def status(run):
             if not report.startswith(FINAL) and sid and not [w for w in why if w.endswith("changed since launch")]:
                 resumable.append(name)
         there = os.path.isdir(tree)
+        if there and not own_gitdir(root, name):
+            why.append("worktree .git file changed")
+            there = False
+            if name in resumable:
+                resumable.remove(name)
         cells = [(WARN + " " if why else "") + name, state, idle_minutes(tree) if there else "?",
                  one_line(report, 60) or "none",
                  count(git(tree, "rev-list", "lanes/%s" % name, "^%s" % base)) if there and base else "?",
