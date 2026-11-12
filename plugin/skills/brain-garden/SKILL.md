@@ -15,7 +15,7 @@ Use a vault path the user or the calling skill gave you in this conversation (re
 
 ## 2. Run the checks
 
-Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Note names, link targets and the `.md` extension match case-insensitively, as in Obsidian. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance: they are exempt from the archived-link info line, but a missing source is still `no such note`. A superseded note (`status: superseded`) stays in its topic folder, is never stale or an orphan, and must name its replacement in `superseded_by: "[[note]]"`; the script reports a missing field, a target that is missing or archived, a cycle (A → B → A), and a chain that leads into one; a `superseded_by` on a note that is not superseded is checked as an ordinary link. A compiled note (tag `compiled`) is out of date when a note in its `sources:` has a later `updated` date than the compiled note; the fix is to recompile it with brain-compile. Links inside fenced code blocks are ignored. An inbox note is expired when today is after its `expires:` date, or more than 30 days after `created` when it has no such key: brain-search no longer answers from it, and the fix is brain-review, which promotes it or archives it once the user names it. The script prints only offending files, then one `totals:` line for the report header.
+Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Note names, link targets and the `.md` extension match case-insensitively, as in Obsidian. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance: they are exempt from the archived-link info line, but a missing source is still `no such note`. A superseded note (`status: superseded`) stays in its topic folder, is never stale or an orphan, and must name its replacement in `superseded_by: "[[note]]"`; the script reports a missing field, a target that is missing or archived, a cycle (A → B → A), and a chain that leads into one; a `superseded_by` on a note that is not superseded is checked as an ordinary link. A compiled note (tag `compiled`) is out of date when a note in its `sources:` has a later `updated` date than the compiled note; the fix is to recompile it with brain-compile. Links inside fenced code blocks are ignored. An inbox note is expired when today is after its `expires:` date, or more than 30 days after `created` when it has no such key: brain-search no longer answers from it, and the fix is brain-review, which promotes it or archives it once the user names it. A `refs:` entry must read `"<project slug>:<repo-relative path>"` and come with a `verified:` date; the garden checks only that shape, because it runs in the vault, not the repository (brain-search and brain-project-refresh check the files). The script prints only offending files, then one `totals:` line for the report header.
 
 ```bash
 V='/path/to/vault'
@@ -30,7 +30,7 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
 {
   f = $(0); name = f; sub(/.*\//, "", name); sub(/\.[mM][dD]$/, "", name); k = tolower(name)
   if (f ~ /^\.\/(_views|_reports)\//) { live[k] = 1; next }   # link targets only
-  nl0 = nl; fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; sb = ""; ex = ""; key = ""; comp = 0; sec = ""; ln = 0; code = 0
+  nl0 = nl; fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; sb = ""; ex = ""; vf = ""; rf = ""; key = ""; comp = 0; sec = ""; ln = 0; code = 0
   while ((getline line < f) > 0) {
     ln++; sub(/\r$/, "", line)
     if (ln == 1 && line == "---") { fm = 1; continue }
@@ -41,8 +41,9 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
         key = substr(line, 1, RLENGTH - 1)
         if (!(key in has)) { has[key] = 1; v = val(line)
           if (key == "status") st = v; else if (key == "type") ty = v; else if (key == "created") cr = v
-          else if (key == "updated") up = v; else if (key == "summary") sm = v; else if (key == "superseded_by") sb = v; else if (key == "expires") ex = v }
+          else if (key == "updated") up = v; else if (key == "summary") sm = v; else if (key == "superseded_by") sb = v; else if (key == "expires") ex = v; else if (key == "verified") vf = v }
       }
+      if (key == "refs") { v = line; sub(/^refs:/, "", v); sub(/^[ \t]*-[ \t]*/, "", v); rf = rf "," v }
       if (key == "tags" && line ~ /(^|[^a-z-])compiled([^a-z-]|$)/) comp = 1
     } else if (line ~ /^(```|~~~)/) { code = !code; continue }
     else if (code) continue
@@ -73,6 +74,13 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
   if ("summary" in has && sm == "") print f ": empty summary"
   if ("type" in has && ty !~ /^(decision|knowledge|reference|project)$/) print f ": invalid type"
   if ("expires" in has && ex !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) { print f ": invalid expires: " ex; ex = "" }
+  if ("verified" in has && vf !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) print f ": invalid verified: " vf
+  if ("refs" in has) {   # shape only: "<slug>:<repo-relative path>"; the files are checked by brain-search
+    if (!("verified" in has)) print f ": refs without verified"
+    gsub(/^[, \t]*\[|\][ \t]*$/, "", rf); nr = split(rf, ra, ",")
+    for (r = 1; r <= nr; r++) { e = ra[r]; gsub(/^[ \t]+|[ \t]+$/, "", e); gsub(/^["\047]|["\047]$/, "", e)
+      if (e != "" && (e !~ /^[a-z0-9-]+:[^:\/-][^:]*$/ || e ~ /\.\.|["\047$\140\\]/)) print f ": invalid refs entry: " e }
+  }
   if (f ~ /^\.\/_inbox\//) {
     if (st != "inbox") print f ": status: " st " in _inbox/"
     else { if (cr != "" && cr < inbox_cut) print f ": in _inbox/ since " cr " (> 7 days)"
@@ -132,6 +140,7 @@ Frontmatter:
   QA/flaky-tests.md: missing summary → propose: "Retry policy for flaky e2e tests."
   INFRA/dns.md: status: draft (invalid) → active
   DEV/cache.md: status: inbox outside _inbox/ → active
+  DEV/flags.md: invalid refs entry: /srv/app/src/flags.ts → "my-app:src/flags.ts"
 Out-of-date compiled notes:
   DEV/missing-compiled.md: compiled 2026-08-01, source [[api-coerce]] updated 2026-10-02 → recompile with brain-compile
 Superseded:
