@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-12
 ---
 
 # How to work: brain + code
@@ -58,7 +58,9 @@ the project has no UI. `TODO.md` shows the backlog item format with one example 
 `.gitignore` keeps `docs/plans/` out of git; merge it into an existing one.
 The marketplace install keeps the templates on disk:
 `cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/` copies
-them and, with `-n`, skips every file the project already has.
+them and, with `-n`, skips every file the project already has. Without the copy, project-init and
+docs-sync propose the missing files one by one; the setup-check skill reports what the machine itself
+lacks (`python3`, `rg`, `jq`, `gh`, the vault path).
 `docs/` holds the index (task → doc routing), `CURRENT-STATE.md` (verified at a commit),
 `pitfalls.md`, `decisions/` and `runbooks/`. The docs-sync skill scaffolds missing pieces, refreshes
 `CURRENT-STATE.md` and reports docs-vs-code drift; project-baseline proposes missing engineering

@@ -7,13 +7,13 @@ last-verified: 2026-11-12
 # Hooks reference
 
 Defined in `plugin/hooks/hooks.json`. Commands run with `${CLAUDE_PLUGIN_ROOT}` set to the installed
-`plugin/` directory; each has a 10-second timeout. There are 6 hooks: one `cat` and five
+`plugin/` directory; each has a 10-second timeout. There are 7 hooks: one `cat` and six
 Python 3 scripts run as `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.py"`. The scripts use the
 standard library only, need `python3` 3.8 or later on `PATH`, make no network call, and fail open.
-Without `python3` the core rules still load; the state card, notices, guard, repeat-failure and nudge fail with a
+Without `python3` the core rules still load; the state card, notices, guard, patterns, repeat-failure and nudge fail with a
 non-blocking hook error and the session goes on as if they were absent. Why Python and not `sh`:
 [decisions D2](../product/decisions.md#d2-no-runtime-small-hook-scripts-without-dependencies).
-Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh`, `tests/repeat-failure.test.sh`, `tests/capture-nudge.test.sh`.
+Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh`, `tests/patterns.test.sh`, `tests/repeat-failure.test.sh`, `tests/capture-nudge.test.sh`.
 
 ## SessionStart — core rules and state card
 
@@ -269,6 +269,14 @@ confirmation: quoting, an alias, a variable built at run time or a script can ge
 boundary is Claude Code's permission rules and its sandbox (`sandbox.enabled`, or `/sandbox`), which
 restrict writes and network for every command whatever its text.
 
+## PostToolUse — `patterns.py`
+
+Matcher `Edit|Write|MultiEdit`, timeout 10. It scans only the text the edit adds (`new_string`, `content`, each MultiEdit `new_string`) against a closed table keyed by file extension: `eval(` and `exec(` (Python, JavaScript, TypeScript), `pickle.load`, `yaml.load(` without a safe loader, `verify=False`, `shell=True` (Python), `.innerHTML =`, `dangerouslySetInnerHTML` (JavaScript, TypeScript, HTML), `${{ github.event.` on a non-`key:` or `run:` line of a file under `.github/workflows/`, and `curl … | sh` (shell files). A construct the replaced text already held as often is not new; test paths (guard's definition), Markdown and vendored directories (`node_modules`, `vendor`, `third_party`, `.venv`, `site-packages`) are skipped, with the path taken relative to `cwd`.
+
+Output is `hookSpecificOutput.additionalContext` only, one line per pattern naming the file, the construct and the safer form, at most 3 lines, once per pattern and file in a session; never a decision, never a block. Markers live in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/patterns/<session_id>` (mode 700 directory, entries removed after 8 days).
+
+It reads no project file, at most 4 MiB of hook input and 256 KiB of added text. Every error exits 0 with no output. `DEVELOPER_OS_PATTERNS=off` disables it.
+
 ## PostToolUseFailure — `repeat-failure.py`
 
 **Matcher:** none: every tool. Claude Code fires the event when a tool call fails, for Bash when the
@@ -350,9 +358,10 @@ script reads the file's modification time with `stat` and runs no other program 
 | `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | capture-nudge | Tool-call threshold; non-numeric falls back to 30 |
 | `DEVELOPER_OS_GUARD_LOG` | guard | `off` disables the ask log; the guard asks as before |
 | `DEVELOPER_OS_NOTICES` | notices | `off` disables the version and upkeep notices |
+| `DEVELOPER_OS_PATTERNS` | patterns | `off` disables the risky-construct note |
 | `DEVELOPER_OS_REPEAT_FAILURE` | repeat-failure | `off` disables the repeated-failure reminder |
 | `CLAUDE_CODE_ENTRYPOINT` | capture-nudge, notices | Set by Claude Code but not in its documentation, so it may change without notice; `sdk-*` skips the hook |
-| `CLAUDE_PLUGIN_DATA` | capture-nudge, guard, notices, repeat-failure | Set by Claude Code; root of the marker directories and the guard's ask log, kept across plugin updates |
+| `CLAUDE_PLUGIN_DATA` | capture-nudge, guard, notices, patterns, repeat-failure | Set by Claude Code; root of the marker directories and the guard's ask log, kept across plugin updates |
 | `CLAUDE_CONFIG_DIR` | notices, guard | Where the user-level config lives (default `~/.claude`): notices reads the `brain_vault` option from its `settings.json` and the `Brain vault:` line from its `CLAUDE.md`; guard protects the same files under it |
 | `CLAUDE_PLUGIN_ROOT` | hooks.json, notices | Set by Claude Code; plugin install path |
-| `TMPDIR` | capture-nudge, guard, notices, repeat-failure | Root of the marker directories and the ask log when `CLAUDE_PLUGIN_DATA` is unset (default `/tmp`) |
+| `TMPDIR` | capture-nudge, guard, notices, patterns, repeat-failure | Root of the marker directories and the ask log when `CLAUDE_PLUGIN_DATA` is unset (default `/tmp`) |

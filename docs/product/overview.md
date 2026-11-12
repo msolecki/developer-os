@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-08
+last-verified: 2026-11-12
 ---
 
 # Product overview
@@ -27,7 +27,7 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
    conventions skills, ten agents (nine specialists and a verifier), four output styles and small hooks, among them a guard on Bash, Edit, Write and MultiEdit.
 
-The plugin is Markdown and JSON plus five Python 3 hook scripts (standard library only). There is no server, database,
+The plugin is Markdown and JSON plus six Python 3 hook scripts (standard library only). There is no server, database,
 index, binary, background job or network call in the plugin itself.
 
 ## Who it is for

@@ -4,10 +4,80 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Guard: asks before cloud deletes (`aws … delete-*`/`terminate-*`, `aws s3 rm --recursive`, `aws s3 rb`,
+  `gcloud … delete`, `az … delete`), database drops (`psql`/`mysql`/`sqlite3` with `DROP` or `TRUNCATE`,
+  `redis-cli FLUSHALL`/`FLUSHDB`), `docker system prune` and `docker volume rm`/`prune`, publish and merge
+  commands (`npm`/`pnpm`/`yarn publish`, `cargo publish`, `twine upload`, `gem push`, `gh repo delete`,
+  `gh release create`/`delete`, `gh pr merge`) and a downloaded script piped into a shell (`curl … | sh`).
+  Each reason names the safer form; a mention in `grep` or `echo` passes. More protected files: `~/.kube`,
+  `~/.config/gh`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.docker/config.json`.
+- Guard: a session in a linked git worktree is asked before an Edit, Write or MultiEdit into the main
+  checkout or a sibling worktree; the main checkout is never asked.
+- Guard: a project can add its own questions in `.claude/developer-os-guard.json` (literal command prefixes
+  and path globs, at most 50 entries); it can never remove one, the reason is a fixed string, and editing
+  the file asks. session-retro can propose an entry for it.
+- Guard: every ask is logged to `${CLAUDE_PLUGIN_DATA}/guard/asks.jsonl` with the time, reason, rule and
+  tool, never the command; `DEVELOPER_OS_GUARD_LOG=off` disables it.
+- A `PostToolUse` hook, `patterns.py`, tells the agent once per pattern and file when an edit adds a known
+  risky construct (`eval(`, `exec(`, `pickle.load`, `yaml.load(` without a safe loader, `verify=False`,
+  `shell=True`, `.innerHTML =`, `dangerouslySetInnerHTML`, `${{ github.event.` in a workflow `run:` line,
+  `curl … | sh`) and names the safer form. Context only, never a decision; test paths, Markdown and vendored
+  directories are skipped. `DEVELOPER_OS_PATTERNS=off` turns it off (D6).
+- A `setup-check` skill reports what the machine lacks (python3 3.8+, rg, jq, gh and its login, git 2.38+,
+  the vault path, `autoMemoryEnabled`, the Claude Code CLI) with the fix for each gap. Read-only.
+- parallel-lanes: every lane runs under `--max-budget-usd` with a budget the user names per lane (no
+  default; launch refuses a lane without one) and `--output-format json`; Status has a Cost column, quotes
+  the lane's result text and marks a lane cut off by its budget. Integrate previews merge conflicts between
+  `DONE` lanes (`lanes.py conflicts`, git 2.38+), and the merge plan carries a `Conflicts:` line.
+- Inbox notes expire 30 days after `created` (brain-capture writes `expires:`; a note without the key uses
+  `created` + 30 days). brain-search skips expired inbox notes and reports only their count; brain-review
+  shows them as one group that "archive the expired ones" names; brain-garden lists them. Active notes
+  never expire, and nothing is archived without the user's answer (D4).
+- brain-review pages an inbox above 20 notes: 20 per page grouped by proposed folder, each line with
+  `recommend: promote | merge into <note> | reject` and a reason, and range answers such as
+  `1-12 promote, 13 reject, 14-20 skip` that cover only the page shown.
+- Notes can carry `refs: ["<project slug>:<repo-relative path>"]` and `verified: <date>`, written by
+  brain-capture. In the repository with that slug, brain-search appends
+  `(verify: <path> changed since <date>)` to a claim whose file has a later commit; brain-project-refresh
+  reports it as a changed ref; brain-garden checks the keys' shape.
+- `spec`, `bug-triage`, `audit-to-backlog` and `implement-backlog` run `brain-search` on the topic when a
+  vault is configured and read the top note; without a vault they skip silently. In `implement-backlog`, a
+  note that contradicts an item's `Problem` fails triage point 4.
+- `spec` shows a `Research map` (files, data flow, existing tests; at most 15 lines) before its first
+  question, writes unknowns as `[NEEDS CLARIFICATION: …]` and lists them under Open questions, and writes
+  acceptance criteria as `WHEN <event> THEN <observable result>`.
+- `project-init` step 4, Discover the project's conventions: proposes `docs/reference/conventions.md` from
+  the linter, formatter and test config, the test layout and three modules, each rule with its `file:line`;
+  the audit gains Python, Go and PHP probes. New template `templates/project/docs/reference/conventions.md`.
+- `project-baseline` rows: CI actions pinned to a commit SHA, a workflow audit step, a lockfile
+  vulnerability scan, and `enableAllProjectMcpServers` not `true`.
+- `scripts/eval-summary.py` keeps eval scores between releases in `eval-history/<version>.json`, and
+  `--diff <old> <new>` exits 1 when a case's with-plugin score fell by more than 0.1; it refuses to compare
+  runs of different agent or judge models.
+- Evals: eighteen new cases, none run yet: the security-auditor, database-reviewer and infra-reviewer agents
+  on a planted defect and on clean input; four `core.md` rules (`core-asks-before-install`,
+  `core-evidence-before-fixed`, `core-no-skipped-test`, `core-status-block`); `brain-search-expired-inbox`,
+  `brain-review-pages`, `brain-search-stale-ref`, `spec-reads-vault`, `spec-research-map`,
+  `error-handling-python`, `project-init-python` and `project-baseline-unpinned-action`. The fixture inbox
+  notes get relative dates.
+- `docs/workflow.md`: how to keep skill descriptions from being cut (`skillListingBudgetFraction`,
+  `skillOverrides` for your own skills) and how to see the listing's cost (`/doctor`, `/skill-doctor`).
+
 ### Changed
 
 - Core rules: an interrupted lane is resumed only through parallel-lanes' Resume mode; the rule no longer
   forbids what that mode does (D23).
+- parallel-lanes: `lanes.py` beside the skill replaces the `launch.sh` and `resume.sh` listings and the
+  Status block; the skill writes `lanes.json` and shows it with one command for approval.
+- `error-handling-conventions` and `testing-conventions` state their rules for any language; TypeScript,
+  Python, Go and PHP examples and probes are in `references/<lang>.md` beside each skill. The
+  error-handling description says "in server and library code".
+- `project-baseline` rows name the practice first and tools as examples; the Agent sandbox row also requires
+  `sandbox.allowUnsandboxedCommands: false` and denies `~/.kube`, `~/.npmrc` and `~/.config/gh`; the
+  decisions list no longer names npm, pnpm, Jest or Vitest. `project-init` Audit is now step 5 and Report
+  step 6.
 
 ## [0.2.9] - 2026-11-09
 

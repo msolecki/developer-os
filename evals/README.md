@@ -32,6 +32,10 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 - One case: add `--case brain-search-no-match`. One group: `--tag brain` (tags: `brain`, `review`,
   `retro`, `trigger`, `backlog`, `negative`, `core`).
 - Results and the HTML report go to `evals/results/` (git-ignored).
+- To keep the scores of a release, run `python3 scripts/eval-summary.py evals/results/<run>/aggregate-result.json`
+  (several runs of one version merge): it writes `eval-history/<version>.json`, which is tracked.
+  `python3 scripts/eval-summary.py --diff eval-history/<old>.json eval-history/<new>.json` exits 1 and names
+  each case whose with-plugin score fell by more than 0.1; it refuses summaries made with different models.
 
 ## Cases
 

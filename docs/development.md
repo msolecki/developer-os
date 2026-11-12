@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-12
 ---
 
 # Development guide
@@ -137,7 +137,17 @@ which installs ripgrep;
 `tests/session-retro-harvest.test.sh` runs session-retro's `harvest.py` on the synthetic transcript in
 `tests/fixtures/session-retro/` and expects one line per seeded rejection, retraction and repeated
 error and none for the negatives (a permission-rule denial, an `api-request-blob` copy, a single error,
-an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines.
+an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines;
+`tests/lanes.test.sh` runs parallel-lanes' `lanes.py` in a temporary repository with a stub `claude` first on
+`PATH` and checks the launch (one `pids.txt` line per lane, a second launch, a moved worktree `HEAD` and a
+lane without a budget refused), the status table (a changed prompt, the summed cost), the resume refusals and
+the conflict preview;
+`tests/patterns.test.sh` feeds edits to `patterns.py` and expects the note for each pattern and silence
+for a test path, a Markdown file and an edit that adds nothing;
+`tests/setup-check.test.sh` runs setup-check's `check.py` with a fake `PATH` and config directory and checks
+each line, and that a vault path in a project's `CLAUDE.md` is ignored;
+`tests/eval-summary.test.sh` runs `scripts/eval-summary.py` on result fixtures and expects exit 1 with the
+case name for a seeded regression and exit 2 for summaries of different models.
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 
@@ -186,7 +196,10 @@ Release, by hand:
 
 1. On a branch from `development`: bump `version` in both manifests, rename `[Unreleased]` in
    `CHANGELOG.md` to `[<version>] - <date>` under a new empty `[Unreleased]`, refresh the site pages
-   the Site stage names, run `bash scripts/check.sh`, and merge the pull request. In
+   the Site stage names, run `bash scripts/check.sh`, and merge the pull request. After the release's eval
+   run, keep its scores: `python3 scripts/eval-summary.py evals/results/<run>/aggregate-result.json` writes
+   `eval-history/<version>.json` (tracked), and `--diff <old> <new>` on two of those files exits 1 when a
+   case's with-plugin score fell by more than 0.1. In
    `site/docs/changelog.html`, add the version's `<h2>` under `[Unreleased]` and rename that section's
    `unreleased-*` heading ids to `<version>-*` (e.g. `025-added`); the Site stage compares the words, not
    the ids. Set the release in the landing page's "Is it stable?" answer; the Counts stage compares it
