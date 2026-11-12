@@ -18,9 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preload" as="font" type="font/woff2" href="assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
@@ -86,8 +84,41 @@
       <span style="--c: var(--pine)">plan and code into the repository</span>
     </div>
 
+    <h2 id="three-layers-one-plugin">Three layers, one plugin</h2>
+    <p>Agent sessions forget everything between runs, and an agent's defaults are not a careful engineer's habits. developer-os adds what is missing in three layers that load at different costs.</p>
+    <div class="layers">
+      <article class="layer">
+        <span class="k">memory</span>
+        <h3>A vault that remembers</h3>
+        <p>Decisions, lessons and references live in an Obsidian vault of plain Markdown. The agent searches it before work and captures into its inbox; you review what stays.</p>
+        <ul>
+          <li><span>Writes outside the inbox</span><span>only on approval</span></li>
+          <li><span>Deletes</span><span>never, archives</span></li>
+        </ul>
+      </article>
+      <article class="layer">
+        <span class="k">operating model</span>
+        <h3>Habits of a careful engineer</h3>
+        <p>Core rules in every session, workflow skills that stop at defined points, conventions that load only for matching files, and specialist agents for independent passes.</p>
+        <ul>
+          <li><span>Core rules</span><span>at most 8900 bytes</span></li>
+          <li><span>Skill bodies</span><span>load when a skill runs</span></li>
+        </ul>
+      </article>
+      <article class="layer">
+        <span class="k">guard rails</span>
+        <h3>Hooks that ask, never deny</h3>
+        <p>Seven small hooks: two load the rules and, after a compaction, resume or fork, the state card, one shows version and vault-upkeep notices on a new session, one asks before risky commands, one notes a risky construct an edit adds, one tells the agent to stop retrying a call that failed three times, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
+        <ul>
+          <li><span>Network calls</span><span>none</span></li>
+          <li><span>On a parse error</span><span>exit silently</span></li>
+        </ul>
+      </article>
+    </div>
+    <p class="small">The landing page counts the skills, agents, output styles and hooks and names each one: <a href="index.html#inside">What ships in the plugin</a>.</p>
+
     <h2 id="the-daily-loop">The daily loop</h2>
-    <p>Nothing in the loop runs on its own: you start every skill. Hooks only remind and guard. Select a step, or let the loop play. The full text is in <a href="docs/workflow.html#the-daily-loop">How to work: brain + code</a>.</p>
+    <p>A rhythm, not another tool to babysit: the plugin connects moments where you already make decisions. Nothing in the loop runs on its own: you start every skill. Hooks only remind and guard. Select a step, or let the loop play. The full text is in <a href="docs/workflow.html#the-daily-loop">How to work: brain + code</a>.</p>
     <div class="wf-stage wf-loop">
       <svg class="wf-ring" viewBox="0 0 300 300" aria-hidden="true" id="wf-ring"></svg>
       <div>
@@ -98,6 +129,9 @@
         </div>
       </div>
     </div>
+    <p class="small">A one-line notice at the start of a new session reminds you when inbox notes are older than a week or brain-garden has not run for a month.</p>
+    <h3>The vault is plain Markdown you own</h3>
+    <p>Folders by topic (<code>_inbox/</code>, <code>PROJECTS/</code>, <code>DEV/</code>, <code>TOOLS/</code>, <code>INFRA/</code>, <code>QA/</code>, <code>_archive/</code>, <code>_reports/</code>, <code>templates/</code>), one frontmatter shape for every note, and Bases views for the inbox, stale notes and notes by project. brain-setup connects your existing vault by adding only what is missing; in <code>.obsidian/types.json</code> it adds absent keys after your approval and never changes an existing value. <a href="docs/workflow.html#vault-layout">Vault layout</a></p>
 
     <h2 id="the-life-of-a-note">The life of a note</h2>
     <p>The agent writes only to <code>_inbox/</code>. Everything after that happens in brain-review, after your yes, and nothing is deleted. Pick a review decision to see where the note goes and how its frontmatter changes.</p>
@@ -127,6 +161,24 @@
       <p class="wf-cap" id="wf-cap"></p>
     </div>
 
+    <h2 id="it-proposes-you-approve-then-it-acts">It proposes. You approve. Then it acts.</h2>
+    <p>Every skill that changes files, git state or anything outside your machine stops at a defined point and asks. Silence or "looks good" is not approval. The main rows are below; the full list is the <a href="docs/product/functional-spec.html#7-approval-model">approval model</a>.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Action</th><th scope="col">Policy</th><th scope="col">Where it is enforced</th></tr></thead>
+        <tbody>
+          <tr><td>Write in the vault outside <code>_inbox/</code>, move, merge or archive a note</td><td><span class="badge ok">only what you name</span></td><td>brain-review, brain-garden, brain-project-refresh, brain-import-memory</td></tr>
+          <tr><td>Delete a note</td><td><span class="badge never">never</span></td><td>No skill deletes; notes retire to <code>_archive/</code></td></tr>
+          <tr><td>Edit <code>~/.claude/CLAUDE.md</code> or <code>settings.json</code></td><td><span class="badge ok">diff first</span></td><td>brain-setup, brain-import-memory</td></tr>
+          <tr><td>Edit an instruction file, create backlog files or add backlog items</td><td><span class="badge ok">after approval</span></td><td>instruction-review and session-retro show the diff; audit-to-backlog, project-baseline, project-init and spec write the backlog</td></tr>
+          <tr><td>Edit code for review findings, commit, push</td><td><span class="badge ask">asks you</span></td><td>fix-pr asks per edit, per commit and before each push; pr-cycle commits the base merge after a green fast check and fixes after one A/B/C answer, then asks before pushing; implement-backlog commits only green batch work and never pushes</td></tr>
+          <tr><td>Merge a PR, push to a base branch, force-push, rebase a pushed branch</td><td><span class="badge never">never</span></td><td>No skill does this</td></tr>
+          <tr><td>Send email, chat messages or issues</td><td><span class="badge never">never</span></td><td>client-reply drafts; session-retro prints a command for you</td></tr>
+          <tr><td>Install a dependency</td><td><span class="badge ask">asks you</span></td><td>A core rule, and the guard hook</td></tr>
+        </tbody>
+      </table>
+    </div>
+
     <h2 id="hooks-in-one-session">Hooks in one session</h2>
     <p>Small Python scripts with no dependencies and no network. They ask instead of blocking, and stay silent when they fail. Details are in the <a href="docs/reference/hooks.html">hooks reference</a>.</p>
     <div class="wf-stage">
@@ -134,6 +186,29 @@
       <div class="wf-hooks" id="wf-hooks"></div>
       <div class="wf-controls"><button class="wf-btn" id="wf-hooks-play" type="button">Pause</button></div>
     </div>
+    <p>What the timeline leaves out:</p>
+    <ul>
+      <li>The guard asks before installs with a package argument, force pushes, git-hook bypasses, commands that destroy uncommitted work and edits of secret or agent-config files; a project can add its own questions. It never denies; in headless <code>claude -p</code> an ask becomes a denial.</li>
+      <li>The risky constructs are ones such as <code>eval(</code>, <code>shell=True</code> or <code>verify=False</code>; the agent is told once per pattern and file, with the safer form.</li>
+      <li>The failure reminder comes at the third identical failed call within 10 minutes of the last.</li>
+      <li>The state card is at most 1 KB.</li>
+      <li>The Stop hook reads tool-call counts and background-task ids, paths and times, never message content.</li>
+    </ul>
+    <p class="small">The rules load with a plain <code>cat</code>; the other six are Python 3 scripts with the standard library only and no network calls, and they fail open: on an error they exit silently and the normal permission flow applies. <a href="docs/reference/hooks.html">Hooks reference</a>, <a href="docs/workflow.html#privacy">privacy</a>, <a href="docs/security.html">security policy</a>.</p>
+
+    <h2 id="engineering-rules-in-every-session">Engineering rules in every session</h2>
+    <p>An agent commits without the right checks, claims "fixed" without evidence and reviews its own code. The core rules load at session start and are capped at 8900 bytes, so they do not crowd out your own context.</p>
+    <ul class="checklist">
+      <li>Run lint, types and the changed area's tests before each commit; the full suite before a push or PR or when a skill's gate requires it.</li>
+      <li>Never delete or skip tests to make a build green.</li>
+      <li>Write a plan before changing more than 50 lines of code, and keep it current so work survives a context reset.</li>
+      <li>Agent-written code is reviewed by a fresh agent that did not write it.</li>
+      <li>"Works" and "fixed" need evidence: test output, a command result or a screenshot.</li>
+      <li>One git worktree per parallel agent; one orchestrator pushes.</li>
+      <li>Open decisions are asked as A/B/C options, not assumed.</li>
+      <li>Every task ends with a status: Done, Not done, Needs you.</li>
+    </ul>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">Read core.md</a>. Disagree with a rule? Override it in your own <code>~/.claude/CLAUDE.md</code>, which loads alongside it.</p>
 
     <h2 id="from-idea-to-merge">From idea to merge</h2>
     <p>The repository remembers the code. The plan lives in <code>docs/plans/</code> and is deleted once every step is in a commit; a reviewer other than the author checks the work before it merges.</p>
@@ -149,6 +224,42 @@
       </div>
     </div>
     <p><strong>Vault or repository?</strong> A decision, lesson or reference that you or another project will look for again goes to the vault. A plan, an ADR or a fact about the code stays in the repository: a plan in the vault drifts away from the code it describes. See <a href="docs/workflow.html#vault-or-repository">Vault or repository?</a></p>
+
+    <h2 id="is-it-for-you">Is it for you?</h2>
+    <div class="two">
+      <div class="fit-card">
+        <h3>A good fit if</h3>
+        <ul class="checklist">
+          <li>you work with Claude Code across several client or product repositories, alone or in a small team;</li>
+          <li>you want decisions and lessons to outlive a session and a repository;</li>
+          <li>you are happy to review what the agent captures before it counts as knowledge;</li>
+          <li>you want the agent to plan, check and ask the way a careful engineer would.</li>
+        </ul>
+      </div>
+      <div class="fit-card">
+        <h3>Look elsewhere if</h3>
+        <ul class="checklist no">
+          <li>you want memory that writes itself with no review: approval is the point;</li>
+          <li>you need a server, a search index or a shared team knowledge base: there is no runtime;</li>
+          <li>you want agents to merge, push to a base branch or send messages on their own: no skill does;</li>
+          <li>you work mainly in another agent than Claude Code: developer-os supports Claude Code only.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2 id="go-deeper">Go deeper</h2>
+    <p>Everything on this site restates the repository's documents. A check fails when a doc, skill, agent or output-style page falls behind its source; the landing page, this page and the skills index are kept current by hand.</p>
+    <ul class="doc-grid">
+      <li><a href="docs/getting-started.html"><b>Your first 30 minutes</b><span>A guided path from install to your first search, capture, review and code review.</span></a></li>
+      <li><a href="docs/workflow.html"><b>How to work: brain + code</b><span>The daily loop, the vault layout, where knowledge belongs, privacy.</span></a></li>
+      <li><a href="docs/product/overview.html"><b>Product overview</b><span>The problem, the principles, the scope and what is out of scope on purpose.</span></a></li>
+      <li><a href="docs/product/functional-spec.html"><b>Functional specification</b><span>Each skill, agent, hook and output style's contract, and the approval model.</span></a></li>
+      <li><a href="docs/architecture/overview.html"><b>Architecture</b><span>How the plugin loads into a session and where data flows.</span></a></li>
+      <li><a href="docs/reference/hooks.html"><b>Hooks reference</b><span>Inputs, outputs, exit codes and environment variables.</span></a></li>
+      <li><a href="docs/reference/configuration.html"><b>Configuration reference</b><span>Settings, the lines skills read, the paths they write.</span></a></li>
+      <li><a href="docs/product/decisions.html"><b>Decisions</b><span>Why things are the way they are.</span></a></li>
+      <li><a href="docs/development.html"><b>Development guide</b><span>Change the plugin, run the check and the evals.</span></a></li>
+    </ul>
 
     <nav class="doc-foot" aria-label="Related">
       <a href="docs/workflow.html">How to work: brain + code</a>

@@ -80,6 +80,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Evals: the eighteen new cases were measured once per arm on 2026-11-12 (the scores are in `evals/README.md`); brain-review's paging sentence now names the lower-case `recommend:`, a reason on every line, one page only and the literal question, and two Python error-handling graders accept the function name in place of a line number.
 - Core rules: an interrupted lane is resumed only through parallel-lanes' Resume mode; the rule no longer
   forbids what that mode does (D23).
 - parallel-lanes: `lanes.py` beside the skill replaces the `launch.sh` and `resume.sh` listings and the
@@ -97,6 +98,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   message cannot be delivered, an edit goes ahead after a `git status` check before and after and a note to
   the user, and a commit or switch stops and asks (#139).
 - CI pins `actions/checkout` v7.0.1, agnix v0.61.0 and Claude Code 2.1.322.
+- Site: the landing page is four sections (the hero, one session in a terminal, what ships, and the install
+  steps with the questions asked before an install). The three layers, the approval table, the core rules,
+  the daily loop, the fit lists and the links into the docs moved to `workflow.html`, which the landing page
+  links as "How it works".
+- Site: IBM Plex Sans and IBM Plex Mono are served from `site/assets/fonts/` (Latin subset, woff2, with the
+  SIL Open Font License text); no page loads anything from Google Fonts.
+- Site: the two architecture diagrams widen across the on-page contents on a viewport of 1181px or more and
+  fit without sideways scrolling; an "Open full size" button shows each in a full-viewport dialog.
+- Site: `404.html` answers an unknown address with links to the home page, the documentation index and the
+  skills index, and a field that opens the skills index filtered (`skills/index.html?q=<text>`).
 
 ## [0.2.9] - 2026-11-09
 

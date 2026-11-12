@@ -19,9 +19,7 @@
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="dos-source" content="docs/architecture/overview.md@55fd8f83b446">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
 <body>
@@ -107,7 +105,7 @@ site/                             public documentation site, published by .githu
       .arch-svg .head { fill: currentColor; }
       .arch-svg .sm { font-size: 12px; }
     </style>
-<div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-seq-title" viewBox="0 0 1160 730" style="display:block;width:100%;min-width:900px;height:auto">
+<div class="table-wrap wide-fig"><svg class="arch-svg" role="img" aria-labelledby="arch-seq-title" viewBox="0 0 1160 730" style="display:block;width:100%;min-width:900px;height:auto">
 <title id="arch-seq-title">Hook pipeline: Claude Code runs cat core.md, after compact, resume or fork state-card.py, and on startup notices.py on SessionStart, guard.py on PreToolUse for every Bash, Edit, Write and MultiEdit call, patterns.py on PostToolUse after every Edit, Write and MultiEdit call, repeat-failure.py on PostToolUseFailure, and capture-nudge.py on Stop</title>
 <defs><marker id="arch-seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
 <line class="life" x1="80" y1="64" x2="80" y2="720"/>
@@ -173,7 +171,7 @@ pattern and file in a session; it never decides or blocks.</li>
     <p>The six scripts are Python 3, standard library only; without <code>python3</code> they fail open. Exact inputs, outputs and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
     <h2 id="4-skill-composition">4. Skill composition</h2>
     <p>Skills call each other by name and dispatch agents. The dependencies that exist today:</p>
-    <div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-flow-title" viewBox="0 0 1040 940" style="display:block;width:100%;min-width:860px;height:auto">
+    <div class="table-wrap wide-fig"><svg class="arch-svg" role="img" aria-labelledby="arch-flow-title" viewBox="0 0 1040 940" style="display:block;width:100%;min-width:860px;height:auto">
 <title id="arch-flow-title">Skill composition: which skills invoke other skills and agents (solid arrows) and which hand off through the backlog or an offer (dotted arrows)</title>
 <defs><marker id="arch-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
 <line class="edge" x1="210" y1="77" x2="296" y2="107" marker-end="url(#arch-flow-arrow)"/>

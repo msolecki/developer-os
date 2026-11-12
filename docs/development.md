@@ -80,16 +80,32 @@ the claude-code one together with `claude_code` in `.agnix.toml` (the Tool versi
 
 `site/` is the public documentation site, hand-written HTML with no build:
 
-- `index.html`, the landing page;
+- `index.html`, the landing page: the hero, one session in a terminal, what ships (the fact rows the Counts
+  stage reads and every skill and agent name) and the install steps with the questions asked before an install;
 - `docs/`, one page per `docs/*.md` at the same path, plus `readme.html`, `changelog.html`,
   `contributing.html` and `security.html` for the root documents;
 - `skills/`, an index and one page per skill; `agents.html` and `output-styles.html`;
-- `workflow.html`, an animated overview of the daily loop, the life of a note and the hooks, restating
+- `workflow.html`, how it works: the three layers, the animated daily loop, the life of a note, the approval
+  model, the hooks in one session, the core rules, who the plugin fits and the links into the docs, restating
   `docs/workflow.md` and `docs/reference/hooks.md` without a hash (update it by hand when they change);
-- `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons), and
-  `assets/wf.js`, the animated diagrams and the terminal session on the landing page and `workflow.html`;
+- `404.html`, which GitHub Pages serves for an unknown path at any depth: its `<base>` is the site URL, so its
+  relative links work from any address and the Site stage still checks them; it carries `noindex`, and it is
+  in `sitemap.xml` only because the Site stage expects every page there;
+- `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons, the
+  full-size control for wide diagrams, and the skill filter, which also reads `?q=` from the address), and
+  `assets/wf.js`, the terminal session on the landing page and the animated diagrams on `workflow.html`; each
+  diagram's element ids exist on one page only;
+- `assets/fonts/`, IBM Plex Sans (one variable file for the weights 400 to 600) and IBM Plex Mono (400 and 500)
+  as Latin-subset woff2 files, with their license in `OFL.txt`; `site.css` declares them with `font-display: swap`
+  and every page preloads the sans file, so a page loads nothing from another host;
 - `assets/og/`, the 1200×630 link-preview cards (`home`, `docs`, `skills`, `agents`), and the favicons;
 - `sitemap.xml`, one `<loc>` per page.
+
+A diagram wider than the text column sits in a `table-wrap wide-fig` element. From a viewport of 1181px it
+widens to the right, across the on-page contents, which `site.js` hides while a diagram passes them, and fits
+without scrolling; on a narrower viewport it keeps its minimum width and scrolls sideways. `site.js` adds an
+"Open full size" button under it, which shows the diagram in a full-viewport dialog; Escape or its Close button
+closes the dialog and returns focus to the button.
 
 Every page's `<head>` carries, after its `description`, the link-preview block: `canonical` and
 `og:url` (`https://msolecki.github.io/developer-os/<path>`, a directory for an `index.html`), the

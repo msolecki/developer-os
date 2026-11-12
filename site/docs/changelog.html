@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@68f5ab6cb9f7">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="CHANGELOG.md@c20696282dbe">
+<link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
@@ -125,6 +123,7 @@ notes get relative dates.</li>
 </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
+<li>Evals: the eighteen new cases were measured once per arm on 2026-11-12 (the scores are in <code>evals/README.md</code>); brain-review's paging sentence now names the lower-case <code>recommend:</code>, a reason on every line, one page only and the literal question, and two Python error-handling graders accept the function name in place of a line number.</li>
 <li>Core rules: an interrupted lane is resumed only through parallel-lanes' Resume mode; the rule no longer
 forbids what that mode does (D23).</li>
 <li>parallel-lanes: <code>lanes.py</code> beside the skill replaces the <code>launch.sh</code> and <code>resume.sh</code> listings and the
@@ -142,6 +141,16 @@ share a checkout announce a commit, a branch switch or an edit of a shared file 
 message cannot be delivered, an edit goes ahead after a <code>git status</code> check before and after and a note to
 the user, and a commit or switch stops and asks (#139).</li>
 <li>CI pins <code>actions/checkout</code> v7.0.1, agnix v0.61.0 and Claude Code 2.1.322.</li>
+<li>Site: the landing page is four sections (the hero, one session in a terminal, what ships, and the install
+steps with the questions asked before an install). The three layers, the approval table, the core rules,
+the daily loop, the fit lists and the links into the docs moved to <code>workflow.html</code>, which the landing page
+links as "How it works".</li>
+<li>Site: IBM Plex Sans and IBM Plex Mono are served from <code>site/assets/fonts/</code> (Latin subset, woff2, with the
+SIL Open Font License text); no page loads anything from Google Fonts.</li>
+<li>Site: the two architecture diagrams widen across the on-page contents on a viewport of 1181px or more and
+fit without sideways scrolling; an "Open full size" button shows each in a full-viewport dialog.</li>
+<li>Site: <code>404.html</code> answers an unknown address with links to the home page, the documentation index and the
+skills index, and a field that opens the skills index filtered (<code>skills/index.html?q=&lt;text&gt;</code>).</li>
     </ul>
     <h2 id="029---2026-11-09">[0.2.9] - 2026-11-09</h2>
     <h3 id="029-added">Added</h3>
