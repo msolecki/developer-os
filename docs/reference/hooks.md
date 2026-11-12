@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-12
 ---
 
 # Hooks reference
@@ -118,7 +118,7 @@ another user, the hook prints nothing, because without markers every notice woul
 
 **Matcher:** `Bash|Edit|Write|MultiEdit`.
 
-**Input:** the hook JSON on stdin; `tool_input.command` for Bash, `tool_name` and `tool_input.file_path` for Edit, Write and MultiEdit, `old_string`/`new_string` for Edit, `edits` for MultiEdit and `content` for Write (for a test file, also the first MiB of the file on disk); `agent_type`, present when a subagent makes the call.
+**Input:** the hook JSON on stdin; `tool_input.command` for Bash, `tool_name` and `tool_input.file_path` for Edit, Write and MultiEdit, `old_string`/`new_string` for Edit, `edits` for MultiEdit and `content` for Write (for a test file, also the first MiB of the file on disk); `agent_type`, present when a subagent makes the call; `cwd`, the session's working directory when the hook runs (Claude Code's hooks reference lists it among the fields every event receives; it follows a `cd` and is the worktree root after the session enters a worktree), used for the worktree boundary and the project rules. Without `cwd` those two checks are skipped.
 
 **Decision:** prints one line and exits 0:
 
@@ -144,7 +144,14 @@ that hits no category prints only context, which reaches the model and leaves th
 | Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `LEFTHOOK=0`, a word starting `SKIP=` (pre-commit), `core.hooksPath` anywhere in a word (`-c core.hooksPath=…`, `git config core.hooksPath`, `--config-env=`, `GIT_CONFIG_KEY_<n>=`, `GIT_CONFIG_PARAMETERS=`); `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`), with `commit` as git's subcommand (`git log --grep commit -n 5` passes) | `git commit -am` |
 | Destructive command | `rm` (also by full path) with a recursive flag (`-r`, `-R`, `--recursive`, or a cluster containing one) and a force flag (`-f`, `--force`, or a cluster containing it) in one segment; `git reset --hard`; `git clean` with `--force` or a cluster containing `f`, unless `-n`/`--dry-run`; `git checkout` of `.`, `./`, `:/` or `*`, or with `-f`/`--force`; `git switch -f`/`--discard-changes`; `git worktree remove` with `-f`/`--force`; `git rm` with `-f`/`--force` (it removes files with uncommitted changes); `git stash drop`/`clear`; `git restore` of the whole tree, unless it only unstages (`--staged`/`-S` without `--worktree`/`-W`); `find … -delete`; each `rm`, `git` or `find` in command position (as for a read-only agent below, also after `sh -c`). A long option also counts as a prefix of 4 or more characters, as git and GNU `rm` accept it (`git reset --ha`, `git clean --forc`, `rm --rec --for x`) | `rm file`, `git rm a.ts`, `git rm -r --cached x`, a mention in an argument (`grep -rn "rm -rf" .`, `git commit -m "… reset --hard"`), `rm -r dir`, `rm -f file`, `git reset --soft`, `git clean -n`, `git clean -nfd`, `git restore src/a.ts`, `git restore --staged .`, `git checkout main`, `git checkout -b x`, `git checkout -- src/a.ts`, `git worktree remove ../x`, `git stash list`/`pop`, `rm -- -rf` (after `--` a word is a file name). A restore or checkout of one path passes on purpose: undoing one file is routine, and an ask on each would be noise |
 | Infrastructure, data or deploy destroy | `terraform` or `tofu` with `destroy`, `apply` plus `-auto-approve`/`--auto-approve`, or `state rm`; `prisma migrate reset`; `supabase db reset`; `drizzle-kit push --force`; `artisan migrate:fresh`, `migrate:reset` or `db:wipe`; `rails db:drop` or `db:reset`; `dropdb`; `docker compose down` or `docker-compose down` with `-v`/`--volumes` (an option value such as `-f a.yml`, `-p x` or `--project-directory d` before `down` is skipped); `kubectl delete` (also after `-n ns`); `helm uninstall`; `vercel` with `--prod`; each in command position, also after a runner (`npx`, `bunx`, `pnpx`, `pnpm`, `yarn`, `bun`, `php`, `bundle`, `exec`, `dlx`), so `npx prisma migrate reset`, `php artisan db:wipe` and `bundle exec rails db:drop` ask | `terraform plan`, `terraform apply` without `-auto-approve` (it prompts itself), `prisma migrate dev`, `drizzle-kit push`, `php artisan migrate`, `docker compose down`, `kubectl get`, `vercel`, `vercel deploy`, a mention (`echo terraform destroy`, `grep -rn "kubectl delete" docs`) |
-| Protected file (Edit, Write, MultiEdit) | a `file_path` named `.env`, `.envrc`, `.env.*` or `.envrc.*`; anything under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/hooks`, `~/.claude/rules`, `~/.claude/agents`, `~/.claude/skills`, `~/.claude/commands`, `~/.claude/plugins` (installed plugins and their hooks) or `~/.claude/output-styles`; `~/.claude.json` (user-level MCP servers), `~/.claude/settings.json`, `~/.claude/settings.local.json` or `~/.claude/CLAUDE.md`, and the same files and directories under `$CLAUDE_CONFIG_DIR` when it is set, its `.claude.json` included (by the path as written, `~` expanded, by each link it passes through (up to 8) and by the path its symlinks resolve to, so a `.env` link to `secrets.txt` asks, and so does `ok.txt` linked to that `.env`; compared without case); a path with a NUL byte | `.env.example`, `.env.sample`, `.env.template`, `.env.dist`, a project `.claude/settings.json`, `~/.claude/plans/`, any other path; an Edit, Write or MultiEdit without `file_path`. Only Edit, Write and MultiEdit are checked: a Bash write to the same file (`echo X > .env`) or a NotebookEdit is not, so this is not a secrets boundary |
+| Cloud delete | in command position: `aws` with a second operand that starts `delete-` or `terminate-` (`aws ec2 terminate-instances`, `aws s3api delete-bucket`, also after `--profile p --region r`), `aws s3 rm` with `--recursive`, `aws s3 rb`; `gcloud` with the operand `delete` (`gcloud compute instances delete vm-1`); `az` with an operand `delete` or `delete-…` (`az group delete`, `az storage blob delete-batch`) | `aws s3 ls`, `aws ec2 describe-instances`, `aws s3 rm` of one object, an aws command with `--dryrun` or `--dry-run`, `gcloud … list`, `az group list`, a mention (`grep -rn "aws s3 rb" docs`, `echo gcloud projects delete p`). Known misses: `aws s3 sync --delete`, `gsutil rm -r`, an API call (`gh api -X DELETE`, `curl -X DELETE`) |
+| Database drop | `psql`, `mysql`, `mariadb` or `sqlite3` in command position in a command line that holds `DROP` or `TRUNCATE` as a word of its own, in any case, anywhere in the line: in `-c`/`-e`, after a `;` inside the statement, as sqlite3's argument, or piped in (`echo "DROP TABLE t" \| psql app`); `redis-cli` with `FLUSHALL` or `FLUSHDB` | `psql -c "select 1"`, `psql -l`, `mysql -e "show tables"`, `redis-cli get k`, `psql -d dropbox`, `psql -f drop.sql` (a file name is not a statement), `mysqldump --add-drop-table`, a mention (`grep -rn "DROP TABLE" migrations`). Known misses: a statement in a file (`psql -f`, `psql < dump.sql`), `DELETE FROM` without a `WHERE`, another client |
+| Docker cleanup | `docker system prune`, `docker volume rm`/`remove`, `docker volume prune`, in command position, also after `--context x` or `-H host` | `docker ps`, `docker volume ls`, `docker system df`, `docker image prune`, `docker run --rm x prune`, a mention |
+| Publish, merge or remote delete | in command position: `npm`, `pnpm` or `yarn` with `publish` as the first operand (`pnpm -r publish`, `pnpm --filter web publish`, `yarn npm publish`, `yarn workspace web publish`); `cargo publish`; `twine upload`; `gem push`; `gh repo delete`; `gh release create` or `delete`; `gh pr merge` (also after `-R owner/repo`). `git push --mirror` asks as a force push | `npm publish --dry-run`, `cargo publish --dry-run` (any `--dry-run` of npm, pnpm, yarn or cargo), `npm pack`, `npm run publish` (a script), `gh pr view`, `gh pr list --search merge`, `gh release list`/`view`, `twine check`, `gem build`, a mention (`grep -rn "gh pr merge" docs`, `echo npm publish`). Known misses: `python -m twine upload`, a publish inside a script |
+| Downloaded script run unread | `curl` or `wget` in command position piped into `sh`, `bash`, `zsh`, `dash` or `ksh` in command position, directly or through other commands (`curl u \| sh`, `curl u \| sudo bash -s`, `curl u \| tee f \| sh`, `\|&`), or inside `$(…)` or `<(…)` handed to a shell or `eval` (`sh -c "$(curl u)"`, `bash <(curl u)`, `eval "$(curl u)"`) | `curl -o install.sh u`, `curl u \| jq .`, `curl u \|\| sh fallback.sh` (no pipe), `cat install.sh \| sh`, a mention (`grep -rn "curl x \| sh" docs`). Known misses: another interpreter (`curl u \| python3`), a download and a run in separate commands |
+| Worktree boundary (Edit, Write, MultiEdit) | when `cwd` is inside a linked git worktree (the `.git` at its top level is a file): a `file_path` (relative ones start at `cwd`; symlinks resolved) inside another worktree that `git worktree list --porcelain` names for the same repository, the main checkout or a sibling. Worktrees nest (`.claude/worktrees/x` inside the main checkout), so the deepest listed worktree that holds the path decides. In `claude -p` this ask is a denial, which is the wanted result for a lane | a path inside the session's own worktree (a parallel lane's report, `<worktree>/<run directory>/REPORT-<lane>.md`, is one), a path outside every worktree (the vault, a temp directory, another repository); any write from a session whose `cwd` is in the main checkout (an orchestrator writes into its lanes' worktrees); input without `cwd`; a submodule; `git` missing or slower than 3 s. Known misses: a Bash write, and a session that ran `cd` into the main checkout, since `cwd` follows it |
+| Project rule | a rule from the project's `.claude/developer-os-guard.json` ([below](#project-rules--claudedeveloper-os-guardjson)): a Bash command whose words in command position start with a `command` rule, or an Edit, Write or MultiEdit whose `file_path`, relative to the project root, matches a `path` rule | everything else; with a malformed rules file, everything |
+| Protected file (Edit, Write, MultiEdit) | a project's guard rules file, `.claude/developer-os-guard.json` in any directory (its own reason: "This file holds the project's guard rules…"); `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.docker/config.json`, anything under `~/.kube` or `~/.config/gh`; a `file_path` named `.env`, `.envrc`, `.env.*` or `.envrc.*`; anything under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude/hooks`, `~/.claude/rules`, `~/.claude/agents`, `~/.claude/skills`, `~/.claude/commands`, `~/.claude/plugins` (installed plugins and their hooks) or `~/.claude/output-styles`; `~/.claude.json` (user-level MCP servers), `~/.claude/settings.json`, `~/.claude/settings.local.json` or `~/.claude/CLAUDE.md`, and the same files and directories under `$CLAUDE_CONFIG_DIR` when it is set, its `.claude.json` included (by the path as written, `~` expanded, by each link it passes through (up to 8) and by the path its symlinks resolve to, so a `.env` link to `secrets.txt` asks, and so does `ok.txt` linked to that `.env`; compared without case); a path with a NUL byte | `.env.example`, `.env.sample`, `.env.template`, `.env.dist`, a project `.claude/settings.json`, a project's own `.npmrc`, `~/.docker/daemon.json`, `~/.claude/plans/`, any other path; an Edit, Write or MultiEdit without `file_path`. Only Edit, Write and MultiEdit are checked: a Bash write to the same file (`echo X > .env`) or a NotebookEdit is not, so this is not a secrets boundary |
 | Skipped or removed test | a change to a test file (`*.test.*`, `*.spec.*`, under `test/`, `tests/` or `__tests__/`, `test_*.py`, `*_test.go`; not under `node_modules/`, `vendor/` or `.venv/`) that adds skip or focus markers: an Edit whose `new_string` holds more than its `old_string`, a MultiEdit whose `edits` add more than they remove, a Write whose `content` holds more than the file on disk (a new file holds none; for a file over 1 MiB, the first MiB of each, so a marker added past it is a known miss): `it`/`test`/`describe.skip(`, `xit(`, `xdescribe(`, `.only(`, `fit(`, `fdescribe(`, `@pytest.mark.skip`/`xfail`, `pytest.skip(`, `@unittest.skip`, `@Disabled`, `@Ignore`, `t.Skip`; a Bash `rm` or `git rm` of a test file, or `mv` of one to a name ending `.bak`, `.disabled` or `.skip`, in command position | an Edit that keeps or removes a marker, `model.fit(x)`, a marker in a file that is not a test, `mv a.test.ts b.test.ts`, a test file in a temp directory (for `rm` and `mv`), a dependency's test (`rm node_modules/p/test/x.js`), a mention (`grep -rn "rm a.test.ts"`) |
 | Write inside a read-only agent | a Bash call whose `agent_type` is `developer-os:` followed by code-reviewer, database-reviewer, dependency-upgrader, infra-reviewer, performance-engineer or security-auditor, and that runs, in command position (first word of a segment, after one of these in command position: `builtin`, `sudo`, `doas`, `xargs`, `env`, `command`, `nohup`, `time`, `timeout`, `flock` and `chroot` (each past its first operand and a `--`), `nice`, `ionice`, `stdbuf`, `exec`, `eval`, `watch`, `setsid`, `strace`, `unshare`, `busybox`, `parallel`, `-exec`, `-execdir`, also by full path (`/usr/bin/env`), and their options with values, as in `sudo -u x rm`; after a shell keyword in command position (`if`, `then`, `else`, `elif`, `while`, `until`, `do`, `!`) or a shell's or `su`'s `-c` in any cluster (`sh -c`, `bash -lc`, `bash -cl`, `su root -c`); the word after a value option is checked too, since a view drops a `{}` value, as in `xargs -I{} rm`; or after a leading `NAME=value`), `tee`, `rm`, `mv`, `cp`, `install`, `ln`, `truncate`, `touch`, `mkdir`, `dd`, `unlink`, `rmdir`, `chmod`, `chown` or `chgrp` with a target outside scratch, or `patch` with any target (for `cp`/`mv`/`install`/`ln` the last argument, and any `-t`/`--target-directory` asks; for `dd` its `of=`; for `chmod`/`chown`/`chgrp` every operand after the mode or owner; otherwise every non-flag argument), `gh pr checkout`, or `sed`/`perl` with `-i` in a flag cluster or `--in-place` (not in perl's `-M`, `-m` or `-I`, which take a module or path: `perl -MList::Util=sum` passes); a `git fetch` refspec after the remote whose destination is outside `refs/remotes/` (`git fetch origin main:main` moves a local branch; the value of a fetch option such as `--depth 1` or `-j 4` is neither); a word `--write`, `--fix`, `--update-snapshots` or `--updateSnapshot` (also with `=value`), or `-u`/`--update` in a segment with `test`, `jest`, `vitest` or `playwright` (`prettier --write`, `eslint --fix`, `npm test -- -u`); a git (in command position) `add`, `am`, `apply`, `checkout`, `cherry-pick`, `clean`, `clone`, `commit`, `gc`, `init`, `merge`, `mv`, `prune`, `pull`, `push`, `rebase`, `reset`, `restore`, `revert`, `rm`, `sparse-checkout`, `switch`, `update-ref`, `bisect` (not `log`/`visualize`/`view`), `submodule` (not alone or `status`/`summary`), `diff`, `log`, `show`, `format-patch` or `archive` with `--output`, `--output-directory` (or a prefix of either of 4 or more characters, which git accepts: `--out=`) or `-o` outside scratch, `format-patch` without one or `--stdout`, `stash` (not `list`/`show`), `worktree add`/`remove`/`move`/`prune`/`repair`, `remote add`/`remove`/`rm`/`rename`/`set-url`/`set-head`/`set-branches`/`prune`, `notes` (not `list`/`show`), a `branch` or `tag` that creates, deletes or moves, or a `config` write; or a redirect (`>`, `>>`, `>|`, `&>`, `>&file`, `2>`) to a file outside quotes, or inside quotes the shell may run (double quotes after a shell's or `su`'s `-c`, or after `eval`; any quotes in a command with `"$(...)"`, a backtick in double quotes, `<<<` or `| sh`) | scratch: `/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/fd/N`, `/tmp/`, `/private/tmp/`, `/var/folders/`, `$TMPDIR/` (after normalizing; a relative `TMPDIR/` too, since the guard drops `$`), so `mkdir -p /tmp/x` and `cp a.ts /tmp/` pass; a file descriptor (`2>&1`); `=>` and `->`; a `>` inside quotes (`awk '$1>3'`, `grep "<a>" f`, `python3 -c "print(1>2)"`; backslashes are tracked, and unbalanced quotes check every view); `git log -u`, `sort -u`; read-only git (`diff`, `log`, `grep`, `fetch origin main`, `fetch` into `refs/remotes/`, `stash list`, `branch -a`, `tag -l`, `config --get`, `worktree list`, `remote -v`, `notes show`, `submodule status`, `bisect log`, `diff --output=/tmp/x.patch`, `format-patch --stdout`, `apply --check`/`--stat`/`--numstat`/`--summary` without `--apply`); a write word or a git command as an argument (`grep -rn rm .`, `grep -rn "git add" docs`, `grep -rn do rm .`, `wc -c rm`, `grep -rn "xargs -n 1 rm" tests`, `echo watch rm -rf x`); the same command in the main session, another agent, or an agent named without the `developer-os:` prefix |
 
@@ -188,8 +195,74 @@ quotes run by a shell (`bash -c 'echo x > f'`), a formatter that writes by defau
 cover them (both write files); only their prompts limit them to read-only git. In every agent the prompt is the
 first layer: an ask that is approved, by the user or by auto mode, still runs the command (#110).
 
+**Order:** the first hit asks. For Bash: the built-in categories, then the read-only-agent check, then the
+project's command rules, then the commit reminder. For Edit, Write and MultiEdit: protected file, skipped
+test, worktree boundary, project path rule. A project rule therefore never replaces a built-in reason.
+
+**Reasons:** every reason is a fixed string in `guard.py`, and the reasons of the cloud, database, Docker,
+publish and downloaded-script classes end with the safer form (a dry run, a listing first, a named
+resource, a download to a file).
+
+### Project rules — `.claude/developer-os-guard.json`
+
+A repository can add its own questions; it cannot remove or change a built-in one. The file sits at the
+project root: the nearest directory at or above `cwd` that holds `.git`, or `cwd` itself outside git.
+
+```json
+{"ask": [{"command": ["make", "deploy"]}, {"path": "infra/prod/**"}]}
+```
+
+| Entry | Matches |
+|---|---|
+| `{"command": [words]}` | 1 to 8 literal words (letters, digits and `. _ : / @ = + -`, at most 64 characters each). A Bash command asks when its words in command position start with them, in any of the seven views; the first word also matches by base name, so `sudo /usr/bin/make deploy ENV=prod` matches `["make", "deploy"]`. `make build`, `make -n deploy` and a mention (`grep -rn "make deploy" docs`) pass |
+| `{"path": "glob"}` | a glob of at most 128 characters, relative to the project root, with no leading `/` and no `..`. `*` and `?` stay inside one path segment, `**` crosses `/`, and `**/` at the start of a segment also matches no directory (`**/secrets/*.yaml` is `secrets/a.yaml` and `apps/web/secrets/a.yaml`); at most 8 `*`. No character classes and no regex. It applies to the `file_path` of Edit, Write and MultiEdit (symlinks resolved), not to Bash, and compares case as written |
+
+The answer is always `ask` with the fixed reason "This project asks before this command or path.", so no
+text from the repository reaches the model or the prompt. The file is void as a whole — no rule is read from
+it, the built-in behaviour is unchanged — when it is not a regular file (a symlink is not read), is larger
+than 16 KiB, is not JSON, is not an object with exactly the key `ask` (an `allow` key voids it), holds more
+than 50 entries, or holds one entry that is not exactly one valid `command` or `path` (a regex such as
+`dep.*` or `^infra/(prod|stage)/.*$` is not valid). Editing the file with Edit, Write or MultiEdit asks,
+like the other protected paths, so an agent cannot edit a rule away without a question.
+
+### Ask log — `asks.jsonl`
+
+Every ask appends one line to `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/guard/asks.jsonl`:
+
+```json
+{"ts":"2026-11-12T09:41:07Z","reason":"publish","rule":"npm-publish","tool":"Bash"}
+```
+
+`ts` is UTC; `reason` is the category key; `rule` names the table entry that fired; `tool` is `Bash`, `Edit`,
+`Write` or `MultiEdit`. The command, the file path and the project's rule text are never written.
+
+| `reason` | `rule` values |
+|---|---|
+| `install`, `push`, `destroy`, `noverify`, `infra`, `tests`, `readonly`, `protected`, `rules`, `worktree` | the same word as `reason` |
+| `cloud` | `aws-delete`, `aws-s3-rm`, `aws-s3-rb`, `gcloud-delete`, `az-delete` |
+| `data` | `sql-drop`, `redis-flush` |
+| `containers` | `docker-system-prune`, `docker-volume-rm`, `docker-volume-prune` |
+| `publish` | `npm-publish` (npm, pnpm and yarn), `cargo-publish`, `twine-upload`, `gem-push`, `gh-repo-delete`, `gh-release-create`, `gh-release-delete`, `gh-pr-merge` |
+| `remote-code` | `curl-pipe-shell` |
+| `project` | `project-command`, `project-path` |
+
+Asks per rule, most frequent first:
+
+```sh
+jq -r .rule "${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-$(id -u)}/guard/asks.jsonl" | sort | uniq -c | sort -rn
+```
+
+`CLAUDE_PLUGIN_DATA` is set only inside Claude Code; in your own shell use the plugin's data directory
+(`~/.claude/plugins/data/<plugin id>/`). The directory is created with mode 700 and the file with mode
+600; nothing is written when the directory or its parent is a symlink or owned by another user, or when
+the file is a symlink. At 1 MiB the file is renamed to `asks.jsonl.1`, replacing the previous one, and a new
+file starts, so the log holds at most 2 MiB. The log records that the guard asked, not what the user
+answered. `DEVELOPER_OS_GUARD_LOG=off` disables it. The ask is printed before the log is touched, and
+every log error is ignored: the log never changes a decision.
+
 **Failure:** any exception exits 0; input without `{…}` or without a `command` string produces no
-output.
+output. A check that reads the disk or runs git (worktree boundary, project rules, the ask log) fails on
+its own: its error means no hit from that check, and the others still run.
 
 **Not a security boundary.** The guard matches command text, so it decides only what needs your
 confirmation: quoting, an alias, a variable built at run time or a script can get past it. The hard
@@ -275,10 +348,11 @@ script reads the file's modification time with `stat` and runs no other program 
 |---|---|---|
 | `DEVELOPER_OS_CAPTURE_NUDGE` | capture-nudge | `off` disables the nudge |
 | `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | capture-nudge | Tool-call threshold; non-numeric falls back to 30 |
+| `DEVELOPER_OS_GUARD_LOG` | guard | `off` disables the ask log; the guard asks as before |
 | `DEVELOPER_OS_NOTICES` | notices | `off` disables the version and upkeep notices |
 | `DEVELOPER_OS_REPEAT_FAILURE` | repeat-failure | `off` disables the repeated-failure reminder |
 | `CLAUDE_CODE_ENTRYPOINT` | capture-nudge, notices | Set by Claude Code but not in its documentation, so it may change without notice; `sdk-*` skips the hook |
-| `CLAUDE_PLUGIN_DATA` | capture-nudge, notices, repeat-failure | Set by Claude Code; marker directory root, kept across plugin updates |
+| `CLAUDE_PLUGIN_DATA` | capture-nudge, guard, notices, repeat-failure | Set by Claude Code; root of the marker directories and the guard's ask log, kept across plugin updates |
 | `CLAUDE_CONFIG_DIR` | notices, guard | Where the user-level config lives (default `~/.claude`): notices reads the `brain_vault` option from its `settings.json` and the `Brain vault:` line from its `CLAUDE.md`; guard protects the same files under it |
 | `CLAUDE_PLUGIN_ROOT` | hooks.json, notices | Set by Claude Code; plugin install path |
-| `TMPDIR` | capture-nudge, notices, repeat-failure | Marker directory root when `CLAUDE_PLUGIN_DATA` is unset (default `/tmp`) |
+| `TMPDIR` | capture-nudge, guard, notices, repeat-failure | Root of the marker directories and the ask log when `CLAUDE_PLUGIN_DATA` is unset (default `/tmp`) |

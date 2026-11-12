@@ -1,13 +1,14 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-12
 ---
 
 # Configuration reference
 
-The plugin has no configuration file of its own. It is configured through one optional plugin option
-and through lines and keys in files the user already has, which the skills read. This page lists every one of them.
+The plugin has no configuration file of its own at user level. It is configured through one optional plugin option
+and through lines and keys in files the user already has, which the skills read; a project may add one
+optional file of guard rules. This page lists every one of them.
 
 ## User level
 
@@ -21,6 +22,7 @@ and through lines and keys in files the user already has, which the skills read.
 | `"outputStyle": "developer-os:<name>"` | Claude Code settings | Claude Code; a bare name silently falls back to the default style | The user |
 | Rule overrides | `~/.claude/CLAUDE.md` | The model, alongside the core rules | The user |
 | `DEVELOPER_OS_CAPTURE_NUDGE`, `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | Shell environment | The `Stop` hook ([hooks.md](hooks.md#environment-variables)) | The user |
+| `DEVELOPER_OS_GUARD_LOG` | Shell environment | The `PreToolUse` guard; `off` disables the ask log, a local record of which rule asked, without the command ([hooks.md](hooks.md#ask-log--asksjsonl)) | The user |
 | `DEVELOPER_OS_NOTICES` | Shell environment | The `SessionStart` notices hook; `off` disables the version and upkeep notices ([hooks.md](hooks.md#sessionstart-on-startup--noticespy)) | The user |
 | `DEVELOPER_OS_REPEAT_FAILURE` | Shell environment | The `PostToolUseFailure` hook; `off` disables the repeated-failure reminder ([hooks.md](hooks.md#environment-variables)) | The user |
 
@@ -40,6 +42,7 @@ stay symlinks.
 | Docs root | `AGENTS.md` | docs-sync | `docs/` |
 | Task state | `docs/plans/.devos-state.md` (fixed, even when the planning location is overridden) | The `SessionStart` hook after compaction, resume and fork | Written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes; none |
 | `TODO.md` item format | The backlog todo file | audit-to-backlog, project-baseline, implement-backlog, plan-status, spec (`FEAT-` items), project-init (`CONV-` items), session-retro (open items of a finished plan) | `templates/project/TODO.md` shows it |
+| Guard rules: `{"ask": [{"command": ["make", "deploy"]}, {"path": "infra/prod/**"}]}` | `.claude/developer-os-guard.json` at the repository root; at most 50 entries and 16 KiB, literal command words and path globs only | The `PreToolUse` guard, which asks with one fixed reason before a matching Bash command or a matching Edit, Write or MultiEdit path. The file can only add questions; a malformed one adds none, and editing it asks ([hooks.md](hooks.md#project-rules--claudedeveloper-os-guardjson)) | No extra rule: the built-in categories alone |
 | `DESIGN.md` | Repository root, for projects with a UI | Agents doing UI work (the template `AGENTS.md` line), project-baseline, docs-sync, code-review (a line the diff makes false), nextjs-conventions (the token source of truth) | project-baseline proposes it as a backlog item |
 
 ## Vault
