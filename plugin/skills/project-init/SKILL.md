@@ -25,7 +25,7 @@ An orchestrator: it runs other skills up to their reports, adds a conventions au
 | `developer-os:typescript-conventions` | `tsconfig.json` or `*.ts` files in app code | not applicable |
 | `developer-os:nextjs-conventions` | `next.config.*` or a `next` dependency | not applicable |
 | `developer-os:testing-conventions` | test files exist | not applicable; baseline covers the missing tests |
-| `developer-os:error-handling-conventions` | TypeScript server code, API routes or handlers | not applicable |
+| `developer-os:error-handling-conventions` | server or library code in any language: API routes or handlers, services, jobs, a CLI | not applicable |
 | `developer-os:monitoring-conventions` | infrastructure code, CI workflows, alert definitions or health endpoints | not applicable |
 | `developer-os:defensive-coding-conventions` | code that handles external input, authentication, money, concurrency, persistence or error paths: webhooks, event handlers, migrations, billing inputs, hook scripts | not applicable |
 | `developer-os:comments-conventions` | never audited | it governs only comments an agent adds and leaves existing ones alone |
