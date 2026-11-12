@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-project-refresh/SKILL.md@293e30d9c93a">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="plugin/skills/brain-project-refresh/SKILL.md@9909017019a9">
+<link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
@@ -70,7 +68,7 @@
       <li><strong>Finds the vault</strong> from a path you or the calling skill gave, or the plugin option <code>brain_vault</code>, or the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code>, as the other brain skills do.</li>
       <li><strong>Finds the hub:</strong> the <code>type: project</code> note with the slug from <code>_Context.md</code>, accepted only when it matches <code>^[a-z0-9-]+$</code>, never a slug guessed from the directory name. A hub still in <code>_inbox/</code> is refreshed in place, and you promote it with brain-review. Without a hub but with other notes of the slug, it offers a draft in <code>_inbox/</code> that links them, under a name it first checks is free across the vault in any letter case; with no note of the slug at all it stops. With several hubs it asks which one.</li>
       <li><strong>Collects evidence</strong> from the README, the docs map, <code>CURRENT-STATE.md</code>, the decision records and the last 30 commits, and from the vault's notes with the same slug.</li>
-      <li><strong>Compares:</strong> claims in the hub the repository contradicts, repository paths that no longer exist, project notes the hub does not link (an inbox note goes in with a <code>(waiting for review)</code> marker; once the note is promoted, merged or rejected, brain-review proposes dropping the marker, retargeting the link or removing the line), links to notes that do not exist, and a summary or status that no longer fits. A drifted code fact usually becomes a link to the repository doc, because the hub keeps only what outlives the repository.</li>
+      <li><strong>Compares:</strong> claims in the hub the repository contradicts, repository paths that no longer exist, project notes the hub does not link (an inbox note goes in with a <code>(waiting for review)</code> marker; once the note is promoted, merged or rejected, brain-review proposes dropping the marker, retargeting the link or removing the line), links to notes that do not exist, and a summary or status that no longer fits. A drifted code fact usually becomes a link to the repository doc, because the hub keeps only what outlives the repository. Notes of the slug whose <code>refs:</code> file changed since their <code>verified</code> date are listed under Verify; the skill does not edit them.</li>
       <li><strong>Shows the diff and asks,</strong> then applies only the numbers you name and sets <code>updated</code> to today.</li>
     </ol>
 
@@ -78,7 +76,7 @@
     <div class="terminal">
       <div class="terminal-bar"><i></i><i></i><i></i><span>brain-project-refresh</span></div>
 <pre><code>Project refresh — PROJECTS/my-app.md against my-app at 3f9c2d1
-Drifted: 1   Moved: 1   Missing links: 3   Dead links: 0   Summary: 1   Unchecked: 2
+Drifted: 1   Moved: 1   Missing links: 3   Dead links: 0   Summary: 1   Changed refs: 1   Unchecked: 2
 
 1. [drifted] line 14 says "deployed to Heroku"; docs/runbooks/deploy.md:3 deploys to Fly.io → link the runbook
 2. [moved] line 9 names docs/adr/; decisions now live in docs/decisions/

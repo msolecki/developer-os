@@ -7,7 +7,7 @@ A Claude Code plugin for working with an AI coding agent and an Obsidian vault a
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
-agents, output styles and rules) plus five small Python 3 hook scripts (standard library only), with no server, no database and
+agents, output styles and rules) plus six small Python 3 hook scripts (standard library only), with no server, no database and
 nothing to install beyond `python3`.
 
 ## Install (Claude Code)
@@ -59,12 +59,15 @@ by hand:
 cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/
 ```
 
+Without the copy, project-init and docs-sync propose the missing files one by one. The setup-check skill
+reports what the machine itself lacks (`python3`, `rg`, `jq`, `gh`, the vault path).
+
 They include a `docs/` skeleton; run the docs-sync skill to fill and check it. The
 full setup, with Obsidian settings and a first test, is in [docs/workflow.md](docs/workflow.md#setup-in-5-minutes).
 
 ## What the hooks do
 
-The plugin has 6 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
+The plugin has 7 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
 session context. After a compaction, a resume or a fork inside a git repository, a second `SessionStart` hook,
 [`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
@@ -101,8 +104,8 @@ also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `
 `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form, and a command
 that destroys uncommitted or untracked work: `rm` with both a recursive and a force flag (`rm -rf`),
 `git reset --hard`, `git clean -f`, `git checkout`/`git restore` of `.`, `:/` or `*`, `git checkout -f`,
-`git switch -f`/`--discard-changes`, `git worktree remove --force`, `git rm -f`, `git stash drop`/`clear` or `find … -delete` (`git restore --staged .` and `git clean -n` pass), and an infrastructure, data or deploy destroy (`terraform destroy`, `prisma migrate reset`, `kubectl delete`, `vercel --prod` and the like). An Edit or Write asks when its file is a `.env`, `.envrc` or `.env.*` (not
-`.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, or `~/.claude/` `hooks`,
+`git switch -f`/`--discard-changes`, `git worktree remove --force`, `git rm -f`, `git stash drop`/`clear` or `find … -delete` (`git restore --staged .` and `git clean -n` pass), and an infrastructure, data or deploy destroy (`terraform destroy`, `prisma migrate reset`, `kubectl delete`, `vercel --prod` and the like), a cloud delete (`aws s3 rm --recursive`, `gcloud … delete`), a database drop (`psql -c "DROP …"`, `redis-cli FLUSHALL`), `docker system prune`, a publish or merge command (`npm publish`, `gh pr merge`, `gh release create`, `gh repo delete`) and a downloaded script piped into a shell (`curl … | sh`). A session in a linked git worktree is asked before an Edit or Write into the main checkout or a sibling worktree. A project can add its own questions in `.claude/developer-os-guard.json` (literal command prefixes and path globs; it can never remove one), and every ask is logged locally with its reason and rule, never the command (`DEVELOPER_OS_GUARD_LOG=off` disables the log). An Edit or Write asks when its file is a `.env`, `.envrc` or `.env.*` (not
+`.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube` or `~/.config/gh`, is `~/.npmrc`, `~/.pypirc`, `~/.git-credentials` or `~/.docker/config.json`, is under `~/.claude/` `hooks`,
 `rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`, or is `~/.claude.json`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` or `settings.local.json` (also under `$CLAUDE_CONFIG_DIR`). An Edit that adds a skip or focus marker (`it.skip(`, `.only(`, `@pytest.mark.skip`) to a test file asks, and so does `rm`, `git rm` or `mv … .bak` of one. Inside the six read-only agents (the five reviewers and dependency-upgrader), a Bash
 call that writes outside the temp directories (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, `prettier --write`, `eslint --fix`, `gh pr checkout`, a git command that changes the
 tree, history or remotes) asks too. A `git commit` that asks for nothing gets a one-line reminder, as context for
@@ -117,7 +120,12 @@ failed tool calls per session. When the same call (the same tool and input; for 
 fails for the third time, each within 10 minutes of the last, it tells the agent, as context, to stop retrying it unchanged if nothing changed between the runs, and to diagnose the
 cause. It never blocks; set `DEVELOPER_OS_REPEAT_FAILURE=off` to turn it off.
 
-The five scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
+A `PostToolUse` hook on Edit, Write and MultiEdit ([`plugin/hooks/patterns.py`](plugin/hooks/patterns.py)) reads the text an edit adds.
+When it adds a known risky construct (`eval(`, `pickle.load`, `verify=False`, `shell=True`, `.innerHTML =`, an
+untrusted `github.event` value in a workflow `run:` line and the like), it tells the agent once per pattern and file,
+as context, with the safer form. It never blocks; set `DEVELOPER_OS_PATTERNS=off` to turn it off.
+
+The six scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;
 without it the core rules still load and the other hooks do not run.
 
@@ -133,7 +141,8 @@ without it the core rules still load and the other hooks do not run.
 - **Session skills:** session-retro (end-of-session wrap-up: state check, cleanup proposals,
   Done / Not done / Needs you, plan update or close, approval-gated capture) and skill-usage
   (read-only report of how often each developer-os skill fired locally, with
-  keep/merge/rewrite-description/remove suggestions).
+  keep/merge/rewrite-description/remove suggestions), and setup-check (read-only report of what the
+  machine lacks: `python3`, `rg`, `jq`, `gh`, `git`, the vault path).
 - **Conventions skills** (load only when relevant): comments-conventions,
   error-handling-conventions, defensive-coding-conventions, monitoring-conventions,
   nextjs-conventions, testing-conventions, typescript-conventions.
@@ -143,8 +152,8 @@ without it the core rules still load and the other hooks do not run.
   performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
-- **Six hooks on four events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
-  once per long session, `PreToolUse` asks before installs, force pushes, hook bypasses, destructive commands and edits of secret or agent-config files, and `PostToolUseFailure`
+- **Seven hooks on five events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
+  once per long session, `PreToolUse` asks before installs, force pushes, hook bypasses, destructive commands and edits of secret or agent-config files, `PostToolUse` notes a risky construct an edit adds, and `PostToolUseFailure`
   tells the agent to stop retrying a call that failed three times (see above).
 - **Evals:** behavior checks for the brain skills, the review, backlog, PR, lanes and session skills, the
   agents, prompt-injection resistance and the skill triggers in [`evals/`](evals/README.md), run by hand with

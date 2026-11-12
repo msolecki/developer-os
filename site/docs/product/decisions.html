@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@15dd3c95e005">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="docs/product/decisions.md@fd3290f8a353">
+<link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
 <body>
@@ -46,7 +44,7 @@
 
   <main id="main" class="prose">
 <h1 id="decisions">Decisions</h1>
-<p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/product/decisions.md">docs/product/decisions.md</a></span><span>Verified 2026-11-08</span></p>
+<p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/product/decisions.md">docs/product/decisions.md</a></span><span>Verified 2026-11-12</span></p>
 <p>One register for the plugin era. Each entry: date, decision, why, and the commit that put it in the code. Alternatives are listed only where the history records them. Never renumber; when a decision is replaced, mark it superseded and add a new entry. Decisions of the CLI era are not carried over; their history is at the git tag <code>archive/cli-v0</code>.</p>
 <h2 id="d1-plugin-only">D1. Plugin only</h2>
 <ul>
@@ -65,6 +63,10 @@
 <li><strong>Amended 2026-10-24:</strong> a fourth script, <code>notices.py</code>, on <code>SessionStart</code> <code>startup</code> (D22).</li>
 <li><strong>Amended 2026-11-08:</strong> a fifth script, repeat-failure.py (D26).</li>
 <li><strong>Amended 2026-11-08:</strong> a stdlib script may also sit beside a skill, run by that skill and checked by the Imports stage: <code>plugin/skills/session-retro/harvest.py</code>, which reads past session transcripts for session-retro's window mode (FLOW-55).</li>
+<li><strong>Amended 2026-11-12:</strong> a sixth hook script, <code>patterns.py</code> (D6), and two more scripts beside a skill:
+<code>parallel-lanes/lanes.py</code> (D23) and <code>setup-check/check.py</code>. All are standard library only, inside the
+Imports allowlist. <code>check.py</code> opens no connection itself but runs <code>gh auth status</code>, which asks GitHub
+whether the login works. <code>scripts/eval-summary.py</code> is repository tooling outside the plugin.</li>
 </ul>
 <h2 id="d3-the-vault-is-read-and-written-with-the-agents-own-file-tools">D3. The vault is read and written with the agent's own file tools</h2>
 <ul>
@@ -77,6 +79,11 @@
 <li><strong>Date:</strong> 2026-10-14 · <strong>Commits:</strong> <code>369028cc</code>, <code>0c4ab694</code>, <code>9242bf87</code></li>
 <li><strong>Decision:</strong> agent-created notes go to <code>_inbox/</code> with <code>status: inbox</code>. Any other edit, move, merge or archive happens only for notes the user names. Retired notes move to <code>_archive/</code> with <code>status: archived</code>; nothing is deleted.</li>
 <li><strong>Why:</strong> an unreviewed agent note is a draft, not a fact; approval is the one step that keeps the vault trustworthy. Archiving keeps mistakes recoverable.</li>
+<li><strong>Amended 2026-11-12:</strong> an inbox note expires 30 days after <code>created</code> (<code>expires:</code>, or <code>created</code> + 30
+days without the key); brain-search stops answering from it and brain-review shows the expired notes
+as one group. "archive the expired ones" names that shown group and nothing else; an expired note
+still moves only on the user's answer, and <code>active</code> notes never expire. The inbox had grown to 82
+notes with no review.</li>
 </ul>
 <h2 id="d5-find-the-vault-through-a-brain-vault-line">D5. Find the vault through a <code>Brain vault:</code> line</h2>
 <ul>
@@ -108,6 +115,29 @@
 <li><strong>Amended 2026-11-08:</strong> from the PR #133 review: a quoted-delimiter heredoc (<code>&lt;&lt;'EOF'</code>, <code>&lt;&lt;"EOF"</code>) that is the whole body of a commit message's <code>$(…)</code> is not scanned (SEC-16); <code>python -m pip install</code> asks (SEC-17); an option value (<code>-f</code>, <code>-p</code>, <code>--project-directory</code>) no longer hides <code>docker compose down -v</code> (SEC-18); in the read-only agents an unambiguous prefix of <code>--output</code>/<code>--output-directory</code> (<code>--out=</code>) asks (SEC-19); vendored <code>node_modules/</code>, <code>vendor/</code> and <code>.venv/</code> paths are not test paths (FLOW-57); the matcher adds MultiEdit, and a Write that adds a skip marker the file on disk lacks asks (SEC-20).</li>
 <li><strong>Amended 2026-11-08:</strong> a test category: an Edit of a test file (<code>*.test.*</code>, <code>*.spec.*</code>, <code>tests/</code>, <code>test_*.py</code>, <code>*_test.go</code>) whose <code>new_string</code> holds more skip or focus markers than its <code>old_string</code> (<code>it.skip(</code>, <code>.only(</code>, <code>xit(</code>, <code>@pytest.mark.skip</code>, <code>t.Skip(</code> and the like), and <code>rm</code>/<code>git rm</code> of a test file or <code>mv</code> of one to <code>.bak</code>, <code>.disabled</code> or <code>.skip</code>; core.md's "do not delete or skip tests" was text only (SEC-09).</li>
 <li><strong>Amended 2026-11-08:</strong> an infra category, a closed list in command position (also after <code>npx</code>, <code>pnpm exec</code>, <code>php</code>, <code>bundle exec</code> and similar runners): <code>terraform</code>/<code>tofu destroy</code>, <code>apply -auto-approve</code>, <code>state rm</code>, <code>prisma migrate reset</code>, <code>supabase db reset</code>, <code>drizzle-kit push --force</code>, <code>artisan migrate:fresh</code>/<code>migrate:reset</code>/<code>db:wipe</code>, <code>rails db:drop</code>/<code>db:reset</code>, <code>dropdb</code>, <code>docker compose down -v</code>, <code>kubectl delete</code>, <code>helm uninstall</code>, <code>vercel --prod</code>. Users without their own deny list had no check on these in auto mode; users of destructive_command_guard already have one (SEC-08).</li>
+<li><strong>Amended 2026-11-12:</strong> the guard also asks before cloud deletes, database drops, Docker volume and
+system cleanup, publish, merge and remote-delete commands, and a downloaded script piped into a shell
+(closed tables in command position; each reason ends with the safer form); before an Edit, Write or
+MultiEdit from a linked worktree into another worktree of the same repository; and for rules a
+project adds in <code>.claude/developer-os-guard.json</code>, which can only add an <code>ask</code> with a fixed plugin
+reason (D5, D16: no project text reaches the model, and a malformed file adds nothing). Every ask is
+appended to a local log (<code>guard/asks.jsonl</code> in the plugin data directory: time, reason, rule, tool,
+never the command), so the noise of each rule can be measured; the ask is printed first and a log
+failure changes nothing. Still <code>ask</code> only, and every new check fails open.</li>
+<li><strong>Amended 2026-11-12:</strong> a Bash command the guard cannot scan inside the hook timeout asks (<code>slow</code>)
+instead of failing open: the scan is quadratic in command-position words, a hook that times out lets
+Claude Code run the command unchecked, and a command padded to that size is the one case built to
+get past the guard. The bound is the command's size (command-position words times words in one view
+above 1,500,000, computed in linear time before the scan), with a 4-second backstop between views.</li>
+<li><strong>Amended 2026-11-12:</strong> the same classes take the forms the first tables missed: <code>gsutil rb</code> and
+<code>gsutil rm</code> with a recursive flag, <code>gcloud storage rm -r</code>, <code>aws s3 sync --delete</code>, an aws operand that
+starts <code>batch-delete-</code>, <code>npm unpublish</code> and <code>deprecate</code>, <code>python -m twine upload</code>, <code>gh api</code> with the
+DELETE method, a download piped into an interpreter that reads its program from the pipe
+(<code>curl u | python3</code>; <code>python3 -m json.tool</code> reads data and passes), a bracket after the pipe
+(<code>curl u | (sh)</code>) and <code>. &lt;(curl u)</code>. <code>--dry-run=false</code> no longer counts as a dry run (PR #141 review).</li>
+<li><strong>Amended 2026-11-12:</strong> a seventh hook, <code>patterns.py</code> on <code>PostToolUse</code> for Edit, Write and MultiEdit,
+adds <code>additionalContext</code> (no decision, no block) when an edit adds one of a closed table of risky
+constructs; once per pattern and file in a session, fail open, <code>DEVELOPER_OS_PATTERNS=off</code>.</li>
 </ul>
 <h2 id="d7-one-wrap-up-nudge-per-long-session">D7. One wrap-up nudge per long session</h2>
 <ul>
@@ -133,6 +163,8 @@
 <li><strong>Date:</strong> 2026-10-15 · <strong>Commit:</strong> <code>1c324a89</code></li>
 <li><strong>Decision:</strong> every skill that can write, send or change git state ends with <code>## Stop point</code> and <code>## Never</code>. Read-only skills (<code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>) and <code>*-conventions</code> are exempt. <code>scripts/check.sh</code> enforces it.</li>
 <li><strong>Why:</strong> the stop point and the forbidden side effects are the contract a user relies on; a check keeps new skills from omitting them.</li>
+<li><strong>Amended 2026-11-12:</strong> <code>setup-check</code> joins the read-only skills in <code>scripts/check.sh</code>; it reads the
+machine's tools and user-level config and writes nothing. It still carries both sections.</li>
 </ul>
 <h2 id="d10-fixed-per-session-budget">D10. Fixed per-session budget</h2>
 <ul>
@@ -202,6 +234,8 @@
 <li><strong>Decision:</strong> CI downloads the <code>agent-sh/agnix</code> v0.57.0 release binary, checks it against a SHA-256 in the workflow, and runs it strict, with suppressions in <code>.agnix.toml</code>, each with its reason. <code>scripts/check.sh</code> adds <code>plugin/SURFACE.txt</code> and digit-count checks, which need no new tool.</li>
 <li><strong>Why:</strong> a local agnix would need an install on every contributor's machine. The hash lives in the workflow because the action's own checksum file comes from the same release and proves nothing if the release is replaced.</li>
 <li><strong>Amended 2026-11-08:</strong> <code>scripts/check.sh</code> runs agnix when it is on <code>PATH</code> and fails in CI without it, so a contributor who has it sees CI's result before pushing; CI only sets up the pinned binary. A local install stays optional: without it the stage prints <code>SKIP agnix</code>.</li>
+<li><strong>Amended 2026-11-12:</strong> CI pins agnix v0.61.0 with its new SHA-256, <code>actions/checkout</code> v7.0.1 and Claude
+Code 2.1.322 (<code>claude_code</code> in <code>.agnix.toml</code> moves with it, the Tool versions stage).</li>
 </ul>
 <h2 id="d19-a-codex-installer-that-copies-not-symlinks-superseded-by-d21">D19. A Codex installer that copies, not symlinks (superseded by D21)</h2>
 <ul>
@@ -236,6 +270,24 @@
 <li><strong>Decision:</strong> the parallel-lanes skill runs each lane as a separate <code>claude -p</code> process in its own git worktree and branch, started detached (<code>setsid</code> through <code>python3</code>, which the hooks already require) so it outlives the turn, with <code>--permission-mode acceptEdits</code> and an explicit <code>--allowedTools</code> list. It launches only after the user approves the shown <code>launch.sh</code>; lanes commit in their worktree and never push, merge or install; the launching session integrates finished lanes into a local branch and reviews them through code-review. Each lane gets a recorded <code>--session-id</code> and a <code>--max-turns</code> cap; a lane cut off without a final report is continued with <code>claude -p --resume &lt;id&gt;</code> (the Resume mode), again only after the user's yes.</li>
 <li><strong>Why:</strong> subagents run inside the session that dispatched them and end with it, while long lanes need to keep running and be watched from a later turn. A permission bypass would let an unattended process run any command, against the approval model; a fixed tool list makes a lane that needs more stop as <code>BLOCKED</code> instead.</li>
 <li><strong>Alternatives:</strong> dispatching lanes as subagents (implement-backlog's model, kept for backlog items); <code>--dangerously-skip-permissions</code> (rejected for the reason above); <code>nohup</code> alone (the lane stays in the harness's process group, which kills background jobs after about 29 minutes).</li>
+<li><strong>Amended 2026-11-12:</strong> the user approves the shown <code>lanes.json</code> and one <code>lanes.py launch</code> command
+instead of a <code>launch.sh</code>; <code>lanes.py</code> (stdlib, beside the skill, tested by <code>tests/lanes.test.sh</code>)
+launches, reports and resumes the lanes. Every lane runs under a <code>--max-budget-usd</code> the user names
+per lane, with no default, and <code>--output-format json</code>; a lane cut off by its budget ends without
+<code>DONE</code> and is resumed like one cut off by <code>--max-turns</code>, with the same <code>--max-budget-usd</code> passed
+again. Integrate previews conflicts between <code>DONE</code> lanes before the first merge, moving no ref and
+changing no working-tree file. The guard's worktree rule (D6) does
+not block a lane: its report path is inside its own worktree.</li>
+<li><strong>Amended 2026-11-12:</strong> a lane's tool list always denies edits of <code>.git</code> and anything under it, and
+<code>lanes.py</code> runs git with <code>core.fsmonitor</code> and hooks off, with a timeout: a lane that rewrote its
+worktree's <code>.git</code> file could point git at a config of its own, whose commands would then run in the
+lane's <code>git status</code> and in the orchestrator's. Status marks such a lane without running git in it and
+Resume refuses it. A <code>pids.txt</code> line counts only with a lane name, a numeric PID and a UUID session id,
+since a lane can write that file through an allowed git output path (<code>git diff --output=&lt;file&gt;</code>, a
+risk the launch question names) and its words would otherwise reach <code>claude</code> as options. <code>lanes.json</code>
+is refused when a budget or turn cap is not a finite number, a <code>fast_check</code> holds a bracket or a
+comma, or an <code>allow</code> entry is not one tool rule: each would grant more than the approved file shows.</li>
+
 </ul>
 <h2 id="d24-the-vault-is-the-one-long-term-store-auto-memory-is-off-by-recommendation">D24. The vault is the one long-term store; auto memory is off by recommendation</h2>
 <ul>
@@ -315,6 +367,25 @@
 <tr><td>2026-11-08</td><td>implement-backlog runs parallel delegates with a git-ignored backlog (uncommitted <code>Owner</code> lines, full item text in each brief) and has an optional PR ending, only on request, that pushes the batch branch and opens a PR it never merges; implement-backlog and parallel-lanes run the project's regeneration command for derived files after each lane merge and every <code>Check</code> from the worktree root (#134; D17 amended)</td><td><code>implement-backlog</code>, <code>parallel-lanes</code>, <code>audit-to-backlog</code></td><td>A git-ignored backlog forced sequential work, a requested PR had no steps, site hashes conflicted on every lane merge, and a <code>Check</code> run from another checkout tested the wrong tree</td></tr>
 <tr><td>2026-11-08</td><td>session-retro with a window (<code>14d</code>, a date, <code>all</code>) runs <code>harvest.py</code> on past transcripts and proposes at most five lessons from its candidates, routed to the vault, project docs or a hook/check proposal, never to <code>CLAUDE.md</code>/<code>AGENTS.md</code> without approval of that file by name; transcript text is data</td><td><code>session-retro</code></td><td>Corrections spread across sessions were never collected, so the same correction recurred (FLOW-55)</td></tr>
 </tbody>
+<tr><td>2026-11-12</td><td>An interrupted lane is resumed only through parallel-lanes' Resume mode, otherwise replaced by a fresh, smaller one; reverses "never resume an interrupted lane" from #113 (<code>ddc711b6</code>)</td><td><code>plugin/rules/core.md</code></td><td>The rule contradicted D23, which defines Resume for a lane cut off without a final report; the user chose Resume</td></tr>
+<tr><td>2026-11-12</td><td>Look up the vault before deciding: run brain-search on the topic when a vault is configured, skip silently without one; in implement-backlog a note that contradicts an item's <code>Problem</code> fails triage point 4</td><td><code>spec</code>, <code>bug-triage</code>, <code>audit-to-backlog</code>, <code>implement-backlog</code></td><td>Earlier decisions and rejected approaches were not read where new decisions are made</td></tr>
+<tr><td>2026-11-12</td><td>Rules stated for any language; per-language examples moved to <code>references/&lt;lang&gt;.md</code>; error-handling-conventions applies to server and library code in any language</td><td><code>error-handling-conventions</code>, <code>testing-conventions</code>, <code>project-init</code></td><td>The rules named TypeScript-only APIs and did not apply to Python, Go or PHP code</td></tr>
+<tr><td>2026-11-12</td><td>New step: discover the project's conventions and propose <code>docs/reference/conventions.md</code> with <code>file:line</code> evidence; Python, Go and PHP probes; Audit is step 5 and Report step 6</td><td><code>project-init</code></td><td>A non-JS repository got no conventions finding</td></tr>
+<tr><td>2026-11-12</td><td>Rows name the practice first, tools as examples; the decisions list is stack-free; new rows: actions pinned to a SHA, workflow audit, lockfile vulnerability scan, <code>enableAllProjectMcpServers</code> not <code>true</code>; the sandbox row adds <code>allowUnsandboxedCommands: false</code> and <code>~/.kube</code>, <code>~/.npmrc</code>, <code>~/.config/gh</code></td><td><code>project-baseline</code></td><td>Rows and decisions assumed a JS stack; supply-chain and agent-hardening gaps. Setting names checked against the Claude Code docs on 2026-11-12</td></tr>
+<tr><td>2026-11-12</td><td>Research map before the first question; <code>[NEEDS CLARIFICATION: …]</code> markers listed under Open questions; WHEN/THEN acceptance criteria that step 6 turns into the <code>Check</code></td><td><code>spec</code></td><td>The spec decided before showing what it read, guessed at unknowns and wrote uncheckable criteria</td></tr>
+<tr><td>2026-11-12</td><td>The Never line reads "a note or shown group the user did not name": "archive the expired ones" names the Expired group shown in that run, and a range answer covers only the page shown last</td><td><code>brain-review</code></td><td>Expired inbox notes are archived as a group and a large inbox is answered by ranges; neither names notes one by one, and silence still moves nothing (D4)</td></tr>
+<tr><td>2026-11-12</td><td>brain-capture writes <code>expires:</code>, <code>refs:</code> and <code>verified:</code>; brain-search skips expired inbox notes and marks a claim whose <code>refs:</code> file changed since <code>verified</code>; brain-garden and brain-project-refresh report both</td><td><code>brain-capture</code>, <code>brain-search</code>, <code>brain-garden</code>, <code>brain-project-refresh</code></td><td>Unreviewed notes stayed answerable forever, and a note about changed code read as current</td></tr>
+<tr><td>2026-11-12</td><td>Check candidates may propose one entry for the project's <code>.claude/developer-os-guard.json</code> when the repeated mistake is a command or a path to ask about first</td><td><code>session-retro</code></td><td>A mechanical correction had no destination but prose; the guard now reads tighten-only project rules (D6)</td></tr>
+<tr><td>2026-11-12</td><td>The skill writes <code>lanes.json</code>, asks for a budget per lane and runs <code>lanes.py</code> for launch, status, resume and the conflict preview</td><td><code>parallel-lanes</code></td><td>The launch and resume scripts were retyped by the model on every run and had no test; a lane had no cost cap (D23)</td></tr>
+<tr><td>2026-11-12</td><td>Only an <code>active</code> note that contradicts an item's <code>Problem</code> fails triage point 4; an inbox note is reported as context and the item stays</td><td><code>implement-backlog</code></td><td>An unreviewed inbox note is a draft, not a fact (D4), and it could drop an item from a batch (PR #141 review)</td></tr>
+<tr><td>2026-11-12</td><td>A documented project convention wins over a skill rule only on shape and naming (error-handling) or layout and tooling (testing); it never permits a swallowed error, a lost cause, internals in a response, an unseen-red regression test, a skipped test or a raised retry</td><td><code>error-handling-conventions</code>, <code>testing-conventions</code></td><td>The override had no limit, so one line in a project doc could switch a safety rule off (PR #141 review)</td></tr>
+<tr><td>2026-11-12</td><td>The <code>Expired</code> group belongs to the page shown, so its numbers are in range like the others</td><td><code>brain-review</code></td><td>A number in the group read either as in range or as outside the page, and two readings gave different actions (PR #141 review)</td></tr>
+<tr><td>2026-11-12</td><td>The changed-ref check runs as <code>git -C &lt;repository root&gt;</code></td><td><code>brain-project-refresh</code></td><td>Run from a subdirectory, the relative path matched nothing and read as "no change" (PR #141 review)</td></tr>
+<tr><td>2026-11-12</td><td>A lane never edits <code>.git</code>; <code>fast_check</code> holds no bracket or comma and each <code>allow</code> entry is one tool rule; Status and Resume refuse a lane whose worktree <code>.git</code> file changed; the launch question names the <code>git diff --output</code> risk</td><td><code>parallel-lanes</code></td><td>A lane could run its own commands through a rewritten <code>.git</code> file, or reach <code>claude</code> options through <code>pids.txt</code> (PR #141 security review, D23)</td></tr>
+<tr><td>2026-11-12</td><td>A gate or test is seen red by mutating with an edit and undoing that edit, not with git</td><td><code>plugin/rules/core.md</code></td><td><code>git checkout -- &lt;path&gt;</code> discards other uncommitted work and a command guard blocks it, which left no documented way to revert a mutation (#140)</td></tr>
+<tr><td>2026-11-12</td><td>Undo a test mutation by hand; never revert it with <code>git checkout</code>, <code>git restore</code> or <code>git stash</code></td><td><code>testing-conventions</code></td><td>The same gap, stated where tests are written (#140)</td></tr>
+<tr><td>2026-11-12</td><td>Two sessions sharing a checkout announce a commit, a branch switch or an edit of a shared file and wait before a commit or switch; when the message cannot be delivered, an edit proceeds after a <code>git status</code> check before and after and a note to the user, and a commit or switch stops and asks</td><td><code>plugin/rules/core.md</code></td><td>The announce rule had no path for a peer that <code>SendMessage</code> could not reach (#139)</td></tr>
+<tr><td>2026-11-12</td><td>The paging sentence names the lower-case <code>recommend:</code>, a reason in brackets on every line, the current page only and the literal question "Approve which ones?"</td><td><code>brain-review</code></td><td>The first eval run of brain-review-pages scored 0.70: the model capitalised the keyword, left most lines without a reason, summarised page two and paraphrased the question; 1.00 over three runs after the change</td></tr>
 </table>
 </div>
 <nav class="doc-foot" aria-label="Pagination">

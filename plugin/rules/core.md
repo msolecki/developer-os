@@ -35,7 +35,7 @@
 - Before a large task, look for earlier decisions: when a vault is configured (the `brain_vault` option or a `Brain vault:` line), search the vault with the `brain-search` skill and read the selected note (otherwise skip this silently), then read the project's active plan. Search raw session transcripts only when the user asks.
 - During compaction, preserve the modified-file list, the project's test commands, the current objective, and the user's language. Task state that must survive it lives in `docs/plans/.devos-state.md`, not only in chat.
 - Show only failures from tests and builds, never a full passing log.
-- Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence. A new or changed gate or test counts only after you saw it fail: mutate, watch it go red, revert.
+- Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence. A new or changed gate or test counts only after you saw it fail: mutate with an edit, watch it go red, undo that edit (not with git, which discards other work).
 - Before saying done, list the background shells and tasks you started and stop those no longer needed.
 - Never promise to report back later ("I'll let you know"): you cannot act between turns. Run the work as a background task that notifies on completion, or give an ETA and what the user should check.
 - If the user asks for the same thing three times, say so and propose a skill or hook.
@@ -44,11 +44,12 @@
 
 - Run every parallel agent in its own git worktree (`git worktree add`, or the project's worktree script). Two sessions in one checkout corrupt each other's staging area, and a push from one restarts CI on the other's older state.
 - Stage explicit paths, never `git add -A` or `git add .`; if a checkout is shared anyway, commit with `git commit -F <msg-file> -- <paths>`. Re-run `git status` right before the first edit.
+- Two sessions share a checkout anyway: before a commit, a branch switch or an edit of a file the other may hold, tell that session (`ListAgents`, `SendMessage`) and wait for its answer before a commit or switch. If the message cannot be delivered: for an edit, check `git status` right before and after it and tell the user which session you could not reach; for a commit or switch, stop and ask the user.
 - No `git stash` in a lane: worktrees share one stash; compare with `git show HEAD:<path>` instead.
 - One orchestrator owns push and integrate. Lanes produce commits inside their worktree and stop there; they do not push, merge, or rebase shared branches.
 - Before dispatching parallel agents, state which worktree each one gets. "Both in the main repository" is not a plan, it is the failure above.
 - When the project provisions per-worktree resources (ports, a compose project name, an environment file), use those instead of the default ports, and release them with the project's cleanup command when the branch is done.
-- After integrating lanes, run the repository-wide gate on the result. Never resume an interrupted lane; start a fresh, smaller one.
+- After integrating lanes, run the repository-wide gate on the result. Resume an interrupted lane only through parallel-lanes' Resume mode; otherwise start a fresh, smaller one.
 
 ### Conventions skills
 

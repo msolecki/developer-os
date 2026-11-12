@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/glossary.md@51ec57d7a23c">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="docs/glossary.md@1bc793e41a5e">
+<link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
@@ -52,7 +50,7 @@
         <thead><tr><th scope="col">Term</th><th scope="col">Meaning</th></tr></thead>
         <tbody>
           <tr><td>Action skill</td><td>Any skill that is not read-only. It must end with <code>## Stop point</code> and <code>## Never</code>, even when, like bug-triage, deploy-checklist and client-reply, it writes nothing itself.</td></tr>
-          <tr><td>Read-only skill</td><td>A skill exempt from the <code>## Stop point</code>/<code>## Never</code> check (<code>read_only</code> in <code>scripts/check.sh</code>): brain-search, code-review, plan-status, skill-usage and the <code>*-conventions</code> skills. It changes nothing and proposes no action.</td></tr>
+          <tr><td>Read-only skill</td><td>A skill exempt from the <code>## Stop point</code>/<code>## Never</code> check (<code>read_only</code> in <code>scripts/check.sh</code>): brain-search, code-review, plan-status, setup-check, skill-usage and the <code>*-conventions</code> skills. It changes nothing and proposes no action.</td></tr>
           <tr><td>Conventions skill</td><td>A <code>*-conventions</code> skill with stack- or file-specific rules, loaded only when its description matches the work.</td></tr>
           <tr><td>Core rules</td><td><code>plugin/rules/core.md</code>, printed into every session by the <code>SessionStart</code> hook.</td></tr>
           <tr><td>Brain, vault</td><td>The user's Obsidian vault of Markdown notes, the agent's long-term memory.</td></tr>

@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-12
 ---
 
 # Development guide
@@ -33,7 +33,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name; a line inside the frontmatter of an `evals/` file contains `---` (the eval loader ends frontmatter there) |
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or the descriptions of skills without `disable-model-invocation: true` together exceed 12000 |
-| Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`); any skill body holds a bare `$<digits>`, which Claude Code replaces with the skill's argument (write `$(N)` in awk, `${N}` in sh) |
+| Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `setup-check`, `skill-usage`, `*-conventions`); any skill body holds a bare `$<digits>`, which Claude Code replaces with the skill's argument (write `$(N)` in awk, `${N}` in sh) |
 | Last-verified (warning) | A `docs/*.md` committed after its `last-verified` date prints a warning; the exit status does not change |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden`, `brain-import-memory`, `brain-project-refresh` or `brain-review` differs from `brain-search`'s |
 | Docs standard | A `## ` heading or bold field of `templates/project/docs/decisions/0001-template.md`, a bold field of `templates/project/docs/pitfalls.md`, or a `## ` heading of `templates/project/docs/CURRENT-STATE.md` does not appear whole, as a fixed string, on that template file's own line of `## The standard` in `docs-sync` (the plugin does not ship `templates/`, so the skill restates them) |
@@ -64,10 +64,10 @@ committed.
 
 `.github/workflows/check.yml` runs `scripts/check.sh` on pushes to `development` and `main` and on
 every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
-Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.57.0, the release binary pinned by its
+Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.61.0, the release binary pinned by its
 SHA-256, `--strict`, target `claude-code`), a static lint of skills, hooks and manifests configured in
 `.agnix.toml`; every rule disabled there carries its reason. It pins `actions/checkout` to a commit SHA, does not persist credentials, has
-read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`) and a gitleaks
+read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.322` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`) and a gitleaks
 release verified by SHA-256, and, on a pull request, `gitleaks git` over the PR's commits, so a secret added and
 removed inside one PR still fails. The same step fails a PR that changes `.gitleaks.toml` or
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
@@ -80,16 +80,32 @@ the claude-code one together with `claude_code` in `.agnix.toml` (the Tool versi
 
 `site/` is the public documentation site, hand-written HTML with no build:
 
-- `index.html`, the landing page;
+- `index.html`, the landing page: the hero, one session in a terminal, what ships (the fact rows the Counts
+  stage reads and every skill and agent name) and the install steps with the questions asked before an install;
 - `docs/`, one page per `docs/*.md` at the same path, plus `readme.html`, `changelog.html`,
   `contributing.html` and `security.html` for the root documents;
 - `skills/`, an index and one page per skill; `agents.html` and `output-styles.html`;
-- `workflow.html`, an animated overview of the daily loop, the life of a note and the hooks, restating
+- `workflow.html`, how it works: the three layers, the animated daily loop, the life of a note, the approval
+  model, the hooks in one session, the core rules, who the plugin fits and the links into the docs, restating
   `docs/workflow.md` and `docs/reference/hooks.md` without a hash (update it by hand when they change);
-- `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons), and
-  `assets/wf.js`, the animated diagrams and the terminal session on the landing page and `workflow.html`;
+- `404.html`, which GitHub Pages serves for an unknown path at any depth: its `<base>` is the site URL, so its
+  relative links work from any address and the Site stage still checks them; it carries `noindex`, and it is
+  in `sitemap.xml` only because the Site stage expects every page there;
+- `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons, the
+  full-size control for wide diagrams, and the skill filter, which also reads `?q=` from the address), and
+  `assets/wf.js`, the terminal session on the landing page and the animated diagrams on `workflow.html`; each
+  diagram's element ids exist on one page only;
+- `assets/fonts/`, IBM Plex Sans (one variable file for the weights 400 to 600) and IBM Plex Mono (400 and 500)
+  as Latin-subset woff2 files, with their license in `OFL.txt`; `site.css` declares them with `font-display: swap`
+  and every page preloads the sans file, so a page loads nothing from another host;
 - `assets/og/`, the 1200×630 link-preview cards (`home`, `docs`, `skills`, `agents`), and the favicons;
 - `sitemap.xml`, one `<loc>` per page.
+
+A diagram wider than the text column sits in a `table-wrap wide-fig` element. From a viewport of 1181px it
+widens to the right, across the on-page contents, which `site.js` hides while a diagram passes them, and fits
+without scrolling; on a narrower viewport it keeps its minimum width and scrolls sideways. `site.js` adds an
+"Open full size" button under it, which shows the diagram in a full-viewport dialog; Escape or its Close button
+closes the dialog and returns focus to the button.
 
 Every page's `<head>` carries, after its `description`, the link-preview block: `canonical` and
 `og:url` (`https://msolecki.github.io/developer-os/<path>`, a directory for an `index.html`), the
@@ -137,7 +153,27 @@ which installs ripgrep;
 `tests/session-retro-harvest.test.sh` runs session-retro's `harvest.py` on the synthetic transcript in
 `tests/fixtures/session-retro/` and expects one line per seeded rejection, retraction and repeated
 error and none for the negatives (a permission-rule denial, an `api-request-blob` copy, a single error,
-an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines.
+an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines;
+`tests/lanes.test.sh` runs parallel-lanes' `lanes.py` in a temporary repository with a stub `claude` first on
+`PATH` and checks the launch (one `pids.txt` line per lane, the `.git` deny rules, and a second launch, a
+moved worktree `HEAD`, a lane without a budget or with an infinite one, a duplicate or path-like lane name, a
+`fast_check` with a bracket, a `drop_deny` path outside the deny list or naming `.git`, and a `base` that is
+no full commit id refused), the status table (a changed prompt, a rewritten worktree `.git` file, a reused PID
+not read as a running lane, the session's total cost, not counted twice after a resume and kept when a later
+result reports zero), the resume refusals (a forged `pids.txt` line never reaches `claude`) and the conflict
+preview (a lane still running is left out; a failing `git merge-tree` exits 1);
+`tests/patterns.test.sh` feeds edits to `patterns.py` and expects the note for each pattern and silence
+for a test path, a Markdown file and an edit that adds nothing, a state directory of mode 700 with files of
+mode 600, a session file 9 days old removed while newer ones stay, and the list of shown notes cut to its
+newest 5000;
+`tests/setup-check.test.sh` runs setup-check's `check.py` with a fake `PATH` and config directory and checks
+each line, that a vault path in a project's `CLAUDE.md` is ignored, that `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`
+counts as auto memory off, and that a hanging `gh auth status` is cut off with a warning while the later
+checks still print (this case takes about 10 seconds);
+`tests/eval-summary.test.sh` runs `scripts/eval-summary.py` on result fixtures and expects exit 1 with the
+case name for a seeded regression or a case missing from the new summary, exit 2 for summaries or runs of
+different agent or judge models, for a version that is a path and for a wrong number of `--diff` arguments,
+and a warning on stderr for a partial run.
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 
@@ -186,7 +222,10 @@ Release, by hand:
 
 1. On a branch from `development`: bump `version` in both manifests, rename `[Unreleased]` in
    `CHANGELOG.md` to `[<version>] - <date>` under a new empty `[Unreleased]`, refresh the site pages
-   the Site stage names, run `bash scripts/check.sh`, and merge the pull request. In
+   the Site stage names, run `bash scripts/check.sh`, and merge the pull request. After the release's eval
+   run, keep its scores: `python3 scripts/eval-summary.py evals/results/<run>/aggregate-result.json` writes
+   `eval-history/<version>.json` (tracked), and `--diff <old> <new>` on two of those files exits 1 when a
+   case's with-plugin score fell by more than 0.1 or the case is missing from the new summary. In
    `site/docs/changelog.html`, add the version's `<h2>` under `[Unreleased]` and rename that section's
    `unreleased-*` heading ids to `<version>-*` (e.g. `025-added`); the Site stage compares the words, not
    the ids. Set the release in the landing page's "Is it stable?" answer; the Counts stage compares it

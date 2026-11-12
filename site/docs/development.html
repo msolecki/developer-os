@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@a418356ea478">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="docs/development.md@7cd5b51d9155">
+<link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
@@ -46,7 +44,7 @@
 
   <main id="main" class="prose">
     <h1 id="development-guide">Development guide</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/development.md">docs/development.md</a></span><span>Verified 2026-11-08</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/development.md">docs/development.md</a></span><span>Verified 2026-11-12</span></p>
     <p>How to change the plugin, check it and ship it. The rules for contributions are in
     <a href="contributing.html">CONTRIBUTING.md</a>; this page explains the mechanics behind them.</p>
     <h2 id="setup">Setup</h2>
@@ -66,7 +64,7 @@
           <tr><td>Frontmatter</td><td>Frontmatter in <code>plugin/</code>, <code>templates/</code>, <code>evals/</code> or <code>docs/</code> Markdown does not parse; a <code>docs/*.md</code> lacks <code>status</code> (<code>current</code>, <code>draft</code>, <code>deprecated</code>), <code>owner</code> or a <code>last-verified</code> date; a skill, agent or output style lacks <code>name</code>/<code>description</code> or its <code>name</code> differs from the folder or file name; a line inside the frontmatter of an <code>evals/</code> file contains <code>---</code> (the eval loader ends frontmatter there)</td></tr>
           <tr><td>Skill fields</td><td>A skill lacks <code>license</code> or <code>compatibility</code>, or its name does not match <code>^[a-z0-9-]{1,64}$</code></td></tr>
           <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or the descriptions of skills without <code>disable-model-invocation: true</code> together exceed 12000</td></tr>
-          <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>); any skill body holds a bare <code>$&lt;digits&gt;</code>, which Claude Code replaces with the skill&#8217;s argument (write <code>$(N)</code> in awk, <code>${N}</code> in sh)</td></tr>
+          <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>setup-check</code>, <code>skill-usage</code>, <code>*-conventions</code>); any skill body holds a bare <code>$&lt;digits&gt;</code>, which Claude Code replaces with the skill's argument (write <code>$(N)</code> in awk, <code>${N}</code> in sh)</td></tr>
           <tr><td>Last-verified (warning)</td><td>A <code>docs/*.md</code> committed after its <code>last-verified</code> date prints a warning; the exit status does not change</td></tr>
           <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code>, <code>brain-import-memory</code>, <code>brain-project-refresh</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>
           <tr><td>Docs standard</td><td>A <code>## </code> heading or bold field of <code>templates/project/docs/decisions/0001-template.md</code>, a bold field of <code>templates/project/docs/pitfalls.md</code>, or a <code>## </code> heading of <code>templates/project/docs/CURRENT-STATE.md</code> does not appear whole, as a fixed string, on that template file's own line of <code>## The standard</code> in <code>docs-sync</code> (the plugin does not ship <code>templates/</code>, so the skill restates them)</td></tr>
@@ -97,10 +95,10 @@
     <h2 id="ci">CI</h2>
     <p><code>.github/workflows/check.yml</code> runs <code>scripts/check.sh</code> on pushes to <code>development</code> and <code>main</code> and on
     every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
-    Before the check it puts agnix on <code>PATH</code> for the agnix stage (<code>agent-sh/agnix</code> v0.57.0, the release binary pinned by its
+    Before the check it puts agnix on <code>PATH</code> for the agnix stage (<code>agent-sh/agnix</code> v0.61.0, the release binary pinned by its
     SHA-256, <code>--strict</code>, target <code>claude-code</code>), a static lint of skills, hooks and manifests configured in
     <code>.agnix.toml</code>; every rule disabled there carries its reason. It pins <code>actions/checkout</code> to a commit SHA, does not persist credentials, has
-    read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.300</code> (with <code>--ignore-scripts</code>, then only its own <code>install.cjs</code>, which links the native binary, then <code>claude --version</code>) and a gitleaks
+    read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.322</code> (with <code>--ignore-scripts</code>, then only its own <code>install.cjs</code>, which links the native binary, then <code>claude --version</code>) and a gitleaks
     release verified by SHA-256, and, on a pull request, <code>gitleaks git</code> over the PR's commits, so a secret added and
     removed inside one PR still fails. The same step fails a PR that changes <code>.gitleaks.toml</code> or
     <code>.gitleaksignore</code> or adds a <code>gitleaks&#58;allow</code> marker; the workflow file itself comes from the PR, so
@@ -111,35 +109,60 @@
     <h2 id="the-site">The site</h2>
     <p><code>site/</code> is the public documentation site, hand-written HTML with no build:</p>
     <ul>
-      <li><code>index.html</code>, the landing page;</li>
+      <li><code>index.html</code>, the landing page: the hero, one session in a terminal, what ships (the fact rows the Counts stage reads and every skill and agent name) and the install steps with the questions asked before an install;</li>
       <li><code>docs/</code>, one page per <code>docs/*.md</code> at the same path, plus <code>readme.html</code>, <code>changelog.html</code>, <code>contributing.html</code> and <code>security.html</code> for the root documents;</li>
       <li><code>skills/</code>, an index and one page per skill; <code>agents.html</code> and <code>output-styles.html</code>;</li>
-<li><code>workflow.html</code>, an animated overview of the daily loop, the life of a note and the hooks, restating
-<code>docs/workflow.md</code> and <code>docs/reference/hooks.md</code> without a hash (update it by hand when they change);</li>
-      <li><code>assets/site.css</code> and <code>assets/site.js</code> (the sidebar order in <code>NAV</code>, on-page contents, copy buttons), and
-<code>assets/wf.js</code>, the animated diagrams and the terminal session on the landing page and <code>workflow.html</code>;</li>
+      <li><code>workflow.html</code>, how it works: the three layers, the animated daily loop, the life of a note, the approval model, the hooks in one session, the core rules, who the plugin fits and the links into the docs, restating <code>docs/workflow.md</code> and <code>docs/reference/hooks.md</code> without a hash (update it by hand when they change);</li>
+      <li><code>404.html</code>, which GitHub Pages serves for an unknown path at any depth: its <code>&lt;base&gt;</code> is the site URL, so its relative links work from any address and the Site stage still checks them; it carries <code>noindex</code>, and it is in <code>sitemap.xml</code> only because the Site stage expects every page there;</li>
+      <li><code>assets/site.css</code> and <code>assets/site.js</code> (the sidebar order in <code>NAV</code>, on-page contents, copy buttons, the full-size control for wide diagrams, and the skill filter, which also reads <code>?q=</code> from the address), and <code>assets/wf.js</code>, the terminal session on the landing page and the animated diagrams on <code>workflow.html</code>; each diagram's element ids exist on one page only;</li>
+      <li><code>assets/fonts/</code>, IBM Plex Sans (one variable file for the weights 400 to 600) and IBM Plex Mono (400 and 500) as Latin-subset woff2 files, with their license in <code>OFL.txt</code>; <code>site.css</code> declares them with <code>font-display: swap</code> and every page preloads the sans file, so a page loads nothing from another host;</li>
       <li><code>assets/og/</code>, the 1200×630 link-preview cards (<code>home</code>, <code>docs</code>, <code>skills</code>, <code>agents</code>), and the favicons;</li>
       <li><code>sitemap.xml</code>, one <code>&lt;loc&gt;</code> per page.</li>
     </ul>
+    <p>A diagram wider than the text column sits in a <code>table-wrap wide-fig</code> element. From a viewport of 1181px it widens to the right, across the on-page contents, which <code>site.js</code> hides while a diagram passes them, and fits without scrolling; on a narrower viewport it keeps its minimum width and scrolls sideways. <code>site.js</code> adds an "Open full size" button under it, which shows the diagram in a full-viewport dialog; Escape or its Close button closes the dialog and returns focus to the button.</p>
     <p>Every page's <code>&lt;head&gt;</code> carries, after its <code>description</code>, the link-preview block: <code>canonical</code> and <code>og:url</code> (<code>https://msolecki.github.io/developer-os/&lt;path&gt;</code>, a directory for an <code>index.html</code>), the favicon links (relative, from the page's <code>data-root</code>), <code>og:type</code>, <code>og:site_name</code>, <code>og:title</code> and <code>og:description</code> (the page's title and description), <code>og:image</code> (the section's card), its size and alt text, and <code>twitter:card</code>. A new page copies the block from a page in the same folder and adds its URL to <code>sitemap.xml</code>. The landing page also carries JSON-LD (<code>SoftwareApplication</code>). A project site has no robots.txt of its own (crawlers read only the host root), so the sitemap is submitted by hand.</p>
     <p>Each page that restates a source carries <code>&lt;meta name="dos-source" content="&lt;source&gt;@&lt;hash&gt;"&gt;</code>: the first 12 hex digits of the source's SHA-256 with any <code>last-verified:</code> line removed, so re-verifying a doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style, the Site stage names the page to refresh: update its text, then its hash (<code>sed '/^last-verified: /d' &lt;source&gt; | shasum -a 256 | cut -c1-12</code>). The regeneration command for these derived hashes, which implement-backlog and parallel-lanes run after each lane merge, is <code>python3 scripts/site-hashes.py</code> from the repository root: it rewrites every <code>dos-source</code> hash to its source's current one and changes no page text. A page under <code>site/docs/</code> must carry its source's words in order, so a new hash on an unedited page still fails; skill, agent and output-style pages are summaries, which code-review checks instead (D28). A new doc or skill needs a new page, and a new doc an entry in <code>NAV</code>. The landing page and the skills index restate many sources and carry no hash; update them by hand when the hooks, rules or skills they describe change. <code>CHANGELOG.md</code> changes on most pull requests, so its page usually does too. The Local paths stage scans <code>site/</code>, so a page that quotes its patterns writes the slash as <code>&amp;#47;</code>, as <code>development.html</code> and <code>contributing.html</code> do. CI rejects a pull request that adds the gitleaks allow marker, so a page that quotes it writes its colon as <code>&amp;#58;</code>.</p>
     <p><code>.github/workflows/pages.yml</code> publishes <code>site/</code> to GitHub Pages on a push to <code>main</code> that changes it, or by hand; its job runs only on <code>main</code>, so a dispatch from another branch publishes nothing. The repository's Pages source must be "GitHub Actions".</p>
     <h2 id="script-tests">Script tests</h2>
     <p><code>tests/state-card.test.sh</code> runs <code>state-card.py</code> in a temporary git repository and checks that it
-    prints nothing outside <code>compact</code>/<code>resume</code>/<code>fork</code>, that the card holds the plan and state file only when they are
-    safe to show, and that the card is cut to its cap; <code>tests/guard.test.sh</code> feeds command fixtures to <code>guard.py</code> and expects <code>ask</code> or silence;
-    <code>tests/repeat-failure.test.sh</code> feeds failed tool calls to <code>repeat-failure.py</code> and expects the reminder only at the third failure of the same call;
-    <code>tests/capture-nudge.test.sh</code> builds synthetic transcripts and checks the exit code, the JSON output and the message;
-    <code>tests/notices.test.sh</code> runs <code>notices.py</code> with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's <code>CLAUDE.md</code> is ignored, that the <code>brain_vault</code> option in the user-level <code>settings.json</code> wins over the line, an empty one falls back to it and its environment variable is ignored, and that no note name is printed;
-    <code>tests/check.test.sh</code> breaks a copy of the repository once per stage it covers and expects that
-    stage's message; it runs the whole check once per case (several minutes), so <code>scripts/check.sh</code> runs it
-    only when <code>CI</code> is set (GitHub Actions sets it): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;
-    <code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
-    transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
-    and expects one count per message; when <code>rg</code> is missing it prints SKIP locally and fails in CI, which installs ripgrep;
-    <code>tests/session-retro-harvest.test.sh</code> runs session-retro's <code>harvest.py</code> on the synthetic transcript in <code>tests/fixtures/session-retro/</code> and expects one line per seeded rejection, retraction and repeated error and none for the negatives (a permission-rule denial, an <code>api-request-blob</code> copy, a single error, an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines.
-    After changing a hook, run its test from the repository root, for example <code>sh tests/guard.test.sh</code>,
-    and add a fixture for the case you changed.</p>
+prints nothing outside <code>compact</code>/<code>resume</code>/<code>fork</code>, that the card holds the plan and state file only when they are
+safe to show, and that the card is cut to its cap; <code>tests/guard.test.sh</code> feeds command fixtures to <code>guard.py</code> and expects <code>ask</code> or silence;
+<code>tests/repeat-failure.test.sh</code> feeds failed tool calls to <code>repeat-failure.py</code> and expects the reminder only at the third failure of the same call;
+<code>tests/capture-nudge.test.sh</code> builds synthetic transcripts and checks the exit code, the JSON output and the message;
+<code>tests/notices.test.sh</code> runs <code>notices.py</code> with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's <code>CLAUDE.md</code> is ignored, that the <code>brain_vault</code> option in the user-level <code>settings.json</code> wins over the line, an empty one falls back to it and its environment variable is ignored, and that no note name is printed;
+<code>tests/check.test.sh</code> breaks a copy of the repository once per stage it covers and expects that
+stage's message; it runs the whole check once per case (several minutes), so <code>scripts/check.sh</code> runs it
+only when <code>CI</code> is set (GitHub Actions sets it): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;
+<code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
+transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
+and expects one count per message; when <code>rg</code> is missing it prints SKIP locally and fails in CI,
+which installs ripgrep;
+<code>tests/session-retro-harvest.test.sh</code> runs session-retro's <code>harvest.py</code> on the synthetic transcript in
+<code>tests/fixtures/session-retro/</code> and expects one line per seeded rejection, retraction and repeated
+error and none for the negatives (a permission-rule denial, an <code>api-request-blob</code> copy, a single error,
+an old rejection outside the window, a duplicate uuid, an invalid line), and that a kind stops at 15 lines;
+<code>tests/lanes.test.sh</code> runs parallel-lanes' <code>lanes.py</code> in a temporary repository with a stub <code>claude</code> first on
+<code>PATH</code> and checks the launch (one <code>pids.txt</code> line per lane, the <code>.git</code> deny rules, and a second launch, a
+moved worktree <code>HEAD</code>, a lane without a budget or with an infinite one, a duplicate or path-like lane name, a
+<code>fast_check</code> with a bracket, a <code>drop_deny</code> path outside the deny list or naming <code>.git</code>, and a <code>base</code> that is
+no full commit id refused), the status table (a changed prompt, a rewritten worktree <code>.git</code> file, a reused PID
+not read as a running lane, the session's total cost, not counted twice after a resume and kept when a later
+result reports zero), the resume refusals (a forged <code>pids.txt</code> line never reaches <code>claude</code>) and the conflict
+preview (a lane still running is left out; a failing <code>git merge-tree</code> exits 1);
+<code>tests/patterns.test.sh</code> feeds edits to <code>patterns.py</code> and expects the note for each pattern and silence
+for a test path, a Markdown file and an edit that adds nothing, a state directory of mode 700 with files of
+mode 600, a session file 9 days old removed while newer ones stay, and the list of shown notes cut to its
+newest 5000;
+<code>tests/setup-check.test.sh</code> runs setup-check's <code>check.py</code> with a fake <code>PATH</code> and config directory and checks
+each line, that a vault path in a project's <code>CLAUDE.md</code> is ignored, that <code>CLAUDE_CODE_DISABLE_AUTO_MEMORY=1</code>
+counts as auto memory off, and that a hanging <code>gh auth status</code> is cut off with a warning while the later
+checks still print (this case takes about 10 seconds);
+<code>tests/eval-summary.test.sh</code> runs <code>scripts/eval-summary.py</code> on result fixtures and expects exit 1 with the
+case name for a seeded regression or a case missing from the new summary, exit 2 for summaries or runs of
+different agent or judge models, for a version that is a path and for a wrong number of <code>--diff</code> arguments,
+and a warning on stderr for a partial run.
+After changing a hook, run its test from the repository root, for example <code>sh tests/guard.test.sh</code>,
+and add a fixture for the case you changed.</p>
     <h2 id="evals">Evals</h2>
     <p>Behavior checks with <code>claude plugin eval</code>, run by hand before a release or after changing a tested
     skill, never in CI: <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md">evals/README.md</a>. A case must fail when the skill breaks;
@@ -168,7 +191,16 @@
     </ul>
     <p>Release, by hand:</p>
     <ol>
-      <li>On a branch from <code>development</code>: bump <code>version</code> in both manifests, rename <code>[Unreleased]</code> in <code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request. In <code>site/docs/changelog.html</code>, add the version&#8217;s <code>&lt;h2&gt;</code> under <code>[Unreleased]</code> and rename that section&#8217;s <code>unreleased-*</code> heading ids to <code>&lt;version&gt;-*</code> (e.g. <code>025-added</code>); the Site stage compares the words, not the ids. Set the release in the landing page's &quot;Is it stable?&quot; answer; the Counts stage compares it with <code>plugin.json</code>.</li>
+      <li>On a branch from <code>development</code>: bump <code>version</code> in both manifests, rename <code>[Unreleased]</code> in
+<code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages
+the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request. After the release's eval
+run, keep its scores: <code>python3 scripts/eval-summary.py evals/results/&lt;run&gt;/aggregate-result.json</code> writes
+<code>eval-history/&lt;version&gt;.json</code> (tracked), and <code>--diff &lt;old&gt; &lt;new&gt;</code> on two of those files exits 1 when a
+case's with-plugin score fell by more than 0.1 or the case is missing from the new summary. In
+<code>site/docs/changelog.html</code>, add the version's <code>&lt;h2&gt;</code> under <code>[Unreleased]</code> and rename that section's
+<code>unreleased-*</code> heading ids to <code>&lt;version&gt;-*</code> (e.g. <code>025-added</code>); the Site stage compares the words, not
+the ids. Set the release in the landing page's "Is it stable?" answer; the Counts stage compares it
+with <code>plugin.json</code>.</li>
       <li>When <code>check</code> is green on <code>development</code>: <code>git push origin origin/development:main</code>. Only a fast-forward is accepted; the <code>main</code> ruleset lets the repository admin push without a pull request (bypass mode "Always"), so <code>main</code> keeps the same SHAs as <code>development</code>.</li>
       <li><code>git tag -a v&lt;version&gt; -m v&lt;version&gt; origin/main &amp;&amp; git push origin v&lt;version&gt;</code> at once (a fetch prunes an unpushed tag; a lightweight <code>git tag</code> stops with "no tag message?" where <code>tag.gpgSign</code> is set), then <code>gh release create v&lt;version&gt; --notes-file &lt;the changelog section&gt;</code>. The <code>release-tags</code> ruleset forbids moving or deleting a <code>v*</code> tag.</li>
       <li>Pushing <code>main</code> publishes <code>site/</code> to GitHub Pages.</li>

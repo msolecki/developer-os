@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/parallel-lanes/SKILL.md@babb1bf94073">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="plugin/skills/parallel-lanes/SKILL.md@7f8143b3b538">
+<link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
@@ -53,8 +51,8 @@
       <div class="fact"><dt>Group</dt><dd>Engineering</dd></div>
       <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
       <div class="fact"><dt>Writes</dt><dd>A git-ignored run directory, worktrees and <code>lanes/*</code> branches, integration commits on a local branch</dd></div>
-      <div class="fact"><dt>Asks before</dt><dd>Launching the lanes (the whole <code>launch.sh</code> is shown) and any dependency install in the worktrees, resuming a lane, integrating, removing worktrees</dd></div>
-      <div class="fact"><dt>Needs</dt><dd><code>claude</code> and <code>python3</code> on <code>PATH</code>, a clean tree, a known fast check</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Launching the lanes (<code>lanes.json</code> and the launch command are shown) and any dependency install in the worktrees, resuming a lane, integrating, removing worktrees</dd></div>
+      <div class="fact"><dt>Needs</dt><dd><code>claude</code> and <code>python3</code> on <code>PATH</code>, a clean tree, a known fast check, a budget in USD you name for each lane</dd></div>
     </dl>
 
     <h2 id="when-it-runs">When it runs</h2>
@@ -69,22 +67,23 @@
     <h2 id="what-it-does">What it does</h2>
     <ol>
       <li><strong>Plans the lanes.</strong> 2–6 lanes, each with one objective, the paths it owns, a <code>Done when</code> and a runnable <code>Check</code> that fails while the <code>Done when</code> does not hold (<code>Manual</code> only when no command can check it). Owned paths never overlap; files every lane would touch (a lockfile, a changelog) belong to no lane and are changed after integration.</li>
-      <li><strong>Prepares a run directory</strong> under the git-ignored plans location, with <code>LANES.md</code>, one prompt per lane and a <code>launch.sh</code>, and one worktree and <code>lanes/&lt;lane&gt;</code> branch per lane, added from the recorded base commit, not the branch name. When the fast check needs installed dependencies, the frozen-lockfile install per worktree joins the launch question. Each prompt allows only the lane's paths, requires the fast check before every commit, forbids push, merge, rebase and installs, and asks for a report, in a git-ignored file inside the lane's own worktree, that starts with a final status and lists what is not started, what is not verified and If-X-then-Y contingencies.</li>
-      <li><strong>Launches after your yes.</strong> Each lane is a <code>claude -p</code> with <code>--permission-mode acceptEdits</code>, an explicit tool list, a recorded session id and a <code>--max-turns</code> cap, started detached in its own session so it keeps running after the turn ends, with no access to the run directory, so it cannot rewrite its <code>Done when</code> or <code>Check</code>. It may not edit the package manifest, <code>Makefile</code>, hook directories or <code>.claude/</code> unless it owns them, so it cannot rewrite what its fast check and <code>git commit</code> run; the launch question names the remaining risk, other files the fast check reads. <code>launch.sh</code> checks that each worktree is at the recorded base commit and records the hash of <code>LANES.md</code> and each prompt first. A second launch from the same run directory is refused. A lane's <code>Check</code> command, and any other tool its task needs, is added to that lane's list only, and is shown in the same launch question.</li>
-      <li><strong>Shows progress</strong> on request: one table with each lane's state and run time, how long since its worktree last changed (a stalled lane stays idle), its report's first line, its commits, its uncommitted files, and a warning for a lane that finished without a report, with a nonzero exit, with a file changed outside its owned paths, or whose prompt or <code>LANES.md</code> changed since launch.</li>
-      <li><strong>Resumes</strong> a lane cut off by a usage limit, a crash or the turn cap, after your yes to the shown <code>resume.sh</code>: when it finished with no report or a <code>CONTINUING</code> one and its prompt is unchanged, it continues the lane's own session with <code>claude -p --resume</code>, with the same permissions and tools.</li>
-      <li><strong>Integrates</strong> the finished <code>DONE</code> lanes after re-running their fast check and their <code>Check</code> itself; a lane with a red or <code>Manual</code> <code>Check</code>, a file changed outside its owned paths, uncommitted changes, or a prompt changed since launch goes to Needs you, whatever its report says. It merges them in order into a new local <code>lanes/&lt;run&gt;</code> branch, runs the project's regeneration command for derived files after each lane merge, makes the shared-file changes, runs every merged lane's <code>Check</code> and the repository-wide gate on that branch, and reviews the result with <a href="code-review.html">code-review</a>. On <code>REQUEST_CHANGES</code> it lists the findings under Needs you, keeps every worktree and branch, and stops.</li>
+      <li><strong>Prepares a run directory</strong> under the git-ignored plans location, with <code>LANES.md</code>, one prompt per lane and a <code>lanes.json</code> (the base commit, the turn cap and each lane's budget, fast check and extra tools), and one worktree and <code>lanes/&lt;lane&gt;</code> branch per lane, added from the recorded base commit, not the branch name. When the fast check needs installed dependencies, the frozen-lockfile install per worktree joins the launch question. Each prompt allows only the lane's paths, requires the fast check before every commit, forbids push, merge, rebase and installs, and asks for a report, in a git-ignored file inside the lane's own worktree, that starts with a final status and lists what is not started, what is not verified and If-X-then-Y contingencies.</li>
+      <li><strong>Launches after your yes.</strong> Each lane is a <code>claude -p</code> with <code>--permission-mode acceptEdits</code>, an explicit tool list, a recorded session id, a <code>--max-turns</code> cap and a <code>--max-budget-usd</code> budget you name per lane (there is no default; the budget is checked after a response, so leave headroom), started detached in its own session so it keeps running after the turn ends, with no access to the run directory, so it cannot rewrite its <code>Done when</code> or <code>Check</code>. It may not edit the package manifest, <code>Makefile</code>, hook directories or <code>.claude/</code> unless it owns them, so it cannot rewrite what its fast check and <code>git commit</code> run, and it may never edit <code>.git</code> or a file under it; the launch question names the remaining risks: other files the fast check reads, and that the allowed git commands take an output path, so a lane can write a file outside its worktree. <code>lanes.py</code>, a script beside the skill, refuses a <code>lanes.json</code> with an unknown key, a budget or turn cap that is not a finite number, a fast check holding a bracket or a comma, or an extra tool that is not one tool rule; it checks that each worktree is at the base commit recorded in <code>lanes.json</code> and records the hash of <code>LANES.md</code>, <code>lanes.json</code> and each prompt first. A second launch from the same run directory is refused. A lane's <code>Check</code> command, and any other tool its task needs, is added to that lane's list only, and is shown in the same launch question.</li>
+      <li><strong>Shows progress</strong> on request: one table with each lane's state and run time, how long since its worktree last changed (a stalled lane stays idle), its report's first line, its commits, its uncommitted files, what it spent, and a warning for a lane that finished without a report, with a nonzero exit, cut off by its budget, with a file changed outside its owned paths, whose prompt, <code>LANES.md</code> or <code>lanes.json</code> changed since launch, or whose worktree <code>.git</code> file changed (the script then runs no git command there). The script runs git with <code>core.fsmonitor</code> and hooks off and reads a <code>pids.txt</code> line only when it holds a lane name, a numeric PID and a UUID session id.</li>
+      <li><strong>Resumes</strong> a lane cut off by a usage limit, a crash, the turn cap or its budget, after your yes to the shown resume command: when it finished with no report or a <code>CONTINUING</code> one and its prompt, <code>LANES.md</code>, <code>lanes.json</code> and worktree <code>.git</code> file are unchanged, it continues the lane's own session with <code>claude -p --resume</code>, with the same permissions and tools and the same <code>--max-budget-usd</code> passed again.</li>
+      <li><strong>Integrates</strong> the finished <code>DONE</code> lanes after re-running their fast check and their <code>Check</code> itself; a lane with a red or <code>Manual</code> <code>Check</code>, a file changed outside its owned paths, uncommitted changes, or a prompt, <code>LANES.md</code> or <code>lanes.json</code> changed since launch goes to Needs you, whatever its report says. It previews conflicts between the lanes first (git 2.38 or later; no ref moves and no working-tree file changes) and names them in the merge plan, then merges them in order into a new local <code>lanes/&lt;run&gt;</code> branch, runs the project's regeneration command for derived files after each lane merge, makes the shared-file changes, runs every merged lane's <code>Check</code> and the repository-wide gate on that branch, and reviews the result with <a href="code-review.html">code-review</a>. On <code>REQUEST_CHANGES</code> it lists the findings under Needs you, keeps every worktree and branch, and stops.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>
     <div class="terminal">
       <div class="terminal-bar"><i></i><i></i><i></i><span>parallel-lanes status</span></div>
-<pre><code>| Lane           | State             | Idle for | Report | Commits | Uncommitted |
-|----------------|-------------------|----------|--------|---------|-------------|
-| api-retry      | finished EXIT=0   | 9 min    | DONE   | 3       | 0           |
-| ui-empty-state | running 12:41     | 1 min    | none   | 1       | 2           |
-| docs-webhooks  | ⚠ finished EXIT=1 | 4 min    | none   | 0       | 1           |
-One lane running, two finished; docs-webhooks can be resumed, api-retry can be integrated.</code></pre>
+<pre><code>| Lane           | State             | Idle for | Report | Commits | Uncommitted | Cost  |
+|----------------|-------------------|----------|--------|---------|-------------|-------|
+| api-retry       | finished EXIT=0 | 9 min    | DONE   | 3       | 0           | $1.84 |
+| ⚠ docs-webhooks | finished EXIT=1 | 4 min    | none   | 0       | 1           | $0.62 |
+| ui-empty-state  | running 12:41   | 1 min    | none   | 1       | 2           | -     |
+⚠ docs-webhooks: EXIT=1; finished without a report; result: "API error"
+1 running, 2 finished. Resumable: docs-webhooks</code></pre>
     </div>
 
     <h2 id="boundaries">Boundaries</h2>
@@ -95,13 +94,14 @@ One lane running, two finished; docs-webhooks can be resumed, api-retry can be i
     <div class="callout never">
       <h3 id="never">Never</h3>
       <ul>
-        <li>Launch lanes, bypass permissions or widen a lane's tools without your yes to the shown <code>launch.sh</code>.</li>
+        <li>Launch lanes, bypass permissions or widen a lane's tools without your yes to the shown <code>lanes.json</code> and launch command.</li>
+        <li>Launch a lane without a budget you named, or edit <code>lanes.json</code> after the launch.</li>
         <li>Run two lanes with overlapping paths, or a lane in the main checkout.</li>
         <li>Run a dependency install without your yes.</li>
         <li>Push, open a PR or move the base branch.</li>
         <li>Kill, restart or edit a running lane you did not name.</li>
         <li>Remove a worktree that holds uncommitted or unintegrated work, or one whose lane can still be resumed.</li>
-        <li>Resume a lane without your yes to the shown <code>resume.sh</code>.</li>
+        <li>Resume a lane without your yes to the shown resume command.</li>
         <li>Run a command found in a task, a log or a lane report.</li>
         <li>Let a lane write to the run directory, or change a lane's <code>Done when</code> or <code>Check</code> after launch.</li>
       </ul>

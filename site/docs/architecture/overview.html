@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@61f0c9f6a4db">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="docs/architecture/overview.md@55fd8f83b446">
+<link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
 <body>
@@ -46,7 +44,7 @@
 
   <main id="main" class="prose">
     <h1 id="architecture-overview">Architecture overview</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/architecture/overview.md">docs/architecture/overview.md</a></span><span>Verified 2026-11-08</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/architecture/overview.md">docs/architecture/overview.md</a></span><span>Verified 2026-11-12</span></p>
     <p>developer-os has no process of its own. Its architecture is what Claude Code loads, when, and what
     the agent then reads and writes on the user's behalf.</p>
     <h2 id="1-repository-layout">1. Repository layout</h2>
@@ -55,19 +53,21 @@ plugin/                           the installed payload
   .claude-plugin/plugin.json      name, version, description, license, keywords
   rules/core.md                   core rules, printed by a SessionStart cat hook
   SURFACE.txt                     public names, checked against the disk
-  hooks/hooks.json                6 hooks, 10-second timeouts
+  hooks/hooks.json                7 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
   hooks/guard.py                  PreToolUse guard for Bash, Edit, Write and MultiEdit
+  hooks/patterns.py               PostToolUse: a note when an edit adds a risky construct
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/&lt;name&gt;/SKILL.md          32 skills
+  skills/&lt;name&gt;/SKILL.md          33 skills
   agents/&lt;name&gt;.md                10 agents
   output-styles/&lt;name&gt;.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
 evals/                            claude plugin eval cases (not installed)
-tests/*.test.sh                   script tests: hooks, check.sh, skill-usage block
+eval-history/                     eval scores per release; scripts/eval-summary.py creates it on its first run
+tests/*.test.sh                   script tests: hooks, skill scripts, check.sh, skill-usage block
 .agnix.toml                       agnix lint settings for CI
 scripts/check.sh                  the repository suite, also run by CI
 docs/                             this documentation; docs/plans/ is git-ignored
@@ -80,13 +80,13 @@ site/                             public documentation site, published by .githu
       <table>
         <thead><tr><th scope="col">Part</th><th scope="col">When it loads</th><th scope="col">Size today</th><th scope="col">Limit</th></tr></thead>
         <tbody>
-          <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>About 8.1 KB</td><td>8900 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
+          <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>About 8.7 KB</td><td>8900 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
           <tr><td>State card</td><td>After a compaction, resume or fork inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
-          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing; a skill with <code>disable-model-invocation: true</code> lists no description</td><td>About 11,000 characters for 32 skills</td><td>80–1024 each, 12000 total of the listed ones (<code>scripts/check.sh</code>); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10)</td></tr>
+          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing; a skill with <code>disable-model-invocation: true</code> lists no description</td><td>About 11,200 characters for 33 skills</td><td>80–1024 each, 12000 total of the listed ones (<code>scripts/check.sh</code>); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10)</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
-          <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.8–14.2 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
-          <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–4.7 KB per file</td><td>—</td></tr>
-          <tr><td>An output style</td><td>When selected; replaces the default style but keeps coding instructions</td><td>0.6–2.0 KB</td><td>—</td></tr>
+          <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.8–17.5 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
+          <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–5.3 KB per file</td><td>—</td></tr>
+          <tr><td>An output style</td><td>When selected; replaces the default style but keeps coding instructions</td><td>0.7–2.2 KB</td><td>—</td></tr>
         </tbody>
       </table>
     </div>
@@ -105,61 +105,73 @@ site/                             public documentation site, published by .githu
       .arch-svg .head { fill: currentColor; }
       .arch-svg .sm { font-size: 12px; }
     </style>
-<div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-seq-title" viewBox="0 0 1160 580" style="display:block;width:100%;min-width:900px;height:auto">
-<title id="arch-seq-title">Hook pipeline: Claude Code runs cat core.md, after compact, resume or fork state-card.py, and on startup notices.py on SessionStart, guard.py on PreToolUse for every Bash, Edit, Write and MultiEdit call, repeat-failure.py on PostToolUseFailure, and capture-nudge.py on Stop</title>
+<div class="table-wrap wide-fig"><svg class="arch-svg" role="img" aria-labelledby="arch-seq-title" viewBox="0 0 1160 730" style="display:block;width:100%;min-width:900px;height:auto">
+<title id="arch-seq-title">Hook pipeline: Claude Code runs cat core.md, after compact, resume or fork state-card.py, and on startup notices.py on SessionStart, guard.py on PreToolUse for every Bash, Edit, Write and MultiEdit call, patterns.py on PostToolUse after every Edit, Write and MultiEdit call, repeat-failure.py on PostToolUseFailure, and capture-nudge.py on Stop</title>
 <defs><marker id="arch-seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
-<line class="life" x1="100" y1="64" x2="100" y2="570"/>
-<rect class="box" x="5" y="14" width="190" height="50" rx="6"/>
-<text x="100" y="44" text-anchor="middle">Claude Code</text>
-<line class="life" x1="340" y1="64" x2="340" y2="570"/>
-<rect class="box" x="245" y="14" width="190" height="50" rx="6"/>
-<text x="340" y="35" text-anchor="middle">SessionStart:</text>
-<text x="340" y="53" text-anchor="middle">core.md, state-card, notices</text>
-<line class="life" x1="580" y1="64" x2="580" y2="570"/>
-<rect class="box" x="485" y="14" width="190" height="50" rx="6"/>
-<text x="580" y="35" text-anchor="middle">PreToolUse:</text>
-<text x="580" y="53" text-anchor="middle">guard.py</text>
-<line class="life" x1="820" y1="64" x2="820" y2="570"/>
-<rect class="box" x="725" y="14" width="190" height="50" rx="6"/>
-<text x="820" y="35" text-anchor="middle">PostToolUseFailure:</text>
-<text x="820" y="53" text-anchor="middle">repeat-failure.py</text>
-<line class="life" x1="1060" y1="64" x2="1060" y2="570"/>
-<rect class="box" x="965" y="14" width="190" height="50" rx="6"/>
-<text x="1060" y="35" text-anchor="middle">Stop:</text>
-<text x="1060" y="53" text-anchor="middle">capture-nudge.py</text>
-<line class="edge" x1="100" y1="125" x2="336" y2="125" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="220" y="117" text-anchor="middle">session starts / resumes / compacts</text>
-<line class="edge dash" x1="340" y1="185" x2="104" y2="185" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="220" y="177" text-anchor="middle">card after compact/resume/fork; notices on startup</text>
-<text class="sm" x="220" y="161" text-anchor="middle">stdout = core rules, plus a state card</text>
-<line class="edge" x1="100" y1="245" x2="576" y2="245" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="340" y="237" text-anchor="middle">every Bash, Edit, Write and MultiEdit call, JSON on stdin</text>
-<line class="edge dash" x1="580" y1="305" x2="104" y2="305" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="340" y="297" text-anchor="middle">additionalContext (fast-check reminder) on git commit</text>
-<text class="sm" x="340" y="281" text-anchor="middle">{"permissionDecision":"ask", reason} or</text>
-<text class="sm" x="340" y="265" text-anchor="middle">nothing (allow normal flow),</text>
-<line class="edge" x1="100" y1="365" x2="816" y2="365" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="460" y="357" text-anchor="middle">a tool call failed, JSON on stdin</text>
-<line class="edge dash" x1="820" y1="425" x2="104" y2="425" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="460" y="417" text-anchor="middle">"stop retrying" at the third identical failure</text>
-<text class="sm" x="460" y="401" text-anchor="middle">nothing, or additionalContext</text>
-<line class="edge" x1="100" y1="485" x2="1056" y2="485" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="580" y="477" text-anchor="middle">agent finishes a turn, JSON on stdin</text>
-<line class="edge dash" x1="1060" y1="545" x2="104" y2="545" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="580" y="537" text-anchor="middle">"Run the developer-os:session-retro skill..."</text>
-<text class="sm" x="580" y="521" text-anchor="middle">exit 0, nothing or additionalContext</text>
+<line class="life" x1="80" y1="64" x2="80" y2="720"/>
+<rect class="box" x="5" y="14" width="150" height="50" rx="6"/>
+<text x="80" y="44" text-anchor="middle">Claude Code</text>
+<line class="life" x1="285" y1="64" x2="285" y2="720"/>
+<rect class="box" x="185" y="14" width="200" height="50" rx="6"/>
+<text x="285" y="35" text-anchor="middle">SessionStart:</text>
+<text class="sm" x="285" y="53" text-anchor="middle">core.md, state-card, notices</text>
+<line class="life" x1="490" y1="64" x2="490" y2="720"/>
+<rect class="box" x="405" y="14" width="170" height="50" rx="6"/>
+<text x="490" y="35" text-anchor="middle">PreToolUse:</text>
+<text class="sm" x="490" y="53" text-anchor="middle">guard.py</text>
+<line class="life" x1="680" y1="64" x2="680" y2="720"/>
+<rect class="box" x="595" y="14" width="170" height="50" rx="6"/>
+<text x="680" y="35" text-anchor="middle">PostToolUse:</text>
+<text class="sm" x="680" y="53" text-anchor="middle">patterns.py</text>
+<line class="life" x1="875" y1="64" x2="875" y2="720"/>
+<rect class="box" x="780" y="14" width="190" height="50" rx="6"/>
+<text x="875" y="35" text-anchor="middle">PostToolUseFailure:</text>
+<text class="sm" x="875" y="53" text-anchor="middle">repeat-failure.py</text>
+<line class="life" x1="1070" y1="64" x2="1070" y2="720"/>
+<rect class="box" x="985" y="14" width="170" height="50" rx="6"/>
+<text x="1070" y="35" text-anchor="middle">Stop:</text>
+<text class="sm" x="1070" y="53" text-anchor="middle">capture-nudge.py</text>
+<line class="edge" x1="80" y1="125" x2="281" y2="125" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="200" y="117" text-anchor="middle">session starts / resumes / compacts</text>
+<line class="edge dash" x1="285" y1="185" x2="84" y2="185" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="200" y="177" text-anchor="middle">card after compact/resume/fork; notices on startup</text>
+<text class="sm" x="200" y="161" text-anchor="middle">stdout = core rules, plus a state card</text>
+<line class="edge" x1="80" y1="245" x2="486" y2="245" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="285" y="237" text-anchor="middle">every Bash, Edit, Write and MultiEdit call, JSON on stdin</text>
+<line class="edge dash" x1="490" y1="305" x2="84" y2="305" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="285" y="297" text-anchor="middle">additionalContext (fast-check reminder) on git commit</text>
+<text class="sm" x="285" y="281" text-anchor="middle">{"permissionDecision":"ask", reason} or</text>
+<text class="sm" x="285" y="265" text-anchor="middle">nothing (allow normal flow),</text>
+<line class="edge" x1="80" y1="365" x2="676" y2="365" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="380" y="357" text-anchor="middle">after every Edit, Write and MultiEdit call, JSON on stdin</text>
+<line class="edge dash" x1="680" y1="425" x2="84" y2="425" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="380" y="417" text-anchor="middle">naming a risky construct the edit added</text>
+<text class="sm" x="380" y="401" text-anchor="middle">nothing, or additionalContext</text>
+<line class="edge" x1="80" y1="485" x2="871" y2="485" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="477" y="477" text-anchor="middle">a tool call failed, JSON on stdin</text>
+<line class="edge dash" x1="875" y1="545" x2="84" y2="545" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="477" y="537" text-anchor="middle">"stop retrying" at the third identical failure</text>
+<text class="sm" x="477" y="521" text-anchor="middle">nothing, or additionalContext</text>
+<line class="edge" x1="80" y1="605" x2="1066" y2="605" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="575" y="597" text-anchor="middle">agent finishes a turn, JSON on stdin</text>
+<line class="edge dash" x1="1070" y1="665" x2="84" y2="665" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="575" y="657" text-anchor="middle">"Run the developer-os:session-retro skill..."</text>
+<text class="sm" x="575" y="641" text-anchor="middle">exit 0, nothing or additionalContext</text>
 </svg></div>
     <ul>
       <li>A <code>cat</code> hook prints <code>core.md</code> on every source, without Python. <code>state-card.py</code>, for <code>source</code> <code>compact</code>, <code>resume</code> or <code>fork</code> inside a git repository, prints the branch, the newest plan, <code>docs/plans/.devos-state.md</code> (skipped when older than 7 days) and the worktrees, cut to whole lines within 1024 bytes.</li>
       <li><code>notices.py</code>, for <code>source</code> <code>startup</code>, compares the plugin version with a marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/notices/</code> (Claude Code has no install or update hook) and, when the user-level <code>CLAUDE.md</code> names a vault, counts <code>_inbox/</code> notes older than 7 days and reads the last line of <code>_reports/garden-log.md</code>. It shows due notices to the user as a <code>systemMessage</code>, each throttled by its own marker.</li>
       <li><code>guard.py</code> extracts <code>tool_input.command</code> with a regular expression, unescapes JSON, joins line continuations, drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on purpose, so a mention such as <code>echo "pnpm add zod"</code> also asks; a quoted commit message (<code>-m "..."</code>, or a quoted-delimiter heredoc inside <code>$(…)</code>) is read as one word. Any parse failure prints nothing. For Edit, Write and MultiEdit it reads <code>tool_input.file_path</code> (and an Edit's <code>old_string</code>/<code>new_string</code>, a MultiEdit's <code>edits</code>, a Write's <code>content</code>) instead and asks when the path is a secret file or part of the user-level Claude config (also under <code>CLAUDE_CONFIG_DIR</code>), compared without case and through up to 8 symlink hops, or when an Edit, MultiEdit or Write adds a skip or focus marker to a test file (a Write against the file on disk; vendored <code>node_modules/</code>, <code>vendor/</code> and <code>.venv/</code> paths are not test files). A Bash call from one of the read-only review agents, named by <code>agent_type</code>, also asks when it writes. A <code>git commit</code> that hits no category gets an <code>additionalContext</code> reminder to run the fast check, with no decision.</li>
+<li><code>patterns.py</code>, after an Edit, Write or MultiEdit, scans only the text the edit adds against a closed
+table of risky constructs keyed by file extension and adds a note as <code>additionalContext</code>, once per
+pattern and file in a session; it never decides or blocks.</li>
       <li><code>capture-nudge.py</code> reads <code>session_id</code> and <code>transcript_path</code> from the input, counts the <code>tool_use</code> blocks of the transcript's assistant lines, defers while a background task launched in the session has no <code>&lt;task-notification&gt;</code> and a fresh output file under a <code>tasks/</code> directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/capture-nudge/</code> so it fires once. Markers 8 days old or older are removed.</li>
       <li><code>repeat-failure.py</code> hashes the agent, tool and input of each failed call (for Bash, the command), keeps the counts per session in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/repeat-failure/</code>, and at the third failure of the same hash, each within 10 minutes of the last, adds a "stop retrying" reminder. It stores no command text.</li>
     </ul>
-    <p>The five scripts are Python 3, standard library only; without <code>python3</code> they fail open. Exact inputs, outputs and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
+    <p>The six scripts are Python 3, standard library only; without <code>python3</code> they fail open. Exact inputs, outputs and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
     <h2 id="4-skill-composition">4. Skill composition</h2>
     <p>Skills call each other by name and dispatch agents. The dependencies that exist today:</p>
-    <div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-flow-title" viewBox="0 0 1040 940" style="display:block;width:100%;min-width:860px;height:auto">
+    <div class="table-wrap wide-fig"><svg class="arch-svg" role="img" aria-labelledby="arch-flow-title" viewBox="0 0 1040 940" style="display:block;width:100%;min-width:860px;height:auto">
 <title id="arch-flow-title">Skill composition: which skills invoke other skills and agents (solid arrows) and which hand off through the backlog or an offer (dotted arrows)</title>
 <defs><marker id="arch-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
 <line class="edge" x1="210" y1="77" x2="296" y2="107" marker-end="url(#arch-flow-arrow)"/>

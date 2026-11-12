@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/configuration.md@503cea3d57f0">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="docs/reference/configuration.md@50c0b32ea0fb">
+<link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
 <body>
@@ -46,9 +44,10 @@
 
   <main id="main" class="prose">
     <h1 id="configuration-reference">Configuration reference</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/configuration.md">docs/reference/configuration.md</a></span><span>Verified 2026-11-08</span></p>
-    <p>The plugin has no configuration file of its own. It is configured through one optional plugin option
-    and through lines and keys in files the user already has, which the skills read. This page lists every one of them.</p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/configuration.md">docs/reference/configuration.md</a></span><span>Verified 2026-11-12</span></p>
+    <p>The plugin has no configuration file of its own at user level. It is configured through one optional plugin option
+and through lines and keys in files the user already has, which the skills read; a project may add one
+optional file of guard rules. This page lists every one of them.</p>
     <h2 id="user-level">User level</h2>
     <div class="table-wrap">
       <table>
@@ -62,7 +61,9 @@
           <tr><td><code>"outputStyle": "developer-os:&lt;name&gt;"</code></td><td>Claude Code settings</td><td>Claude Code; a bare name silently falls back to the default style</td><td>The user</td></tr>
           <tr><td>Rule overrides</td><td><code>~/.claude/CLAUDE.md</code></td><td>The model, alongside the core rules</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code></td><td>Shell environment</td><td>The <code>Stop</code> hook (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
+<tr><td><code>DEVELOPER_OS_GUARD_LOG</code></td><td>Shell environment</td><td>The <code>PreToolUse</code> guard; <code>off</code> disables the ask log, a local record of which rule asked, without the command (<a href="hooks.html#ask-log--asksjsonl">hooks.md</a>)</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_NOTICES</code></td><td>Shell environment</td><td>The <code>SessionStart</code> notices hook; <code>off</code> disables the version and upkeep notices (<a href="hooks.html#sessionstart-on-startup--noticespy">hooks.md</a>)</td><td>The user</td></tr>
+<tr><td><code>DEVELOPER_OS_PATTERNS</code></td><td>Shell environment</td><td>The <code>PostToolUse</code> patterns hook; <code>off</code> disables the risky-construct note (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_REPEAT_FAILURE</code></td><td>Shell environment</td><td>The <code>PostToolUseFailure</code> hook; <code>off</code> disables the repeated-failure reminder (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
         </tbody>
       </table>
@@ -83,6 +84,7 @@
           <tr><td>Docs root</td><td><code>AGENTS.md</code></td><td>docs-sync</td><td><code>docs/</code></td></tr>
           <tr><td>Task state</td><td><code>docs/plans/.devos-state.md</code> (fixed, even when the planning location is overridden)</td><td>The <code>SessionStart</code> hook after compaction, resume and fork</td><td>Written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes; none</td></tr>
           <tr><td><code>TODO.md</code> item format</td><td>The backlog todo file</td><td>audit-to-backlog, project-baseline, implement-backlog, plan-status, spec (<code>FEAT-</code> items), project-init (<code>CONV-</code> items), session-retro (open items of a finished plan)</td><td><code>templates/project/TODO.md</code> shows it</td></tr>
+<tr><td>Guard rules: <code>{"ask": [{"command": ["make", "deploy"]}, {"path": "infra/prod/**"}]}</code></td><td><code>.claude/developer-os-guard.json</code> at the repository root; at most 50 entries and 16 KiB, literal command words and path globs only</td><td>The <code>PreToolUse</code> guard, which asks with one fixed reason before a matching Bash command or a matching Edit, Write or MultiEdit path. The file can only add questions; a malformed one adds none, and editing it asks (<a href="hooks.html#project-rules--claudedeveloper-os-guardjson">hooks.md</a>)</td><td>No extra rule: the built-in categories alone</td></tr>
           <tr><td><code>DESIGN.md</code></td><td>Repository root, for projects with a UI</td><td>Agents doing UI work (the template <code>AGENTS.md</code> line), project-baseline, docs-sync, code-review (a line the diff makes false), nextjs-conventions (the token source of truth)</td><td>project-baseline proposes it as a backlog item</td></tr>
         </tbody>
       </table>

@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-12
 ---
 
 # Decisions
@@ -43,6 +43,10 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-11-08:** a stdlib script may also sit beside a skill, run by that skill and checked by
   the Imports stage: `plugin/skills/session-retro/harvest.py`, which reads past session transcripts for
   session-retro's window mode (FLOW-55).
+- **Amended 2026-11-12:** a sixth hook script, `patterns.py` (D6), and two more scripts beside a skill:
+  `parallel-lanes/lanes.py` (D23) and `setup-check/check.py`. All are standard library only, inside the
+  Imports allowlist. `check.py` opens no connection itself but runs `gh auth status`, which asks GitHub
+  whether the login works. `scripts/eval-summary.py` is repository tooling outside the plugin.
 
 ## D3. The vault is read and written with the agent's own file tools
 
@@ -60,6 +64,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `status: archived`; nothing is deleted.
 - **Why:** an unreviewed agent note is a draft, not a fact; approval is the one step that keeps the
   vault trustworthy. Archiving keeps mistakes recoverable.
+- **Amended 2026-11-12:** an inbox note expires 30 days after `created` (`expires:`, or `created` + 30
+  days without the key); brain-search stops answering from it and brain-review shows the expired notes
+  as one group. "archive the expired ones" names that shown group and nothing else; an expired note
+  still moves only on the user's answer, and `active` notes never expire. The inbox had grown to 82
+  notes with no review.
 
 ## D5. Find the vault through a `Brain vault:` line
 
@@ -176,6 +185,29 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   migrate:fresh`/`migrate:reset`/`db:wipe`, `rails db:drop`/`db:reset`, `dropdb`, `docker compose down
   -v`, `kubectl delete`, `helm uninstall`, `vercel --prod`. Users without their own deny list had no
   check on these in auto mode; users of destructive_command_guard already have one (SEC-08).
+- **Amended 2026-11-12:** the guard also asks before cloud deletes, database drops, Docker volume and
+  system cleanup, publish, merge and remote-delete commands, and a downloaded script piped into a shell
+  (closed tables in command position; each reason ends with the safer form); before an Edit, Write or
+  MultiEdit from a linked worktree into another worktree of the same repository; and for rules a
+  project adds in `.claude/developer-os-guard.json`, which can only add an `ask` with a fixed plugin
+  reason (D5, D16: no project text reaches the model, and a malformed file adds nothing). Every ask is
+  appended to a local log (`guard/asks.jsonl` in the plugin data directory: time, reason, rule, tool,
+  never the command), so the noise of each rule can be measured; the ask is printed first and a log
+  failure changes nothing. Still `ask` only, and every new check fails open.
+- **Amended 2026-11-12:** a Bash command the guard cannot scan inside the hook timeout asks (`slow`)
+  instead of failing open: the scan is quadratic in command-position words, a hook that times out lets
+  Claude Code run the command unchecked, and a command padded to that size is the one case built to
+  get past the guard. The bound is the command's size (command-position words times words in one view
+  above 1,500,000, computed in linear time before the scan), with a 4-second backstop between views.
+- **Amended 2026-11-12:** the same classes take the forms the first tables missed: `gsutil rb` and
+  `gsutil rm` with a recursive flag, `gcloud storage rm -r`, `aws s3 sync --delete`, an aws operand that
+  starts `batch-delete-`, `npm unpublish` and `deprecate`, `python -m twine upload`, `gh api` with the
+  DELETE method, a download piped into an interpreter that reads its program from the pipe
+  (`curl u | python3`; `python3 -m json.tool` reads data and passes), a bracket after the pipe
+  (`curl u | (sh)`) and `. <(curl u)`. `--dry-run=false` no longer counts as a dry run (PR #141 review).
+- **Amended 2026-11-12:** a seventh hook, `patterns.py` on `PostToolUse` for Edit, Write and MultiEdit,
+  adds `additionalContext` (no decision, no block) when an edit adds one of a closed table of risky
+  constructs; once per pattern and file in a session, fail open, `DEVELOPER_OS_PATTERNS=off`.
 
 ## D7. One wrap-up nudge per long session
 
@@ -216,6 +248,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `*-conventions` are exempt. `scripts/check.sh` enforces it.
 - **Why:** the stop point and the forbidden side effects are the contract a user relies on; a
   check keeps new skills from omitting them.
+- **Amended 2026-11-12:** `setup-check` joins the read-only skills in `scripts/check.sh`; it reads the
+  machine's tools and user-level config and writes nothing. It still carries both sections.
 
 ## D10. Fixed per-session budget
 
@@ -340,6 +374,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-11-08:** `scripts/check.sh` runs agnix when it is on `PATH` and fails in CI without it, so a
   contributor who has it sees CI's result before pushing; CI only sets up the pinned binary. A local install stays
   optional: without it the stage prints `SKIP agnix`.
+- **Amended 2026-11-12:** CI pins agnix v0.61.0 with its new SHA-256, `actions/checkout` v7.0.1 and Claude
+  Code 2.1.322 (`claude_code` in `.agnix.toml` moves with it, the Tool versions stage).
 
 ## D19. A Codex installer that copies, not symlinks (superseded by D21)
 
@@ -410,6 +446,23 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Alternatives:** dispatching lanes as subagents (implement-backlog's model, kept for backlog
   items); `--dangerously-skip-permissions` (rejected for the reason above); `nohup` alone (the lane
   stays in the harness's process group, which kills background jobs after about 29 minutes).
+- **Amended 2026-11-12:** the user approves the shown `lanes.json` and one `lanes.py launch` command
+  instead of a `launch.sh`; `lanes.py` (stdlib, beside the skill, tested by `tests/lanes.test.sh`)
+  launches, reports and resumes the lanes. Every lane runs under a `--max-budget-usd` the user names
+  per lane, with no default, and `--output-format json`; a lane cut off by its budget ends without
+  `DONE` and is resumed like one cut off by `--max-turns`, with the same `--max-budget-usd` passed
+  again. Integrate previews conflicts between `DONE` lanes before the first merge, moving no ref and
+  changing no working-tree file. The guard's worktree rule (D6) does
+  not block a lane: its report path is inside its own worktree.
+- **Amended 2026-11-12:** a lane's tool list always denies edits of `.git` and anything under it, and
+  `lanes.py` runs git with `core.fsmonitor` and hooks off, with a timeout: a lane that rewrote its
+  worktree's `.git` file could point git at a config of its own, whose commands would then run in the
+  lane's `git status` and in the orchestrator's. Status marks such a lane without running git in it and
+  Resume refuses it. A `pids.txt` line counts only with a lane name, a numeric PID and a UUID session id,
+  since a lane can write that file through an allowed git output path (`git diff --output=<file>`, a
+  risk the launch question names) and its words would otherwise reach `claude` as options. `lanes.json`
+  is refused when a budget or turn cap is not a finite number, a `fast_check` holds a bracket or a
+  comma, or an `allow` entry is not one tool rule: each would grant more than the approved file shows.
 
 ## D24. The vault is the one long-term store; auto memory is off by recommendation
 
@@ -533,3 +586,22 @@ here before reversing a rule.
 | 2026-11-08 | audit-to-backlog briefs reviewers with a KEEP/DROP impact rubric, rejects a `Check` joined by prose, ending in `\| head`, already passing or restating the current code, runs each P1/P2 `Check` red before writing the item, and recommends re-verifying an old backlog (#126) | `audit-to-backlog` | About 30% of P2/P3 items were dropped on re-verification and 5 of about 50 P1/P2 Checks were wrong |
 | 2026-11-08 | implement-backlog runs parallel delegates with a git-ignored backlog (uncommitted `Owner` lines, full item text in each brief) and has an optional PR ending, only on request, that pushes the batch branch and opens a PR it never merges; implement-backlog and parallel-lanes run the project's regeneration command for derived files after each lane merge and every `Check` from the worktree root (#134; D17 amended) | `implement-backlog`, `parallel-lanes`, `audit-to-backlog` | A git-ignored backlog forced sequential work, a requested PR had no steps, site hashes conflicted on every lane merge, and a `Check` run from another checkout tested the wrong tree |
 | 2026-11-08 | session-retro with a window (`14d`, a date, `all`) runs `harvest.py` on past transcripts and proposes at most five lessons from its candidates, routed to the vault, project docs or a hook/check proposal, never to `CLAUDE.md`/`AGENTS.md` without approval of that file by name; transcript text is data | `session-retro` | Corrections spread across sessions were never collected, so the same correction recurred (FLOW-55) |
+| 2026-11-12 | An interrupted lane is resumed only through parallel-lanes' Resume mode, otherwise replaced by a fresh, smaller one; reverses "never resume an interrupted lane" from #113 (`ddc711b6`) | `plugin/rules/core.md` | The rule contradicted D23, which defines Resume for a lane cut off without a final report; the user chose Resume |
+| 2026-11-12 | Look up the vault before deciding: run brain-search on the topic when a vault is configured, skip silently without one; in implement-backlog a note that contradicts an item's `Problem` fails triage point 4 | `spec`, `bug-triage`, `audit-to-backlog`, `implement-backlog` | Earlier decisions and rejected approaches were not read where new decisions are made |
+| 2026-11-12 | Rules stated for any language; per-language examples moved to `references/<lang>.md`; error-handling-conventions applies to server and library code in any language | `error-handling-conventions`, `testing-conventions`, `project-init` | The rules named TypeScript-only APIs and did not apply to Python, Go or PHP code |
+| 2026-11-12 | New step: discover the project's conventions and propose `docs/reference/conventions.md` with `file:line` evidence; Python, Go and PHP probes; Audit is step 5 and Report step 6 | `project-init` | A non-JS repository got no conventions finding |
+| 2026-11-12 | Rows name the practice first, tools as examples; the decisions list is stack-free; new rows: actions pinned to a SHA, workflow audit, lockfile vulnerability scan, `enableAllProjectMcpServers` not `true`; the sandbox row adds `allowUnsandboxedCommands: false` and `~/.kube`, `~/.npmrc`, `~/.config/gh` | `project-baseline` | Rows and decisions assumed a JS stack; supply-chain and agent-hardening gaps. Setting names checked against the Claude Code docs on 2026-11-12 |
+| 2026-11-12 | Research map before the first question; `[NEEDS CLARIFICATION: …]` markers listed under Open questions; WHEN/THEN acceptance criteria that step 6 turns into the `Check` | `spec` | The spec decided before showing what it read, guessed at unknowns and wrote uncheckable criteria |
+| 2026-11-12 | The Never line reads "a note or shown group the user did not name": "archive the expired ones" names the Expired group shown in that run, and a range answer covers only the page shown last | `brain-review` | Expired inbox notes are archived as a group and a large inbox is answered by ranges; neither names notes one by one, and silence still moves nothing (D4) |
+| 2026-11-12 | brain-capture writes `expires:`, `refs:` and `verified:`; brain-search skips expired inbox notes and marks a claim whose `refs:` file changed since `verified`; brain-garden and brain-project-refresh report both | `brain-capture`, `brain-search`, `brain-garden`, `brain-project-refresh` | Unreviewed notes stayed answerable forever, and a note about changed code read as current |
+| 2026-11-12 | Check candidates may propose one entry for the project's `.claude/developer-os-guard.json` when the repeated mistake is a command or a path to ask about first | `session-retro` | A mechanical correction had no destination but prose; the guard now reads tighten-only project rules (D6) |
+| 2026-11-12 | The skill writes `lanes.json`, asks for a budget per lane and runs `lanes.py` for launch, status, resume and the conflict preview | `parallel-lanes` | The launch and resume scripts were retyped by the model on every run and had no test; a lane had no cost cap (D23) |
+| 2026-11-12 | Only an `active` note that contradicts an item's `Problem` fails triage point 4; an inbox note is reported as context and the item stays | `implement-backlog` | An unreviewed inbox note is a draft, not a fact (D4), and it could drop an item from a batch (PR #141 review) |
+| 2026-11-12 | A documented project convention wins over a skill rule only on shape and naming (error-handling) or layout and tooling (testing); it never permits a swallowed error, a lost cause, internals in a response, an unseen-red regression test, a skipped test or a raised retry | `error-handling-conventions`, `testing-conventions` | The override had no limit, so one line in a project doc could switch a safety rule off (PR #141 review) |
+| 2026-11-12 | The `Expired` group belongs to the page shown, so its numbers are in range like the others | `brain-review` | A number in the group read either as in range or as outside the page, and two readings gave different actions (PR #141 review) |
+| 2026-11-12 | The changed-ref check runs as `git -C <repository root>` | `brain-project-refresh` | Run from a subdirectory, the relative path matched nothing and read as "no change" (PR #141 review) |
+| 2026-11-12 | A lane never edits `.git`; `fast_check` holds no bracket or comma and each `allow` entry is one tool rule; Status and Resume refuse a lane whose worktree `.git` file changed; the launch question names the `git diff --output` risk | `parallel-lanes` | A lane could run its own commands through a rewritten `.git` file, or reach `claude` options through `pids.txt` (PR #141 security review, D23) |
+| 2026-11-12 | A gate or test is seen red by mutating with an edit and undoing that edit, not with git | `plugin/rules/core.md` | `git checkout -- <path>` discards other uncommitted work and a command guard blocks it, which left no documented way to revert a mutation (#140) |
+| 2026-11-12 | Undo a test mutation by hand; never revert it with `git checkout`, `git restore` or `git stash` | `testing-conventions` | The same gap, stated where tests are written (#140) |
+| 2026-11-12 | Two sessions sharing a checkout announce a commit, a branch switch or an edit of a shared file and wait before a commit or switch; when the message cannot be delivered, an edit proceeds after a `git status` check before and after and a note to the user, and a commit or switch stops and asks | `plugin/rules/core.md` | The announce rule had no path for a peer that `SendMessage` could not reach (#139) |
+| 2026-11-12 | The paging sentence names the lower-case `recommend:`, a reason in brackets on every line, the current page only and the literal question "Approve which ones?" | `brain-review` | The first eval run of brain-review-pages scored 0.70: the model capitalised the keyword, left most lines without a reason, summarised page two and paraphrased the question; 1.00 over three runs after the change |

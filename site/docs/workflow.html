@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@6c8a10c66ac2">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="docs/workflow.md@70dca1ea4bae">
+<link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
@@ -46,7 +44,7 @@
 
   <main id="main" class="prose">
     <h1 id="how-to-work-brain--code">How to work: brain + code</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/workflow.md">docs/workflow.md</a></span><span>Verified 2026-10-16</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/workflow.md">docs/workflow.md</a></span><span>Verified 2026-11-12</span></p>
     <p>This is the workflow developer-os is built for. The plugin gives the agent skills; this document
 tells you when to use them and where each piece of knowledge belongs.</p>
     <h2 id="the-idea">The idea</h2>
@@ -96,7 +94,9 @@ the project has no UI. <code>TODO.md</code> shows the backlog item format with o
 <code>.gitignore</code> keeps <code>docs/plans/</code> out of git; merge it into an existing one.
 The marketplace install keeps the templates on disk:
 <code>cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/</code> copies
-them and, with <code>-n</code>, skips every file the project already has.
+them and, with <code>-n</code>, skips every file the project already has. Without the copy, project-init and
+docs-sync propose the missing files one by one; the setup-check skill reports what the machine itself
+lacks (<code>python3</code>, <code>rg</code>, <code>jq</code>, <code>gh</code>, the vault path).
 <code>docs/</code> holds the index (task → doc routing), <code>CURRENT-STATE.md</code> (verified at a commit),
 <code>pitfalls.md</code>, <code>decisions/</code> and <code>runbooks/</code>. The docs-sync skill scaffolds missing pieces, refreshes
 <code>CURRENT-STATE.md</code> and reports docs-vs-code drift; project-baseline proposes missing engineering
@@ -132,6 +132,9 @@ because every imported line loads into every session.</p>
 <tr><td>Check what loads</td><td><code>/memory</code> lists the instruction files and shows the auto-memory toggle; <code>/context</code> shows what loaded</td></tr>
 <tr><td>Move existing auto memory into the vault</td><td><code>brain-import-memory</code>, once per project; the files stay where they are</td></tr>
 <tr><td>Fewer reminders</td><td><code>DEVELOPER_OS_NOTICES=off</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE=off</code> (<a href="reference/hooks.html#environment-variables">hooks</a>)</td></tr>
+<tr><td>Skill descriptions that are not cut</td><td>Claude Code drops the descriptions of the least-used skills when the listing exceeds 1% of the context window; raise it with <code>"skillListingBudgetFraction": 0.02</code> in <code>~/.claude/settings.json</code>, or disable plugins you do not use</td></tr>
+<tr><td>Room for this plugin's descriptions</td><td>Set your own rarely used skills to <code>"name-only"</code> in <code>skillOverrides</code>; the setting does not apply to plugin skills, so developer-os skills keep their descriptions</td></tr>
+<tr><td>See what the listing costs</td><td><code>/doctor</code> estimates the listing's context cost; <code>/skill-doctor</code> shows the cost and use of each skill</td></tr>
 </tbody>
 </table>
 </div>

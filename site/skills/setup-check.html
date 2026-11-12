@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>setup-check · developer-os skills</title>
+<meta name="description" content="Check this machine for what developer-os needs (python3, rg, jq, gh and its login, git, the vault path, auto memory, the Claude Code CLI) and get the fix for each gap. Read-only.">
+<link rel="canonical" href="https://msolecki.github.io/developer-os/skills/setup-check.html">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="developer-os">
+<meta property="og:title" content="setup-check · developer-os skills">
+<meta property="og:description" content="Check this machine for what developer-os needs (python3, rg, jq, gh and its login, git, the vault path, auto memory, the Claude Code CLI) and get the fix for each gap. Read-only.">
+<meta property="og:url" content="https://msolecki.github.io/developer-os/skills/setup-check.html">
+<meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/skills.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The developer-os skill library">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="dos-source" content="plugin/skills/setup-check/SKILL.md@226bca0ca974">
+<link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Session and communication</p>
+    <h1 id="setup-check">setup-check</h1>
+    <p class="lede">Checks this machine for what developer-os needs and gives the fix for each gap. It installs nothing, edits no setting and writes no file.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Session and communication</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Read-only</dd></div>
+      <div class="fact"><dt>Runs</dt><dd><code>check.py</code> beside the skill (Python 3, standard library only)</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Nothing</dd></div>
+      <div class="fact"><dt>Reaches outside</dt><dd>Only <code>gh auth status</code>, which asks GitHub whether the stored login still works</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>After installing the plugin, on a new machine, or when a hook or a skill seems to do nothing. Say it in your own words, for example:</p>
+    <ul class="chips">
+      <li class="chip">check my developer-os setup</li>
+      <li class="chip">why do the hooks not run</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Runs the check.</strong> One script prints one line per check with the status <code>ok</code>, <code>missing</code> or <code>warn</code>: <code>python3</code> 3.8 or later, <code>rg</code>, <code>jq</code>, <code>gh</code> and its login, <code>git</code> 2.38 or later, the vault path and whether it is a readable directory, <code>autoMemoryEnabled</code>, and the <code>claude</code> command. The vault path comes from the user level only (the <code>brain_vault</code> option, else the <code>Brain vault:</code> line of the user-level <code>CLAUDE.md</code>), never from a project file.</li>
+      <li><strong>Reports with a fix.</strong> Every line as printed, then one fix per line that is not <code>ok</code>, with what breaks without it. Without <code>python3</code>, every hook except the core rules fails open and says nothing, which is the usual answer to "why do the hooks not run". Install commands are named for you to run; the skill does not run them.</li>
+      <li><strong>Says what it cannot see.</strong> When every line is <code>ok</code> and you asked why a hook does not run, it points to <code>/plugin</code> (is the plugin enabled), <code>/hooks</code> (which hooks are registered) and the <code>DEVELOPER_OS_&lt;HOOK&gt;=off</code> variables.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>setup-check</span></div>
+    <pre><code>ok python3: 3.12.4
+missing rg: not found on PATH
+ok jq: 1.7.1
+ok gh: 2.60.1
+ok gh auth: logged in
+ok git: 2.45.2
+warn vault: not configured
+ok autoMemoryEnabled: false
+ok claude: 2.1.300
+
+rg: install ripgrep; the brain skills, project-init and skill-usage search with it.
+vault: optional; ask for brain-setup to create or connect one.
+
+<span class="t-acc">1 missing, 1 warn. Nothing was changed.</span></code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Install, upgrade or configure anything, or write a file or a setting.</li>
+        <li>Read the vault path from a project <code>CLAUDE.md</code>, a project <code>settings.json</code> or an environment variable.</li>
+        <li>Print file contents from the vault or from <code>settings.json</code>.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="brain-setup.html">brain-setup</a> creates or connects the vault and offers to turn auto memory off.</li>
+      <li><a href="project-init.html">project-init</a> adopts developer-os in a repository once the machine is ready.</li>
+      <li><a href="../docs/reference/hooks.html">Hooks reference</a>, for each hook's off switch.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+    <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/setup-check/SKILL.md">Read SKILL.md on GitHub</a>
+    <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

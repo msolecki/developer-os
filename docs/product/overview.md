@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-08
+last-verified: 2026-11-12
 ---
 
 # Product overview
@@ -27,8 +27,10 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
    conventions skills, ten agents (nine specialists and a verifier), four output styles and small hooks, among them a guard on Bash, Edit, Write and MultiEdit.
 
-The plugin is Markdown and JSON plus five Python 3 hook scripts (standard library only). There is no server, database,
-index, binary, background job or network call in the plugin itself.
+The plugin is Markdown and JSON plus six Python 3 hook scripts (standard library only). There is no server, database,
+index, binary or network call in the plugin's hooks. Two skill scripts start other programs: setup-check runs
+`gh auth status`, which asks GitHub whether the login works, and parallel-lanes starts the `claude -p` lanes
+the user approved.
 
 ## Who it is for
 
@@ -66,11 +68,11 @@ In scope for the first release:
 |---|---|---|
 | Brain skills | 8 | `plugin/skills/brain-*` |
 | Engineering skills | 15 | `plugin/skills/` |
-| Session skills | 2 (session-retro, skill-usage) | `plugin/skills/` |
+| Session skills | 3 (session-retro, skill-usage, setup-check) | `plugin/skills/` |
 | Conventions skills | 7 (`*-conventions`) | `plugin/skills/` |
 | Agents | 10 | `plugin/agents/` |
 | Output styles | 4 | `plugin/output-styles/` |
-| Hooks | 6 (three on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash, Edit, Write and MultiEdit, one on `PostToolUseFailure`) | `plugin/hooks/hooks.json` |
+| Hooks | 7 (three on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash, Edit, Write and MultiEdit, one on `PostToolUse` for Edit, Write and MultiEdit, one on `PostToolUseFailure`) | `plugin/hooks/hooks.json` |
 | Core rules | 1 file | `plugin/rules/core.md` |
 | Vault template | 1 | `plugin/vault-template/` |
 | Project template | 1 | `templates/project/` (in the repository, not in the installed plugin) |

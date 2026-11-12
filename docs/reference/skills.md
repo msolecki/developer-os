@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-12
 ---
 
 # Skills reference
@@ -21,23 +21,30 @@ and audit skills below in one pass.
 
 [Source](../../plugin/skills/project-init/SKILL.md). Adopts developer-os in a repository in one pass.
 
-- **Stack:** reads the manifests and config on disk: the lockfile, `tsconfig.json`, `next.config.*`,
+- **Stack:** reads the manifests and config on disk: the lockfile, the language manifests
+  (`package.json` and `tsconfig.json`, `pyproject.toml`, `go.mod`, `composer.json`), `next.config.*`,
   test files and runner, CI workflows, infrastructure code, API routes or handlers, a database and
   migrations, a UI. It runs nothing to find them.
 - **Which skills apply:** project-baseline and docs-sync always; instruction-review when a
   `CLAUDE.md`/`AGENTS.md` exists; each conventions skill when its stack is present (typescript:
   `tsconfig.json` or `*.ts`; nextjs: `next.config.*` or a `next` dependency; testing: test files;
-  error-handling: TypeScript server code, API routes or handlers; monitoring: infrastructure, CI workflows, alerts or health endpoints;
+  error-handling: server or library code in any language; monitoring: infrastructure, CI workflows, alerts or health endpoints;
   defensive-coding: external input, authentication, money, concurrency,
   persistence or error paths).
   comments-conventions is never audited, since it governs only comments an agent adds;
   deploy-checklist is never run, since it runs the project's gates and belongs to a release.
 - **Process skills:** runs project-baseline, docs-sync and instruction-review up to their reports
   and collects their items instead of asking their questions one by one.
+- **The project's own conventions:** before any audit it reads the linter, formatter and test
+  config, the test layout and three representative modules, and proposes
+  `docs/reference/conventions.md` as one numbered item: each rule the code follows consistently, with
+  the `file:line` it came from. A rule seen once is a question; a convention the project already
+  documents wins over a skill rule and is reported as `deliberate`.
 - **Conventions audit:** for each applicable conventions skill, one probe per rule (`rg` or a
   config read, for example `"strict": true`, empty `catch {}`, date fixtures without `Z`, mock
   factories that do not spread the original module, a `/health` handler that queries the
-  database). Judgment rules (function size, composition) are sampled: at most five `file:line`
+  database; for Python, Go and PHP, a bare `except:`, a discarded `err`, an empty `catch` and the
+  like, from `references/<lang>.md` beside the error-handling and testing skills). Judgment rules (function size, composition) are sampled: at most five `file:line`
   cases per rule plus the total. Unsure is a question, not a finding; findings are verified as in
   audit-to-backlog. Findings become `CONV-NN`
   backlog items with a `Check` that fails while the violation is there.
@@ -50,18 +57,19 @@ and audit skills below in one pass.
 
 ### project-baseline
 
-[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 17 engineering
-practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog item.
+[Source](../../plugin/skills/project-baseline/SKILL.md). A presence check for 21 engineering
+practices; each one has a probe that reads files only, except the dependency probe, which runs the package
+manager's outdated report, and a missing one becomes a `BASE-NN` backlog item.
 
 | Practice | Present when |
 |---|---|
-| Env through one validated module | one module parses `process.env` with a schema, and `rg` finds no direct env reads elsewhere |
+| Env through one validated module | one module reads the environment through a schema (zod, pydantic-settings, envconfig, a typed config class), and `rg` finds no direct env reads elsewhere |
 | Agent deny-list for secrets | `.claude/settings.json` `permissions.deny` covers `.env*`, `*.pem`, `*.key` |
-| Secret scanning in CI | a CI step runs gitleaks, trufflehog or the host's scanning |
-| Coverage floor that only rises | the test config sets thresholds and CI enforces them |
+| Secret scanning in CI | a CI step scans every push for committed secrets (gitleaks, trufflehog or the host's scanning) |
+| Coverage floor that only rises | the test runner's config sets a coverage threshold and CI fails below it |
 | Additive-only migration guard | CI fails on a destructive migration without a marker (skipped without a database) |
-| Dependency/boundary rules | dependency-cruiser, eslint boundaries or a layer test fails CI |
-| Real-database test tier | tests run against a real database (skipped without a database) |
+| Dependency/boundary rules | a rule set or a layer test fails CI on an import that crosses a module boundary (dependency-cruiser, eslint boundaries, import-linter, depguard, deptrac) |
+| Real-database test tier | one test tier runs against a real database, not only mocks (skipped without a database) |
 | Safe error responses | one error envelope, no stack traces or internal fields (skipped without an API) |
 | CHANGELOG | `CHANGELOG.md` in Keep a Changelog format |
 | Docs-vs-code check | a script or CI step checks docs against code |
@@ -69,8 +77,12 @@ practices; each one has a probe, and a missing one becomes a `BASE-NN` backlog i
 | No runtime dependency two majors behind | the package manager's outdated report shows none; on a yes to a second question, the three furthest behind get an upgrade plan from `dependency-upgrader` as their Fix |
 | Dependency release-age cooldown | the update bot or package manager enforces a minimum release age (Dependabot `cooldown`, Renovate or pnpm `minimumReleaseAge`, uv `exclude-newer`; skipped without dependencies) |
 | After-edit lint hook | a `PostToolUse` hook on `Edit\|Write` lints the edited file and shows only failures (skipped without a linter) |
-| Agent sandbox | `.claude/settings.json` enables `sandbox` and denies reads of `~/.ssh` and `~/.aws` |
+| Agent sandbox | `.claude/settings.json` sets `sandbox.enabled: true` and `sandbox.allowUnsandboxedCommands: false`, and denies reads of `~/.ssh`, `~/.aws`, `~/.kube`, `~/.npmrc` and `~/.config/gh` |
+| Project MCP servers not auto-approved | no settings file in the repository sets `enableAllProjectMcpServers: true` |
 | Pinned MCP servers | every stdio server in `.mcp.json` runs a pinned version (skipped without `.mcp.json`) |
+| CI actions pinned to a commit | every third-party action and reusable workflow is referenced by a full commit SHA (skipped without `.github/workflows`) |
+| Workflow audit in CI | a CI step audits the workflow files for script injection, broad token permissions and unpinned actions (zizmor or an equal tool) |
+| Lockfile vulnerability scan | a CI step scans the lockfile for known vulnerabilities and fails on a finding (osv-scanner or the ecosystem's audit; skipped without a lockfile) |
 | Gate verdict in the exit code | no `\|\| true` or `continue-on-error` on a gate |
 
 It never picks a default for the package manager, test runner, auth library, monitoring stack or
@@ -135,7 +147,8 @@ its done file; one already fixed in the done file or in flight in an open pull r
 skipped when `gh` is unavailable) is dropped and named in the report. A perspective whose reviewer ended `BLOCKED`, failed or hit its turn cap is listed under
 `Not covered:` at the top of the backlog and in the report, with the union of the reviewers'
 `Not read:` lines (in-scope paths they did not open). For a backlog whose base commit is old, or after
-a large rename, it recommends re-verifying it before implement-backlog.
+a large rename, it recommends re-verifying it before implement-backlog. With a vault configured it
+runs brain-search on the audited area first and reads the top note.
 
 ## Code review and pull requests
 
@@ -192,14 +205,19 @@ it runs no command and opens no URL from them.
 
 ### spec
 
-[Source](../../plugin/skills/spec/SKILL.md). Interviews you one question at a time (not asking what
-the repository already answers), inspects the code, then writes a spec (frontmatter with
+[Source](../../plugin/skills/spec/SKILL.md). Inspects the code before its first question and, with a
+vault configured, runs brain-search on the topic; the first reply shows a `Research map` of at most 15
+lines (the files the feature touches, the data flow, the existing tests, any vault note read) and asks
+whether it is right. It then interviews you one question at a time (not asking what
+the repository already answers) and writes a spec (frontmatter with
 `status: draft`, `owner` and `last-verified`; goals, non-goals, flows,
 design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
-tests) and a plan whose steps carry What, Where, How, Test, `Done when` and S/M/L. It then checks
+tests) and a plan whose steps carry What, Where, How, Test, `Done when` and S/M/L. Each acceptance
+criterion is `WHEN <event> THEN <observable result>`; anything the code, the vault and your answers do
+not settle is written `[NEEDS CLARIFICATION: …]`, never guessed. It then checks
 them against each other (a coverage table from criteria to steps both ways, vague words,
-placeholders, scope reduction, conflicts with decision records) and puts every hit under open
-questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–7.
+placeholders, scope reduction, conflicts with decision records) and puts every hit and every
+clarification marker under open questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–7.
 
 ### implement-backlog
 
@@ -207,7 +225,8 @@ questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–
 
 - **Before starting:** runs the project's validation and stops on a red baseline; takes only ready
   items in the backlog format (no open `Blocked by`, no other `Owner`); asks up front about
-  auth/security items.
+  auth/security items. With a vault configured it runs brain-search on the batch's topic and reads the
+  top note.
 - **`Check` screening:** never runs a `Check` that pipes into a shell, fetches from the network or
   writes outside the repository; reads any script a `Check` calls first.
 - **Triage:** before the claim, checks every batch item itself, read-only: its `Where` still
@@ -215,7 +234,7 @@ questions. It can turn the steps into `FEAT-` backlog items, in sessions of 5–
   now (exit 126 or 127, a grep exit 2 or a "no such file" or "no tests found" message is a broken
   `Check`, so the item is stale; a failure on authentication, quota or a missing secret blocks the
   item for you), no open pull request touches its files (skipped when `gh` is
-  unavailable), and no project decision record or doc contradicts it. A failing item leaves the
+  unavailable), and no project decision record, doc or `active` vault note read at the start contradicts it (an inbox note is unreviewed: it is reported as context and the item stays). A failing item leaves the
   batch, is never claimed or dispatched, and is reported as `stale: <ID> · <point> · <evidence>`
   for you to close, amend or keep; the batch is topped up from the next ready items.
 - **Git-ignored backlog:** the `Owner` lines stay uncommitted in the orchestrator's checkout, and
@@ -252,7 +271,8 @@ the observation that would falsify the leader, each claim graded `[hypothesis]`,
 `[ruled out: X because Y]` or `[demonstrated]`. A root cause is `[demonstrated]` only when toggling
 one condition switches the failure on and off. Library or vendor behaviour goes to
 `research-analyst` for a sourced answer. Proposes mitigation, root-cause fix, regression test and
-rollback criteria; applies none of them.
+rollback criteria; applies none of them. With a vault configured it runs brain-search on the
+symptom, after the repro and before the hypotheses, and reads the top note; without one it skips that silently.
 
 ### deploy-checklist
 
@@ -273,21 +293,37 @@ rollback criteria; applies none of them.
 [Source](../../plugin/skills/parallel-lanes/SKILL.md). For free-form tasks that can run at once;
 backlog items go to implement-backlog. Before a launch: a clean tree, `claude` and `python3` on
 `PATH`, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
-lockfile belong to no lane), and a git-ignored run directory and `.worktrees/`. Each lane is a
-detached `claude -p` in its own worktree and session, so it outlives the turn; the worktree starts
-from the base commit recorded in `LANES.md`, which `launch.sh` checks. Each lane runs with a
-recorded `--session-id`, a `--max-turns` cap, and `--disallowedTools` for edits to the manifest,
-`Makefile`, hook directories and `.claude/` unless it owns them; its prompt allows only the lane's
+lockfile belong to no lane), a budget in USD you name for each lane (there is no default), and a
+git-ignored run directory and `.worktrees/`. The skill writes `lanes.json` (the root, the base commit,
+the turn cap and, per lane, its budget, fast check and extra tools) and shows it with one command;
+`lanes.py`, a standard-library script beside the skill, launches, reports and resumes the lanes. Each
+lane is a detached `claude -p` in its own worktree and session, so it outlives the turn; the worktree
+starts from the base commit recorded in `lanes.json`, which the launch checks. Each lane runs with a
+recorded `--session-id`, a `--max-turns` cap, `--max-budget-usd`, `--output-format json`, and
+`--disallowedTools` for edits to the manifest,
+`Makefile`, hook directories and `.claude/` unless it owns them, and always for `.git` and anything under
+it: a lane that rewrote its worktree's `.git` file could point git at a config of its own. `lanes.py`
+refuses a `lanes.json` with an unknown key, a budget or turn cap that is not a finite number, a
+`fast_check` holding a bracket or a comma, or an `allow` entry that is not one tool rule; its prompt allows only the lane's
 paths and commits in the worktree, and its report starts with a final status and lists what is not
 started, what is not verified and If-X-then-Y contingencies. The status table reads
-the PIDs, the `EXIT=` line in each log, the time since the worktree last changed, the report's first
-line, the lane's commits, any changed file outside its owned paths, and a `LANES.md` or prompt whose
-hash differs from the one `launch.sh` recorded. A finished lane with no report or a `CONTINUING` one
-can be resumed: `resume.sh` continues its session with `claude -p --resume` after the user's yes. Each lane has a runnable `Check` next to its `Done when`; the
+the PIDs, the `EXIT=` line and the result in each log, what the lane spent (Cost), the time since the
+worktree last changed, the report's first
+line, the lane's commits, any changed file outside its owned paths, and a `LANES.md`, `lanes.json` or
+prompt whose hash differs from the one recorded at launch. `lanes.py` runs git with `core.fsmonitor` and
+hooks off, reads a `pids.txt` line only when it holds a lane name, a numeric PID and a UUID session id,
+and marks a lane whose worktree `.git` file no longer points into the repository's own `.git/worktrees`,
+without running git there. The budget is checked after a response, so a
+lane can pass it; a lane cut off by it is marked. A finished lane with no report or a `CONTINUING` one
+can be resumed: `lanes.py resume` continues its session with `claude -p --resume` and the same
+`--max-budget-usd` after the user's yes, and refuses a lane with a changed `LANES.md`, `lanes.json`,
+prompt or worktree `.git` file. Each lane has a runnable `Check` next to its `Done when`; the
 lane has no access to the run directory and writes its report to a git-ignored file in its own
 worktree. Integration takes only finished `DONE` lanes whose fast check and `Check` pass when the
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
-other lane goes to Needs you. After each lane merge it runs the project's regeneration command for
+other lane goes to Needs you. Before the first merge it previews conflicts between the `DONE` lanes
+(`lanes.py conflicts`, git 2.38 or later; it moves no ref and changes no working-tree file, though git stores the trial merge's tree objects) and puts them on a `Conflicts:` line of the merge
+plan. After each lane merge it runs the project's regeneration command for
 derived files (in developer-os, `scripts/site-hashes.py`). After merging, it runs every merged lane's `Check` and the
 repository-wide gate on `lanes/<run>`, and stops on a `REQUEST_CHANGES` review.
 
@@ -309,7 +345,8 @@ fact instead of inventing it.
 branches not merged into `origin/HEAD`, your open PRs and still-running background work; proposes
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
 most three under each heading, lessons (an addition to a note that already covers the topic is
-proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates, plan
+proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates (for a
+command or path to ask about first, one entry for the project's `.claude/developer-os-guard.json`), plan
 and docs updates (open items of a finished plan become `PLAN-` backlog items, P2 by default, with a
 session line), plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
 Every check result names the commit it ran on (`<command>: <result> at <short SHA>`, plus
@@ -330,6 +367,16 @@ content. It runs in a forked subagent (`context: fork`), so only its report reac
 `background: false`, a skill field that applies with `context: fork` ([skills frontmatter
 reference](https://code.claude.com/docs/en/skills)), makes the invoking turn wait for that report.
 
+### setup-check
+
+[Source](../../plugin/skills/setup-check/SKILL.md). Runs `check.py` beside the skill and prints one
+line per check, `ok`, `missing` or `warn`: `python3` 3.8 or later, `rg`, `jq`, `gh` and its login
+(`gh auth status`, the one call that reaches GitHub), `git` 2.38 or later, the vault path resolved as
+the notices hook resolves it (the `brain_vault` option, else the user-level `Brain vault:` line, never
+a project file) and whether it is a readable directory, `autoMemoryEnabled`, and the Claude Code
+version. It then gives the fix for each line that is not `ok`. Read-only: it installs nothing and
+edits no setting.
+
 ## Brain (Obsidian vault)
 
 ### brain-setup
@@ -345,10 +392,12 @@ then smoke-tests with brain-search, passing it the vault path.
 
 [Source](../../plugin/skills/brain-search/SKILL.md). Finds the vault from the path you give, the
 plugin's `brain_vault` option or the `Brain vault:` line of the user-level `CLAUDE.md` (never a project file, never by searching the disk), searches content and frontmatter with `rg`, drops archived notes,
-ranks by `summary`/`tags`/name match, project slug, `active` over `inbox` and recency, reads the
+skips inbox notes that have expired (a passed `expires:`, or 30 days after `created` when the note has no such key) and ends with
+their count, ranks by `summary`/`tags`/name match, project slug, `active` over `inbox` and recency, reads the
 top five, follows a superseded note's `superseded_by` chain to the current note (a broken or looping
 chain is incomplete history, with no note named current), and answers only from them with a path
-per claim.
+per claim. In the repository whose slug a note's `refs:` names, a claim whose file has a commit after
+the note's `verified` date gets `(verify: <path> changed since <date>)`.
 
 ### brain-capture
 
@@ -357,7 +406,8 @@ this task, the why written down, not already in the code or the repository's pla
 a test, lint rule or project instruction (it names or proposes that instead). Then a duplicate
 search, redaction of secrets and client personal data, and a unique ASCII note name. Every claim about
 code is re-read in the current tree and cited as repository path plus defining symbol; merge state is
-a PR number, not a SHA.
+a PR number, not a SHA. The note gets `expires:` (30 days after `created`) and, for the paths it
+cites, `refs: ["<project slug>:<path>"]` with `verified:` today.
 
 ### brain-review
 
@@ -367,11 +417,16 @@ checks the name (`^[a-z0-9-]+$`) and that no other note has it, case-insensitive
 a named active note by another active one (not itself, not one already superseded; the old note
 stays in its folder). When a project hub links a promoted, merged or rejected note as
 `(waiting for review)`, it shows the hub-line change as a diff and applies it only after a yes.
+Expired inbox notes are shown as one group that "archive the expired ones" names; the group belongs to the
+page shown, so its numbers can be answered like the others. Above 20 notes it
+shows pages of 20 grouped by proposed folder, each line with `recommend: promote | merge into <note> |
+reject` and a reason, and takes range answers (`1-12 promote, 13 reject`) for the page shown.
 
 ### brain-garden
 
 [Source](../../plugin/skills/brain-garden/SKILL.md). One pass over every note: missing or invalid
-frontmatter, inbox notes older than 7 days, active notes not updated in 180 days, status/folder
+frontmatter (including the shape of `expires:`, `refs:` and `verified:`), inbox notes older than 7 days,
+expired inbox notes, active notes not updated in 180 days, status/folder
 mismatches, broken links and links to archived notes, superseded notes whose `superseded_by` is
 missing, dangling or looping, compiled notes older than an updated source, orphans with a percentage (a superseded note is never one), likely
 duplicates (a project note and its `-overview` note are not), and rules stated by three or more
@@ -392,7 +447,8 @@ choosing a side. Before writing it runs brain-capture's secret scan; a hit write
 hub against the README, the docs map, `CURRENT-STATE.md`, the decision records and the last 30
 commits (claims the repository contradicts, repository paths that no longer exist) and against the
 vault (active or superseded notes of the slug it does not link, links to notes that do not exist, a
-summary or status that no longer fits). A drifted code fact is usually replaced by a link to the
+summary or status that no longer fits). A note of the slug whose `refs:` file changed since its
+`verified` date (checked with `git -C <repository root>`, so the working directory does not matter) is listed under Verify, with a `Changed refs` count; the skill does not edit it. A drifted code fact is usually replaced by a link to the
 repository doc, since the hub keeps only what outlives the repository. A claim it cannot check is
 listed as unchecked, not changed.
 
@@ -434,10 +490,14 @@ project's wrapper, behind consent where required.
 ### error-handling-conventions
 
 [Source](../../plugin/skills/error-handling-conventions/SKILL.md). Loads for error handling in
-TypeScript files. Rethrow with `cause`; a typed result instead of `null` as failure; one error envelope
+server and library code, in any language. An error raised while handling another keeps the original as
+its cause; a typed result instead of a null or zero value as failure; one error envelope
 `{ error: { code, message, details? } }` with a `SCREAMING_SNAKE_CASE` code and no stack trace;
-never log and throw the same error; no empty `catch {}` without a one-line comment saying why; exceptions are
-not control flow.
+never log and re-raise the same error; no swallowed error without a one-line comment saying why; exceptions are
+not control flow. A convention the project documents wins over a rule here on shape and naming (the error
+type, the envelope's field names, the logging library); it never permits a swallowed error, a lost cause or
+internals in a response. Examples and probes for
+TypeScript, Python, Go and PHP are in `references/<lang>.md` beside the skill.
 
 ### testing-conventions
 
@@ -445,7 +505,10 @@ not control flow.
 contract, not current behavior; fixtures pin an absolute instant (`2030-01-01T08:00:00Z`); partial
 module mocks built on the original; a regression test seen red before the fix; the boundary that
 could be wrong is not faked; failure messages show the missing record; no raised retries or
-timeouts to hide a flaky test.
+timeouts to hide a flaky test. A test mutation is undone by
+hand, never with `git checkout`, `git restore` or `git stash`. A convention the project documents wins on layout and tooling (file names,
+the mock library, the fixture format); it never permits a regression test that was not seen red, a skipped
+test or a raised retry.
 
 ### monitoring-conventions
 

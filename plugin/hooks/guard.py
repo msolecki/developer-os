@@ -14,13 +14,33 @@ infrastructure, data or deploy destroy from the closed INFRA list (`terraform de
 `kubectl delete`, `vercel --prod`, ...), in command position or after a runner such as `npx`. Fail-open: anything it cannot parse produces no output and exit 0, so the normal permission
 flow applies.
 
+Five more classes, each in command position, so a mention in `grep` or `echo` passes (classes(), drops_data(),
+runs_download()): a cloud delete (`aws <service> delete-*`/`terminate-*`, `aws s3 rm --recursive`, `aws s3 rb`,
+`gcloud ... delete`, `az ... delete`; an aws dry run passes); a database drop (`psql`, `mysql`, `mariadb` or
+`sqlite3` in a line that holds `DROP` or `TRUNCATE` as a word, `redis-cli FLUSHALL`/`FLUSHDB`); a Docker cleanup
+(`docker system prune`, `docker volume rm`/`prune`); a publish, merge or remote delete (`npm`/`pnpm`/`yarn publish`,
+`cargo publish`, `twine upload`, `gem push`, `gh repo delete`, `gh release create`/`delete`, `gh pr merge`; a
+`--dry-run` of npm, pnpm, yarn or cargo passes; `git push --mirror` is a force push); and a downloaded script run
+unread (`curl`/`wget` piped into a shell, or inside `$(...)`/`<(...)` handed to a shell or `eval`).
+
 An Edit, Write or MultiEdit asks when its `file_path` is a secret or the agent's own user-level config: a `.env`,
-`.envrc`, `.env.*` or `.envrc.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws` or
-`~/.gnupg`, `~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude/CLAUDE.md`,
+`.envrc`, `.env.*` or `.envrc.*` file (not `.example`, `.sample`, `.template`, `.dist`), anything under `~/.ssh`, `~/.aws`,
+`~/.gnupg`, `~/.kube` or `~/.config/gh`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.docker/config.json`,
+`~/.claude.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude/CLAUDE.md`,
 or anything under `~/.claude/hooks`, `rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`; the same files under
 `$CLAUDE_CONFIG_DIR` when it is set. A change to a test file (TEST_PATH) asks when it adds skip or focus
 markers (SKIP_MARK, see skips_added()), and so does `rm`/`git rm` of one or `mv` of one to
-`.bak`, `.disabled` or `.skip`.
+`.bak`, `.disabled` or `.skip`. When the hook input's `cwd` is inside a linked git worktree, an Edit, Write or
+MultiEdit also asks before a `file_path` in another worktree of the same repository, the main checkout or a
+sibling (other_worktree()); a session in the main checkout is never asked for it.
+
+A project can add questions, never remove one: `.claude/developer-os-guard.json` at the project root (the git
+top level above `cwd`) holds `{"ask": [{"command": ["make", "deploy"]}, {"path": "infra/prod/**"}]}`, literal
+command word prefixes and path globs only (project_rules()). A hit asks with one fixed reason, so no text of the
+repository reaches the model; a file that is malformed in any way adds nothing. Editing that file asks too.
+
+Every ask is appended to `${CLAUDE_PLUGIN_DATA}/guard/asks.jsonl` (log()): time, reason key, rule name and tool,
+never the command or the path. The ask is printed first; a log that cannot be written changes nothing.
 
 Inside the read-only agents (code-reviewer, database-reviewer, dependency-upgrader, infra-reviewer,
 performance-engineer, security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
@@ -41,9 +61,20 @@ message (`-m "..."`, or `-m "$(cat <<'EOF' ... EOF\\n)"`, see messages()). An ex
 import json
 import os
 import re
+import subprocess
 import sys
+import time
 
 REASONS = {
+    "cloud": "This deletes cloud resources that git cannot bring back; list them first (describe, ls), name one resource, or use the tool's dry run (--dryrun, --dry-run).",
+    "data": "This drops or empties database data; take a backup first, or run it against a named scratch database.",
+    "containers": "This removes Docker volumes or unused data of every project on this machine; list first (docker volume ls, docker system df) and name one volume.",
+    "publish": "This publishes, merges or deletes on a registry or remote, where it cannot be taken back; use --dry-run where the tool has one, or leave the step to the user.",
+    "remote-code": "This runs a downloaded script that nobody has read; download it to a file, read it, then run it.",
+    "worktree": "This writes into another worktree of this repository (the main checkout or a sibling); write inside your own worktree.",
+    "rules": "This file holds the project's guard rules; change it only on your request.",
+    "project": "This project asks before this command or path.",
+    "slow": "This command is too long for the guard to check in time; read it before running it.",
     "install": "Dependency install, update or removal rewrites dependencies and the lockfile.",
     "push": "Force push can overwrite others' commits; use --force-with-lease alone.",
     "destroy": "This deletes files or discards uncommitted work that git cannot bring back.",
@@ -275,6 +306,124 @@ def infra(words):
     return False
 
 
+# Closed table: (command, the first operand words, REASONS key, rule name for the ask log). The words are a prefix
+# of the operands, past option values (CLI_VALUE), so `gh pr list --search merge` is no merge.
+CLASSES = [
+    ("docker", ("system", "prune"), "containers", "docker-system-prune"),
+    ("docker", ("volume", "rm"), "containers", "docker-volume-rm"),
+    ("docker", ("volume", "remove"), "containers", "docker-volume-rm"),
+    ("docker", ("volume", "prune"), "containers", "docker-volume-prune"),
+    ("npm", ("publish",), "publish", "npm-publish"), ("pnpm", ("publish",), "publish", "npm-publish"),
+    ("yarn", ("publish",), "publish", "npm-publish"), ("yarn", ("npm", "publish"), "publish", "npm-publish"),
+    ("cargo", ("publish",), "publish", "cargo-publish"), ("twine", ("upload",), "publish", "twine-upload"),
+    ("gem", ("push",), "publish", "gem-push"), ("gh", ("repo", "delete"), "publish", "gh-repo-delete"),
+    ("gh", ("release", "create"), "publish", "gh-release-create"),
+    ("gh", ("release", "delete"), "publish", "gh-release-delete"), ("gh", ("pr", "merge"), "publish", "gh-pr-merge"),
+    ("aws", ("s3", "rb"), "cloud", "aws-s3-rb"),
+    ("npm", ("unpublish",), "publish", "npm-unpublish"), ("npm", ("deprecate",), "publish", "npm-deprecate")]
+# Options whose value is the next word, per command, so the value is not read as a subcommand.
+CLI_VALUE = {"docker": {"-H", "--host", "-c", "--context", "--config", "-l", "--log-level"}, "gh": {"-R", "--repo"},
+             "aws": {"--profile", "--region", "--output", "--endpoint-url", "--color", "--ca-bundle", "--query",
+                     "--cli-read-timeout", "--cli-connect-timeout"},
+             "npm": PM_VALUE | {"--registry", "--tag", "--otp", "--access", "-w", "--workspace"},
+             "pnpm": PM_VALUE | {"--registry", "--tag", "--otp", "--access"},
+             "yarn": {"--cwd", "--registry", "--tag", "--otp", "--access"}}
+# Commands whose dry run changes nothing, so it passes.
+DRY_RUN = {"npm", "pnpm", "yarn", "cargo", "aws"}
+DB_CLIENTS = {"psql", "mysql", "mariadb", "sqlite3"}
+# `drop` or `truncate` as a word of its own: not `dropbox`, `drop.sql`, `--add-drop-table`.
+SQL_DROP = re.compile(r"(?<![\w.-])(?:drop|truncate)(?![\w.-])", re.I)
+FETCHERS = {"curl", "wget"}
+RUN_SHELL = re.compile(r"(ba|z|da|k)?sh")
+RUN_INTERP = re.compile(r"python[0-9.]*|perl|ruby|node|php")
+
+
+def classes(words):
+    """(REASONS key, rule name) for a command from CLASSES or one of the cloud and redis forms below, in command
+    position; None otherwise. A dry run of a DRY_RUN command passes."""
+    for i in starts(words):
+        name, rest = words[i].rsplit("/", 1)[-1], words[i + 1:]
+        values = CLI_VALUE.get(name, ())
+        ops = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in values)]
+        flags = {x.split("=")[0] for x in rest if x.startswith("-")}
+        # `--dry-run=false` is no dry run.
+        dry = any(x.split("=")[0] in ("--dry-run", "--dryrun") and x.split("=")[-1].lower() not in ("false", "0", "no")
+                  for x in rest)
+        if name in DRY_RUN and dry:
+            continue
+        for cmd, sub, reason, rule in CLASSES:
+            if name == cmd and tuple(ops[:len(sub)]) == sub:
+                return reason, rule
+        if name == "yarn" and ops[:1] == ["workspace"] and ops[2:3] == ["publish"]:
+            return "publish", "npm-publish"
+        if name == "aws" and ops[:2] == ["s3", "rm"] and "--recursive" in flags:
+            return "cloud", "aws-s3-rm"
+        if name == "aws" and ops[:2] == ["s3", "sync"] and "--delete" in flags:
+            return "cloud", "aws-s3-sync-delete"
+        if name == "aws" and ops[1:2] and re.match(r"(batch-)?(delete|terminate)-", ops[1]):
+            return "cloud", "aws-delete"
+        recursive = any(re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*|--recursive", x) for x in rest)
+        if name == "gsutil" and ("rb" in ops or ("rm" in ops and recursive)):
+            return "cloud", "gsutil-rm"
+        if name == "gcloud" and ops[:2] == ["storage", "rm"] and recursive:
+            return "cloud", "gcloud-storage-rm"
+        if re.fullmatch(r"python[0-9.]*", name) and rest[:3] == ["-m", "twine", "upload"]:
+            return "publish", "twine-upload"
+        if name == "gh" and ops[:1] == ["api"] and re.search(
+                r"(?:^| )(?:-X ?|--method[ =])DELETE(?: |$)", " ".join(rest), re.I):
+            return "publish", "gh-api-delete"
+        if name == "gcloud" and "delete" in ops:
+            return "cloud", "gcloud-delete"
+        if name == "az" and any(x == "delete" or x.startswith("delete-") for x in ops):
+            return "cloud", "az-delete"
+        if name == "redis-cli" and any(x.upper() in ("FLUSHALL", "FLUSHDB") for x in rest):
+            return "data", "redis-flush"
+    return None
+
+
+def drops_data(line):
+    """A database client in command position anywhere in the line and `DROP` or `TRUNCATE` as a word anywhere in
+    it: the statement may sit in `-c`, after a `;` inside it, or come through a pipe."""
+    if not SQL_DROP.search(line):
+        return False
+    for seg in re.split(r"[;&|()`]", line):
+        words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+        if any(words[i].rsplit("/", 1)[-1] in DB_CLIENTS for i in starts(words)):
+            return True
+    return False
+
+
+def runs_download(line):
+    """`curl` or `wget` in command position piped, directly or through other commands, into a shell in command
+    position (`curl u | sudo bash`), or run inside `$(...)` or `<(...)` handed to a shell or `eval`
+    (`sh -c "$(curl u)"`, `bash <(curl u)`). `||` is no pipe."""
+    parts = re.split(r"([;&|()`])", line.replace("&&", ";").replace("||", ";").replace("|&", "|"))
+    piped, before = False, []
+    for k in range(0, len(parts), 2):
+        words = [w for w in re.split(r"[ \t\n]+", parts[k]) if w]
+        delim = parts[k - 1] if k else ""
+        # `curl u | (sh)`: the bracket right after the pipe keeps the pipe.
+        if delim != "|" and not (delim == "(" and not before):
+            piped = False
+        pos = starts(words)
+        names = [words[i].rsplit("/", 1)[-1] for i in pos]
+        if piped and any(RUN_SHELL.fullmatch(n) for n in names):
+            return True
+        # An interpreter reading its program from the pipe: no argument, or `-`. `python3 -m json.tool` reads data.
+        if piped and any(RUN_INTERP.fullmatch(words[i].rsplit("/", 1)[-1]) and words[i + 1:i + 2] in ([], ["-"])
+                         for i in pos):
+            return True
+        if any(n in FETCHERS for n in names):
+            last = before[-1] if before else ""
+            runner = any(RUN_SHELL.fullmatch(n) or n in ("eval", "source", ".")
+                         for n in [before[i].rsplit("/", 1)[-1] for i in starts(before)])
+            if delim == "(" and runner and (last.endswith("<") or last == "eval" or re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", last)):
+                return True
+            piped = True
+        before = words
+    return False
+
+
 # A test file of the project; one under node_modules/, vendor/ or .venv/ is a dependency's.
 TEST_PATH = re.compile(r"^(?!(?:.*/)?(?:node_modules|vendor|\.venv)/).*?"
                        r"(?:(^|/)(tests?|__tests__)(/|$)|\.(test|spec)\.[^/]+$|(^|/)test_[^/]*\.py$|_test\.go$)")
@@ -299,8 +448,19 @@ def drops_tests(words):
                for sub, rest in git_subs(words, pos))
 
 
+def scan_cost(line):
+    """What scan() will spend on this view: each check walks a segment's words once per command-position word.
+    Linear to compute, so a command built to outlast the hook timeout is caught before the scan starts."""
+    total = 0
+    for seg in re.split(r"[;&|()`]", line):
+        words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+        total += len(starts(words)) * len(words)
+    return total
+
+
 def scan(line):
-    """Word scanner: install, push, noverify or destroy for the first hit, None otherwise."""
+    """Word scanner: the REASONS key of the first hit (install, push, noverify, destroy, tests, infra), or a
+    (key, rule name) pair for the classes(), drops_data() and runs_download() hits; None otherwise."""
     for seg in re.split(r"[;&|()`]", line):
         words = [w for w in re.split(r"[ \t\n]+", seg) if w]
         pm = sub = git = push = force = skip = False
@@ -313,6 +473,9 @@ def scan(line):
             return "tests"
         if infra(words):
             return "infra"
+        hit = classes(words)
+        if hit:
+            return hit
         pos = starts(words)
         for i, x in enumerate(words):
             if rm and x == "--":
@@ -353,6 +516,11 @@ def scan(line):
             return "noverify"
         if force:
             return "push"
+    # Whole-line classes last, so a command the per-segment checks know keeps its own reason.
+    if drops_data(line):
+        return "data", "sql-drop"
+    if runs_download(line):
+        return "remote-code", "curl-pipe-shell"
     return None
 
 
@@ -586,7 +754,8 @@ def hops(path, limit=8):
 
 
 def protected(path):
-    """A secret file or the agent's own user-level config, by the path as written (`~` expanded,
+    """"protected" for a secret file or the agent's own user-level config, "rules" for a project's guard rules
+    file (RULES_FILE in any directory), None otherwise; by the path as written (`~` expanded,
     normalized), by each link it passes through, or by the path its links resolve to, compared without case (macOS volumes ignore it).
     A path Python cannot resolve (a NUL byte) counts as protected."""
     try:
@@ -595,18 +764,218 @@ def protected(path):
         other = os.environ.get("CLAUDE_CONFIG_DIR")
         configs = forms(other) if other else set()
     except ValueError:
-        return True
+        return "protected"
     for p in paths:
         base = os.path.basename(p)
         if base in (".env", ".envrc") or (base.startswith((".env.", ".envrc.")) and base.rsplit(".", 1)[1] not in ("example", "sample", "template", "dist")):
-            return True
-    files = [os.path.join(h, ".claude.json") for h in homes]
-    dirs = [os.path.join(h, d) for h in homes for d in (".ssh", ".aws", ".gnupg")]
+            return "protected"
+    files = [os.path.join(h, f) for h in homes for f in (".claude.json", ".npmrc", ".pypirc", ".git-credentials",
+                                                         os.path.join(".docker", "config.json"))]
+    dirs = [os.path.join(h, d) for h in homes for d in (".ssh", ".aws", ".gnupg", ".kube", os.path.join(".config", "gh"))]
     # CLAUDE_CONFIG_DIR moves the config, `.claude.json` included, to another directory (a second account).
     for claude in {os.path.join(h, ".claude") for h in homes} | configs:
         files += [os.path.join(claude, f) for f in (".claude.json", "settings.json", "settings.local.json", "claude.md")]
         dirs += [os.path.join(claude, d) for d in ("hooks", "rules", "agents", "skills", "commands", "plugins", "output-styles")]
-    return any(p in files or any(p == d or p.startswith(d + os.sep) for d in dirs) for p in paths)
+    if any(p in files or any(p == d or p.startswith(d + os.sep) for d in dirs) for p in paths):
+        return "protected"
+    return "rules" if any(p.endswith(os.sep + RULES_FILE.replace("/", os.sep)) for p in paths) else None
+
+
+def toplevel(cwd):
+    """The nearest directory at or above cwd that holds `.git`, symlinks resolved; None when there is none or cwd
+    is no absolute path of a directory."""
+    if not isinstance(cwd, str) or not os.path.isabs(cwd) or not os.path.isdir(cwd):
+        return None
+    d = os.path.realpath(cwd)
+    for _ in range(64):
+        if os.path.lexists(os.path.join(d, ".git")):
+            return d
+        up = os.path.dirname(d)
+        if up == d:
+            break
+        d = up
+    return None
+
+
+def target(cwd, path):
+    """file_path as an absolute path with symlinks resolved; a relative one starts at cwd."""
+    return os.path.realpath(os.path.join(cwd, os.path.expanduser(path)))
+
+
+def other_worktree(cwd, path):
+    """True when cwd is inside a linked worktree (its `.git` is a file) and path lies in another worktree of
+    the same repository: the main checkout or a sibling. Worktrees nest (`.claude/worktrees/x` inside the main
+    checkout), so the deepest listed worktree that holds the path decides. The main checkout is never checked:
+    an orchestrator writes into its lanes' worktrees. One bounded `git worktree list`; any failure is no check."""
+    top = toplevel(cwd)
+    if not top or not os.path.isfile(os.path.join(top, ".git")):
+        return False
+    out = subprocess.run(["git", "-C", top, "worktree", "list", "--porcelain"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3).stdout.decode("utf-8", "replace")
+    trees = [os.path.realpath(line[9:]) for line in out.splitlines() if line.startswith("worktree ")]
+    if top not in trees:  # a submodule's `.git` is a file too
+        return False
+    t = target(cwd, path)
+    holds = [w for w in trees if t == w or t.startswith(w + os.sep)]
+    return bool(holds) and max(holds, key=len) != top
+
+
+RULES_FILE = ".claude/developer-os-guard.json"
+RULES_BYTES, RULES_MAX = 16 << 10, 50
+# A rule is literal: a command word has no shell or pattern character, a path only the wildcards `*`, `?`, `**`.
+RULE_WORD = re.compile(r"[A-Za-z0-9._:/@=+-]{1,64}")
+RULE_GLOB = re.compile(r"[A-Za-z0-9._/@+*?-]{1,128}")
+
+
+def project_rules(cwd):
+    """(project root, command rules, path rules) from RULES_FILE at the root (toplevel(cwd), or cwd outside
+    git). The file can only add questions: it must be a regular file of at most RULES_BYTES holding exactly
+    `{"ask": [...]}` with at most RULES_MAX entries, each `{"command": [words]}` (1 to 8 literal words) or
+    `{"path": "glob"}` (relative, no `..`, at most 8 `*`). Anything else, an `allow` key or a regex included, makes
+    the whole file void: no rule is read from it."""
+    none = (None, [], [])
+    try:
+        root = toplevel(cwd) or (os.path.realpath(cwd) if isinstance(cwd, str) and os.path.isabs(cwd) and os.path.isdir(cwd) else None)
+        if not root:
+            return none
+        path = os.path.join(root, RULES_FILE)
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > RULES_BYTES:
+            return none
+        with open(path, "rb") as f:
+            data = json.loads(f.read(RULES_BYTES + 1).decode("utf-8"))
+        if not isinstance(data, dict) or set(data) != {"ask"} or not isinstance(data["ask"], list) or len(data["ask"]) > RULES_MAX:
+            return none
+        commands, globs = [], []
+        for e in data["ask"]:
+            if not isinstance(e, dict) or len(e) != 1:
+                return none
+            c, g = e.get("command"), e.get("path")
+            if isinstance(c, list) and 0 < len(c) <= 8 and all(isinstance(w, str) and RULE_WORD.fullmatch(w) for w in c):
+                commands.append(c)
+            elif (isinstance(g, str) and RULE_GLOB.fullmatch(g) and not g.startswith("/") and ".." not in g.split("/")
+                  and g.count("*") <= 8):
+                globs.append(g)
+            else:
+                return none
+        return root, commands, globs
+    except (OSError, ValueError):
+        return none
+
+
+def glob_match(pat, s):
+    """Whole-string match of a path glob: `*` and `?` stay inside one path segment, `**` crosses `/`, and `**/`
+    at the start of a segment also matches no directory (`**/a` is `a` and `x/y/a`). The positions in the
+    pattern are advanced together, one step per character, so no pattern backtracks."""
+    toks = re.findall(r"\*\*|[^*]|\*", pat)
+
+    def close(states):
+        todo = list(states)
+        while todo:
+            i = todo.pop()
+            if i < len(toks) and toks[i] in ("*", "**"):
+                skip = [i + 1]
+                if toks[i] == "**" and toks[i + 1:i + 2] == ["/"] and (i == 0 or toks[i - 1] == "/"):
+                    skip.append(i + 2)
+                for j in skip:
+                    if j not in states:
+                        states.add(j)
+                        todo.append(j)
+        return states
+
+    states = close({0})
+    for ch in s:
+        nxt = set()
+        for i in states:
+            if i >= len(toks):
+                continue
+            t = toks[i]
+            if t == "**" or (t == "*" and ch != "/"):
+                nxt.add(i)
+            elif (t == "?" and ch != "/") or t == ch:
+                nxt.add(i + 1)
+        states = close(nxt)
+        if not states:
+            return False
+    return len(toks) in states
+
+
+def project_path(cwd, path):
+    """True when file_path, relative to the project root, matches a path rule of the project."""
+    root, _, globs = project_rules(cwd)
+    if not globs:
+        return False
+    for t in {target(cwd, path), os.path.abspath(os.path.join(os.path.realpath(cwd), os.path.expanduser(path)))}:
+        if t.startswith(root + os.sep) and len(t) < 4096:
+            rel = t[len(root) + 1:].replace(os.sep, "/")
+            if any(glob_match(g, rel) for g in globs):
+                return True
+    return False
+
+
+def project_command(cwd, views):
+    """True when a command rule of the project is a word prefix of a command in command position (the first
+    word also by its base name, so `/usr/bin/make deploy` matches `["make", "deploy"]`)."""
+    _, commands, _ = project_rules(cwd)
+    if not commands:
+        return False
+    for line in views:
+        for seg in re.split(r"[;&|()`]", line):
+            words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+            for i in starts(words):
+                got = words[i:i + 8]
+                base = [got[0].rsplit("/", 1)[-1]] + got[1:]
+                if any(got[:len(c)] == c or base[:len(c)] == c for c in commands):
+                    return True
+    return False
+
+
+def hook_cwd(raw):
+    """`cwd` of the hook input: the session's working directory when the hook runs."""
+    return json.loads(raw).get("cwd")
+
+
+def safe(check, *args):
+    """A check that reads the disk or runs git: any failure counts as no hit (fail open)."""
+    try:
+        return check(*args)
+    except Exception:
+        return False
+
+
+LOG_BYTES = 1 << 20
+SCAN_SECONDS = 4  # a backstop for the cost bound: the hook timeout is 10 s
+SCAN_COST = 1500000  # command-position words times words in one view: about a quarter second of scanning
+
+
+def log(reason, rule, tool):
+    """Append one line to the ask log: time, REASONS key, rule name and tool, never the command or the path. The
+    directory is created with mode 700 and must be the user's own, with no symlink; at LOG_BYTES the file moves
+    to `asks.jsonl.1`. DEVELOPER_OS_GUARD_LOG=off disables it."""
+    if os.environ.get("DEVELOPER_OS_GUARD_LOG") == "off":
+        return
+    base = os.environ.get("CLAUDE_PLUGIN_DATA") or "%s/developer-os-%d" % (os.environ.get("TMPDIR") or "/tmp", os.getuid())
+    d = base + "/guard"
+    old = os.umask(0o077)
+    try:
+        if os.path.islink(base):  # before makedirs, which would create the directory behind the link
+            return
+        os.makedirs(d, exist_ok=True)
+        for p in (d, base):
+            if os.path.islink(p) or os.lstat(p).st_uid != os.getuid():
+                return
+        path = d + "/asks.jsonl"
+        if os.path.lexists(path) and os.lstat(path).st_size >= LOG_BYTES:
+            os.replace(path, path + ".1")
+        line = json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "reason": reason, "rule": rule,
+                           "tool": tool}, separators=(",", ":")) + "\n"
+        # O_NOFOLLOW: no write through a planted link; O_NONBLOCK: a FIFO there fails instead of blocking.
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        try:
+            os.write(fd, line.encode("utf-8"))
+        finally:
+            os.close(fd)
+    finally:
+        os.umask(old)
 
 
 def skips_added(tool, inp, path):
@@ -631,22 +1000,33 @@ def skips_added(tool, inp, path):
     return sum(count(e.get("new_string")) - count(e.get("old_string")) for e in pairs) > 0
 
 
-def ask(reason):
+def ask(reason, rule=None, tool="Bash"):
+    """Print the ask, then log it: the decision is out before the log is touched, so a log failure changes nothing."""
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": REASONS[reason]}},
         separators=(",", ":")))
+    sys.stdout.flush()
+    safe(log, reason, rule or reason, tool)
 
 
 def main():
     raw = sys.stdin.buffer.read().decode("utf-8", "replace")
     tool = re.search(r'"tool_name"\s*:\s*"(Edit|Write|MultiEdit)"', raw)
     if tool:
-        inp = json.loads(raw).get("tool_input", {})
+        data = json.loads(raw)
+        inp, cwd, name = data.get("tool_input", {}), data.get("cwd"), tool.group(1)
         path = inp.get("file_path")
-        if isinstance(path, str) and protected(path):
-            ask("protected")
-        elif isinstance(path, str) and TEST_PATH.search(path) and skips_added(tool.group(1), inp, path):
-            ask("tests")
+        if not isinstance(path, str):
+            return
+        kind = protected(path)
+        if kind:
+            ask(kind, kind, name)
+        elif TEST_PATH.search(path) and skips_added(name, inp, path):
+            ask("tests", "tests", name)
+        elif safe(other_worktree, cwd, path):
+            ask("worktree", "worktree", name)
+        elif safe(project_path, cwd, path):
+            ask("project", "project-path", name)
         return
     cmd = command(raw)
     if not cmd:
@@ -657,16 +1037,24 @@ def main():
     # Quotes are not tracked: an extra ask is the price.
     views = [view(cmd, ";"), view(cmd, " "), view(cmd, ";", True), view(cmd, " ", True), view(cmd, " ", join_commas=True),
              view(cmd, ";", shell_ws=True), view(cmd, ";", True, shell_ws=True)]
+    began = time.monotonic()
     for v in views:
+        # The scan is quadratic in command-position words; past the hook timeout Claude Code would run the
+        # command unchecked, so a command that cannot be checked in time asks instead.
+        if time.monotonic() - began > SCAN_SECONDS or scan_cost(v) > SCAN_COST:
+            ask("slow")
+            return
         hit = scan(v)
         if hit:
-            ask(hit)
+            ask(*(hit if isinstance(hit, tuple) else (hit, hit)))
             return
     # A redirect inside quotes is a program's text (`awk '$1>3'`); unbalanced quotes check every view.
     u = unquoted(cmd)
     redirect = redirects(u) if u is not None else any(redirects(v) for v in views)
     if read_only(raw) and (redirect or any(writes(v) for v in views)):
         ask("readonly")
+    elif safe(project_command, safe(hook_cwd, raw), views):
+        ask("project", "project-command")
     elif any(commits(v) for v in views):
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": COMMIT}},
                          separators=(",", ":")))

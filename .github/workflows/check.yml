@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -28,15 +28,15 @@ jobs:
       # The binary is pinned by its own hash, not by a checksum file from the same release.
       - name: Set up agnix
         run: |
-          curl -sSfL --retry 5 --retry-all-errors --retry-delay 5 -o agnix.tar.gz https://github.com/agent-sh/agnix/releases/download/v0.57.0/agnix-x86_64-unknown-linux-gnu.tar.gz
-          echo "c72bf5ff1f45900055c353cc1bd6bbea6389506a3ba3197db000340066c78098  agnix.tar.gz" | sha256sum -c -
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 5 -o agnix.tar.gz https://github.com/agent-sh/agnix/releases/download/v0.61.0/agnix-x86_64-unknown-linux-gnu.tar.gz
+          echo "cfc8f4c5a51d023bbc8742fb84f420b12d3d49b621c8ccfb7382c5f73944ad09  agnix.tar.gz" | sha256sum -c -
           tar -xzf agnix.tar.gz agnix
           sudo mv agnix /usr/local/bin/
           rm agnix.tar.gz
       # --ignore-scripts skips every dependency's lifecycle script; only Claude Code's own postinstall,
       # which links its native binary, runs, by name.
       - run: |
-          npm install -g --ignore-scripts @anthropic-ai/claude-code@2.1.300
+          npm install -g --ignore-scripts @anthropic-ai/claude-code@2.1.322
           node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
           claude --version
       - name: Install gitleaks

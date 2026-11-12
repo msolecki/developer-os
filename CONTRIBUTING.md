@@ -1,6 +1,6 @@
 # Contributing
 
-The plugin is Markdown and JSON plus five Python 3 hook scripts (standard library only). There is no build step and no runtime.
+The plugin is Markdown and JSON plus six Python 3 hook scripts (standard library only). There is no build step and no runtime.
 
 ## Check
 
@@ -22,7 +22,7 @@ list of stages is in [docs/development.md](docs/development.md#the-check). CI ru
 
 Hook tests live in `tests/*.test.sh` and run with `sh` (they call `python3`); after changing a hook script, run its test
 directly from the repository root, for example `sh tests/guard.test.sh`,
-`sh tests/capture-nudge.test.sh`, `sh tests/notices.test.sh`, `sh tests/repeat-failure.test.sh` or `sh tests/state-card.test.sh`.
+`sh tests/capture-nudge.test.sh`, `sh tests/notices.test.sh`, `sh tests/patterns.test.sh`, `sh tests/repeat-failure.test.sh` or `sh tests/state-card.test.sh`.
 
 Prerequisites on `PATH`:
 
