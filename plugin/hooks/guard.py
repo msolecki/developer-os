@@ -319,7 +319,8 @@ CLASSES = [
     ("gem", ("push",), "publish", "gem-push"), ("gh", ("repo", "delete"), "publish", "gh-repo-delete"),
     ("gh", ("release", "create"), "publish", "gh-release-create"),
     ("gh", ("release", "delete"), "publish", "gh-release-delete"), ("gh", ("pr", "merge"), "publish", "gh-pr-merge"),
-    ("aws", ("s3", "rb"), "cloud", "aws-s3-rb")]
+    ("aws", ("s3", "rb"), "cloud", "aws-s3-rb"),
+    ("npm", ("unpublish",), "publish", "npm-unpublish"), ("npm", ("deprecate",), "publish", "npm-deprecate")]
 # Options whose value is the next word, per command, so the value is not read as a subcommand.
 CLI_VALUE = {"docker": {"-H", "--host", "-c", "--context", "--config", "-l", "--log-level"}, "gh": {"-R", "--repo"},
              "aws": {"--profile", "--region", "--output", "--endpoint-url", "--color", "--ca-bundle", "--query",
@@ -334,6 +335,7 @@ DB_CLIENTS = {"psql", "mysql", "mariadb", "sqlite3"}
 SQL_DROP = re.compile(r"(?<![\w.-])(?:drop|truncate)(?![\w.-])", re.I)
 FETCHERS = {"curl", "wget"}
 RUN_SHELL = re.compile(r"(ba|z|da|k)?sh")
+RUN_INTERP = re.compile(r"python[0-9.]*|perl|ruby|node|php")
 
 
 def classes(words):
@@ -344,7 +346,10 @@ def classes(words):
         values = CLI_VALUE.get(name, ())
         ops = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in values)]
         flags = {x.split("=")[0] for x in rest if x.startswith("-")}
-        if name in DRY_RUN and flags & {"--dry-run", "--dryrun"}:
+        # `--dry-run=false` is no dry run.
+        dry = any(x.split("=")[0] in ("--dry-run", "--dryrun") and x.split("=")[-1].lower() not in ("false", "0", "no")
+                  for x in rest)
+        if name in DRY_RUN and dry:
             continue
         for cmd, sub, reason, rule in CLASSES:
             if name == cmd and tuple(ops[:len(sub)]) == sub:
@@ -353,8 +358,20 @@ def classes(words):
             return "publish", "npm-publish"
         if name == "aws" and ops[:2] == ["s3", "rm"] and "--recursive" in flags:
             return "cloud", "aws-s3-rm"
-        if name == "aws" and ops[1:2] and ops[1].startswith(("delete-", "terminate-")):
+        if name == "aws" and ops[:2] == ["s3", "sync"] and "--delete" in flags:
+            return "cloud", "aws-s3-sync-delete"
+        if name == "aws" and ops[1:2] and re.match(r"(batch-)?(delete|terminate)-", ops[1]):
             return "cloud", "aws-delete"
+        recursive = any(re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*|--recursive", x) for x in rest)
+        if name == "gsutil" and ("rb" in ops or ("rm" in ops and recursive)):
+            return "cloud", "gsutil-rm"
+        if name == "gcloud" and ops[:2] == ["storage", "rm"] and recursive:
+            return "cloud", "gcloud-storage-rm"
+        if re.fullmatch(r"python[0-9.]*", name) and rest[:3] == ["-m", "twine", "upload"]:
+            return "publish", "twine-upload"
+        if name == "gh" and ops[:1] == ["api"] and re.search(
+                r"(?:^| )(?:-X ?|--method[ =])DELETE(?: |$)", " ".join(rest), re.I):
+            return "publish", "gh-api-delete"
         if name == "gcloud" and "delete" in ops:
             return "cloud", "gcloud-delete"
         if name == "az" and any(x == "delete" or x.startswith("delete-") for x in ops):
@@ -385,14 +402,20 @@ def runs_download(line):
     for k in range(0, len(parts), 2):
         words = [w for w in re.split(r"[ \t\n]+", parts[k]) if w]
         delim = parts[k - 1] if k else ""
-        if delim != "|":
+        # `curl u | (sh)`: the bracket right after the pipe keeps the pipe.
+        if delim != "|" and not (delim == "(" and not before):
             piped = False
-        names = [words[i].rsplit("/", 1)[-1] for i in starts(words)]
+        pos = starts(words)
+        names = [words[i].rsplit("/", 1)[-1] for i in pos]
         if piped and any(RUN_SHELL.fullmatch(n) for n in names):
+            return True
+        # An interpreter reading its program from the pipe: no argument, or `-`. `python3 -m json.tool` reads data.
+        if piped and any(RUN_INTERP.fullmatch(words[i].rsplit("/", 1)[-1]) and words[i + 1:i + 2] in ([], ["-"])
+                         for i in pos):
             return True
         if any(n in FETCHERS for n in names):
             last = before[-1] if before else ""
-            runner = any(RUN_SHELL.fullmatch(n) or n in ("eval", "source")
+            runner = any(RUN_SHELL.fullmatch(n) or n in ("eval", "source", ".")
                          for n in [before[i].rsplit("/", 1)[-1] for i in starts(before)])
             if delim == "(" and runner and (last.endswith("<") or last == "eval" or re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", last)):
                 return True
