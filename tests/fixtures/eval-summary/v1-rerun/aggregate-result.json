@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "9.9.1",
+  "startedAt": "2030-01-01T11:00:00.000Z",
+  "durationSeconds": 30,
+  "costUsd": 0.3,
+  "partial": false,
+  "suite": {
+    "root": "/work/demo",
+    "ablation": "none",
+    "modelOverride": "agent-model-a",
+    "judgeModel": "judge-model-a",
+    "caseFilter": "beta",
+    "threshold": 0.8,
+    "concurrency": 3,
+    "plugins": [{ "name": "developer-os", "version": "9.0.0", "path": "/work/demo/plugin" }]
+  },
+  "cases": [
+    {
+      "name": "beta",
+      "dir": "evals/beta",
+      "source": "mixed",
+      "promptMarkdown": "Do beta.",
+      "runsPerCase": 3,
+      "timeoutSeconds": 400,
+      "maxTurns": 25,
+      "graders": [],
+      "arms": {
+        "with": [
+          { "score": 1, "passed": true, "turns": 5, "costUsd": 0.1, "judgeCostUsd": 0, "durationSeconds": 20, "startedAt": "2030-01-01T11:00:01.000Z", "error": null, "tracePath": "/tmp/t/1.jsonl", "skippedPaidGraders": false, "graders": [] },
+          { "score": 1, "passed": true, "turns": 5, "costUsd": 0.1, "judgeCostUsd": 0, "durationSeconds": 20, "startedAt": "2030-01-01T11:00:02.000Z", "error": null, "tracePath": "/tmp/t/2.jsonl", "skippedPaidGraders": false, "graders": [] },
+          { "score": 0.7, "passed": false, "turns": 5, "costUsd": 0.1, "judgeCostUsd": 0, "durationSeconds": 20, "startedAt": "2030-01-01T11:00:03.000Z", "error": null, "tracePath": "/tmp/t/3.jsonl", "skippedPaidGraders": false, "graders": [] }
+        ]
+      },
+      "aggregates": { "score": 0.9, "passRate": 0.6666666666666666 }
+    },
+    {
+      "name": "gamma",
+      "dir": "evals/gamma",
+      "source": "mixed",
+      "promptMarkdown": "Do gamma.",
+      "runsPerCase": 1,
+      "timeoutSeconds": 400,
+      "maxTurns": 25,
+      "graders": [],
+      "arms": {
+        "with": [{ "score": 0.4, "passed": false, "turns": 5, "costUsd": 0.1, "judgeCostUsd": 0, "durationSeconds": 20, "startedAt": "2030-01-01T11:00:04.000Z", "error": null, "tracePath": "/tmp/t/4.jsonl", "skippedPaidGraders": false, "graders": [] }]
+      },
+      "aggregates": { "score": 0.4, "passRate": 0 }
+    }
+  ],
+  "aggregates": { "casesTotal": 2, "casesPassed": 1, "overallScore": 0.65, "overallPassRate": 0.5 }
+}

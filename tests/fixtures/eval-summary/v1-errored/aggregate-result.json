@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "9.9.1",
+  "startedAt": "2030-01-01T12:00:00.000Z",
+  "durationSeconds": 1,
+  "costUsd": 0,
+  "partial": false,
+  "suite": {
+    "root": "/work/demo",
+    "ablation": "none",
+    "modelOverride": "agent-model-a",
+    "judgeModel": "judge-model-a",
+    "caseFilter": "alpha",
+    "threshold": 0.8,
+    "concurrency": 3,
+    "plugins": [{ "name": "developer-os", "version": "9.0.0", "path": "/work/demo/plugin" }]
+  },
+  "cases": [
+    {
+      "name": "alpha",
+      "dir": "evals/alpha",
+      "source": "mixed",
+      "promptMarkdown": "Do alpha.",
+      "runsPerCase": 1,
+      "timeoutSeconds": 400,
+      "maxTurns": 25,
+      "graders": [],
+      "arms": {
+        "with": [{ "score": 0, "passed": false, "turns": 0, "costUsd": 0, "judgeCostUsd": 0, "durationSeconds": 0, "startedAt": "2030-01-01T12:00:01.000Z", "error": "scaffold failed", "tracePath": "/tmp/t/5.jsonl", "skippedPaidGraders": false, "graders": [] }]
+      },
+      "aggregates": { "score": 0, "passRate": 0 }
+    }
+  ],
+  "aggregates": { "casesTotal": 1, "casesPassed": 0, "overallScore": 0, "overallPassRate": 0 }
+}
