@@ -61,6 +61,28 @@ Expired (brain-search no longer answers from these):
 Approve which ones? (e.g. "promote 1 and 2", "promote 1 to TOOLS/", "merge 1 into DEV/release-process.md", "reject 2", "supersede DEV/release-process.md by 1", "archive the expired ones")
 ```
 
+Above 20 inbox notes (expired ones not counted), work in pages of 20. Do not read every note first: print the frontmatter of all of them in one command, and open a note only when its `summary` is not enough to recommend.
+
+```bash
+V='/path/to/vault'; rg -N '^(type|summary|tags|project):' -g '*.md' "$V/_inbox"
+```
+
+Number the notes once, in order of proposed folder, and show numbers 1–20 as the first page, grouped under their folder. Each note takes one line that ends with `recommend: promote | merge into <note> | reject` and a one-clause reason. The `Expired` group follows the first page, numbered after the last inbox note.
+
+```
+Page 1 of 2: notes 1–20 of 25
+DEV/
+1. _inbox/release-notes-in-changelog.md, "Release notes live in CHANGELOG.md." recommend: merge into DEV/release-process.md (same rule, adds the per-version sections)
+2. _inbox/api-error-envelope.md, "Every API error uses one envelope." recommend: promote (a rule with its why)
+INFRA/
+3. _inbox/docker-cache-flag.md, "Use --mount=type=cache for pnpm store in Dockerfiles." recommend: promote (reusable in every image)
+…
+20. _inbox/login-test-debug-log.md, "Steps tried on the flaky login test." recommend: reject (a per-task log)
+Approve which ones? Ranges work: "1-12 promote, 13 reject, 14-20 skip". "next" shows page 2.
+```
+
+A number or range covers only the page shown last: for a number outside it, change nothing for that number and ask. `skip` leaves a note in `_inbox/`, and a number the answer does not mention is skipped. A recommendation is yours, not the user's approval. Read a note in full before promoting or merging it: the frontmatter and secret checks above still apply to it. After acting on an answer (steps 4–6), or on "next", show the next page (numbers 21–40) with the same question.
+
 ## 4. Promote only approved notes
 
 For each note the user explicitly approved, in this order:
@@ -81,7 +103,7 @@ Only for notes the user explicitly named. Never delete a note.
 
 To archive, in this order: run step 4's checks 1 and 2 (archiving keeps the file name), move the note to `_archive/<name>.md`, and only then set `status: archived` and `updated:` to today. A failed check changes nothing.
 
-Silence or "looks good" on the list is not approval for every note; ask which ones.
+Silence or "looks good" on the list or a page is not approval for every note, and neither is your own recommendation; ask which ones.
 
 ## 6. Report and propose hub edits
 
@@ -99,7 +121,7 @@ The user can also review directly in Obsidian through the `_views/Inbox.base` vi
 
 ## Stop point
 
-Stops after the proposal list, expired notes shown as one group, with the question "Approve which ones?". After the user answers, promotes, merges, archives or supersedes only the named notes, or the `Expired` group when the user names it, and reports what moved where and what stayed in `_inbox/`; when a hub links one of them with the `(waiting for review)` marker, the report ends with the hub diff and "Apply these hub edits?".
+Stops after the proposal list, expired notes shown as one group, with the question "Approve which ones?"; above 20 inbox notes, after the first page of 20 with a recommendation per note. After the user answers, promotes, merges, archives or supersedes only the named notes, or the `Expired` group when the user names it, and reports what moved where and what stayed in `_inbox/`; when a hub links one of them with the `(waiting for review)` marker, the report ends with the hub diff and "Apply these hub edits?".
 
 ## Never
 
