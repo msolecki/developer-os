@@ -20,6 +20,7 @@ Edit no file in the repository and commit nothing, on every path: the one write 
 
 ## Establish context
 
+- Before reading code, `git fetch` and record `git rev-parse HEAD` and `origin/<base>`; when another session shares the checkout or HEAD is behind the base, review from a fresh worktree of the current base, and cite findings with the commit read.
 - Read the request/PR description, diff, tests, and affected architecture.
 - Flag changes to auth, middleware, migrations, tenant boundaries, or destructive data paths.
 - For every contract the change touches (an API handler and its client, a schema and its type, a route and its links, a state map and its transitions), read both sides; a mismatch is P1.
