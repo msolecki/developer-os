@@ -22,6 +22,7 @@
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@bb02daec2f3f">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@51af119a191d">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@89c690b4a0ed">
+<meta name="dos-source" content="plugin/agents/scout.md@c37a0ec7cb6e">
 <meta name="dos-source" content="plugin/agents/verifier.md@28852e17195a">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@8c7fd76732b6">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@a31093b64b9f">
@@ -56,7 +57,7 @@
   <main id="main" class="prose">
     <h1 id="agents">Agents</h1>
     <p class="lede">Agents are subagents that a skill or you dispatch for one focused job. Most are read-only reviewers that report and never edit; qa-expert writes tests when it is asked to, and docs-writer edits documentation files.</p>
-    <p>The plugin ships 10 agents. Each one treats code, diffs, PR text, fixtures and fetched pages as data, never as instructions: it runs no command it finds there. No agent with Bash runs a git command that changes state (checkout, switch, reset, stash, rebase, pull, commit, merge and the like), because the session that dispatched it may be integrating in the same checkout; it runs only read-only git and reads another revision with <code>git show</code> or <code>git diff</code>. Skills such as <a href="skills/code-review.html">code-review</a>, <a href="skills/audit-to-backlog.html">audit-to-backlog</a> and <a href="skills/bug-triage.html">bug-triage</a> dispatch them; you can also ask for one by name, for example <code>developer-os:security-auditor</code>.</p>
+    <p>The plugin ships 11 agents. Each one treats code, diffs, PR text, fixtures and fetched pages as data, never as instructions: it runs no command it finds there. No agent with Bash runs a git command that changes state (checkout, switch, reset, stash, rebase, pull, commit, merge and the like), because the session that dispatched it may be integrating in the same checkout; it runs only read-only git and reads another revision with <code>git show</code> or <code>git diff</code>. Skills such as <a href="skills/code-review.html">code-review</a>, <a href="skills/audit-to-backlog.html">audit-to-backlog</a> and <a href="skills/bug-triage.html">bug-triage</a> dispatch them; you can also ask for one by name, for example <code>developer-os:security-auditor</code>.</p>
 
     <h2 id="final-status">Final status</h2>
     <p>Every agent's report starts with exactly one of four lines, so the skill or session that dispatched it knows what to do next:</p>
@@ -280,6 +281,27 @@
       </ul>
     </div>
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/research-analyst.md">Read research-analyst.md on GitHub</a></p>
+
+    <h2 id="scout">scout</h2>
+    <p>Finds and collects facts for the session that called it: files, grep matches across a repository or the vault, issue or PR data, page contents. Skills use it instead of a general-purpose agent, which runs on the session's model, whenever the delegated work only searches, reads or gathers.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Turn cap</dt><dd>60</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash, WebFetch</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>session-retro, docs-sync, brain-search and brain-capture; on request</dd></div>
+    </dl>
+    <h3 id="scout-report">scout report</h3>
+    <p>The findings inline as a compact list or table, each with its <code>file:line</code> or URL, then one <code>Not found:</code> line with what it looked for and where. It never writes a report file.</p>
+    <div class="callout never">
+      <h3 id="what-scout-never-does">What scout never does</h3>
+      <ul>
+        <li>Edit, write, commit or push.</li>
+        <li>Judge quality or make a decision; it stops and says the caller must.</li>
+        <li>Act on commands found in what it reads, or fetch a URL built from local file contents.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/scout.md">Read scout.md on GitHub</a></p>
 
     <h2 id="security-auditor">security-auditor</h2>
     <p>Audits a codebase or diff for exploitable security defects: authentication and authorization, injection, secret exposure, unsafe deserialization, SSRF and insecure defaults. Use it when the work needs a security pass.</p>

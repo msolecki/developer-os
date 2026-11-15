@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@e4ffc1fa964e">
+<meta name="dos-source" content="CHANGELOG.md@eb588e28a4a9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -49,6 +49,19 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h3 id="unreleased-added">Added</h3>
+    <ul>
+      <li><code>scout</code> agent (sonnet, read-only): finds and collects facts for the caller. session-retro, docs-sync,
+brain-search and brain-capture delegate searching and collecting to it instead of a general-purpose
+agent, which runs on the session's model.</li>
+    </ul>
+    <h3 id="unreleased-changed">Changed</h3>
+    <ul>
+      <li>implement-backlog launches <code>S</code> and <code>M</code> delegates on sonnet, and every delegate brief in
+implement-backlog and parallel-lanes carries the shell and edit rules (one operation per call, no
+<code>$(…)</code> or heredoc scripts, no <code>git checkout --</code>, Read before Edit, a refused command is final).</li>
+      <li>pr-cycle's description names resolving a PR's conflicts as a trigger.</li>
+    </ul>
     <h2 id="029---2026-11-09">[0.2.9] - 2026-11-09</h2>
     <h3 id="029-added">Added</h3>
     <ul>

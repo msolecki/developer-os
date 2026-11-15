@@ -127,6 +127,7 @@ Dispatched by skills or by the main agent. All treat code, diffs, PR text and fe
 | [performance-engineer](../../plugin/agents/performance-engineer.md) | sonnet | Read, Bash, Glob, Grep | No | audit-to-backlog (performance) |
 | [qa-expert](../../plugin/agents/qa-expert.md) | sonnet | Read, Grep, Glob, Bash, Write, Edit, Skill | Tests only, and only when asked | audit-to-backlog (tests, assessment only) |
 | [research-analyst](../../plugin/agents/research-analyst.md) | sonnet | Read, Grep, Glob, WebFetch, WebSearch | No | bug-triage (library or vendor behaviour behind a hypothesis); on request |
+| [scout](../../plugin/agents/scout.md) | sonnet | Read, Grep, Glob, Bash, WebFetch | No | session-retro, docs-sync, brain-search and brain-capture (searching and collecting instead of a general-purpose agent); on request |
 | [verifier](../../plugin/agents/verifier.md) | sonnet | Read, Grep, Glob | No | code-review, audit-to-backlog and project-init (P0, P1 and up to five P2 correctness findings; answers `CONFIRMED`, `REFUTED` or `UNDECIDED`; the only agent on an untrusted head) |
 | [database-reviewer](../../plugin/agents/database-reviewer.md) | sonnet | Read, Bash, Glob, Grep | No | audit-to-backlog (data), code-review (migration, schema or query diffs); never connects to a database |
 | [dependency-upgrader](../../plugin/agents/dependency-upgrader.md) | sonnet | Read, Grep, Glob, Bash, WebFetch, WebSearch | No; installs nothing | project-baseline (the three dependencies furthest behind); on request |

@@ -24,7 +24,7 @@ plugin/                           the installed payload
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/<name>/SKILL.md          32 skills
-  agents/<name>.md                10 agents
+  agents/<name>.md                11 agents
   output-styles/<name>.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)

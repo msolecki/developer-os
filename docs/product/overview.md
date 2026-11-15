@@ -25,7 +25,7 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    reads and writes it with its own file tools. The user approves everything that becomes knowledge.
 2. **An engineering operating model.** Core rules loaded into every session, workflow skills
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
-   conventions skills, ten agents (nine specialists and a verifier), four output styles and small hooks, among them a guard on Bash, Edit, Write and MultiEdit.
+   conventions skills, eleven agents (nine specialists, a collector and a verifier), four output styles and small hooks, among them a guard on Bash, Edit, Write and MultiEdit.
 
 The plugin is Markdown and JSON plus five Python 3 hook scripts (standard library only). There is no server, database,
 index, binary, background job or network call in the plugin itself.
