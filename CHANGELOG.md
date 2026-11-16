@@ -4,6 +4,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- CI runs `tests/check.test.sh` as one shard per CPU side by side and the YAML stage in one process; a run
+  took 6.6 minutes, nearly all of it that test (D29).
+- CI keeps the pinned agnix, gitleaks and ripgrep tarballs in `actions/cache`, checks each
+  tarball's SHA-256 on every run, retries downloads with backoff, and takes ripgrep from its release
+  instead of `apt-get`; GitHub's release host had failed five pull-request runs with a 504.
+
 ## [0.2.9] - 2026-11-09
 
 ### Added

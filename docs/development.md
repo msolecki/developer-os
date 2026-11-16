@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-16
 ---
 
 # Development guide
@@ -52,7 +52,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
 | Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page under `site/docs/` whose words differ from its source's (D28); a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once. Git-ignored docs (for example `docs/superpowers/`) need no page |
-| Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
+| Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set, as one shard per CPU side by side (`CHECK_TEST_SHARDS` sets the number) |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
 | agnix | `agnix --target claude-code --strict --config .agnix.toml .` reports an error or warning; the stage runs when `agnix` is on `PATH`, prints `SKIP agnix` otherwise, and fails when it is missing in CI; `AGNIX` overrides the command |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
@@ -63,17 +63,23 @@ committed.
 ## CI
 
 `.github/workflows/check.yml` runs `scripts/check.sh` on pushes to `development` and `main` and on
-every pull request. A newer push to the same ref cancels the older run, and the job times out after 45 minutes.
-Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.57.0, the release binary pinned by its
-SHA-256, `--strict`, target `claude-code`), a static lint of skills, hooks and manifests configured in
-`.agnix.toml`; every rule disabled there carries its reason. It pins `actions/checkout` to a commit SHA, does not persist credentials, has
-read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`) and a gitleaks
-release verified by SHA-256, and, on a pull request, `gitleaks git` over the PR's commits, so a secret added and
+every pull request. A newer push to the same ref cancels the older run, and the job times out after 25 minutes.
+Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.57.0, `--strict`, target `claude-code`),
+a static lint of skills, hooks and manifests configured in `.agnix.toml`; every rule disabled there carries its reason.
+It puts gitleaks (v8.30.1) and ripgrep (15.1.0, for `tests/skill-usage.test.sh`) there too. Each of the three is a release
+tarball pinned by its SHA-256 in the workflow and checked on every run. The tarballs are kept in an
+`actions/cache` entry keyed by the workflow file, so a run downloads them only after the file changes; a corrupt entry
+is downloaded again on every run until the file changes, since a cache key is never overwritten. `curl` retries transient
+errors with exponential backoff for up to 5 minutes per tarball (each try at most 60 s), and the setup step times out after 15
+minutes, because GitHub's release host has answered 504 for minutes at a time (D29).
+It pins its actions to commit SHAs, does not persist credentials, has
+read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`),
+and, on a pull request, runs `gitleaks git` over the PR's commits, so a secret added and
 removed inside one PR still fails. The same step fails a PR that changes `.gitleaks.toml` or
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
 only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
 `.github/dependabot.yml` proposes weekly updates of the SHA-pinned actions, each release at least 7 days old.
-Dependabot does not read the agnix, gitleaks and claude-code versions in the run steps: bump them by hand, and
+Dependabot does not read the agnix, gitleaks, ripgrep and claude-code versions in the run steps: bump them by hand, and
 the claude-code one together with `claude_code` in `.agnix.toml` (the Tool versions stage).
 
 ## The site
@@ -129,7 +135,10 @@ safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds c
 `tests/notices.test.sh` runs `notices.py` with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's `CLAUDE.md` is ignored, that the `brain_vault` option in the user-level `settings.json` wins over the line, an empty one falls back to it and its environment variable is ignored, and that no note name is printed;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
 stage's message; it runs the whole check once per case (several minutes), so `scripts/check.sh` runs it
-only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
+only when `CI` is set (GitHub Actions sets it), split into one shard per CPU run side by side, each in its own copy
+(`CHECK_TEST_SHARD=K/N` runs every Nth case from the Kth on): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
+it sets `CHECK_TEST_COPY`, so `tests/guard.test.sh` in its copies skips the CPU-time limit that the top-level run measures;
+`tests/check-shard.test.sh` passes malformed `CHECK_TEST_SHARD` specs to it and expects each to fail before any case runs;
 `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
 and expects one count per message; when `rg` is missing it prints SKIP locally and fails in CI,

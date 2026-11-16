@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@15dd3c95e005">
+<meta name="dos-source" content="docs/product/decisions.md@0d1c704a29ea">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -274,6 +274,14 @@
 <li><strong>Why:</strong> the hash proved a page was touched, not updated. A docs-sync pass found a removed Codex line still on the architecture page and two hooks.md passages that disagreed with their page; the word comparison caught both, and passed on every other page without exceptions.</li>
 <li><strong>Alternatives rejected:</strong> generating the site from Markdown (adds a build to a repository with none); a docs-sync run on every PR in CI (paid, and evals stay out of CI per D13).</li>
 <li><strong>Revisit when:</strong> the word comparison needs a per-page exception, or skill pages drift despite review.</li>
+</ul>
+<h2 id="d29-one-ci-job-its-slow-test-sharded-its-tools-cached">D29. One CI job, its slow test sharded, its tools cached</h2>
+<ul>
+<li><strong>Date:</strong> 2026-11-16</li>
+<li><strong>Decision:</strong> <code>scripts/check.sh</code> runs <code>tests/check.test.sh</code> in CI as one shard per CPU, side by side, each in its own copy of the repository; every case still runs on every push. Inside those copies <code>tests/guard.test.sh</code> skips its CPU-time limit, since shards side by side share the CPUs; the top-level run still measures it. The YAML stage parses all files in one process. CI keeps one job and one <code>check</code> status, and its timeout drops from 45 to 25 minutes. The agnix, gitleaks and ripgrep tarballs live in an <code>actions/cache</code> entry keyed by the workflow file; each is still checked against its pinned SHA-256 on every run (D18), and ripgrep comes from its release instead of <code>apt-get</code>. A cache key is never overwritten, so a corrupt entry is fixed by changing the workflow file. A download retries transient errors for up to 5 minutes, each try at most 60 s, and the setup step times out after 15 minutes. npm's cache is not kept, since nothing would check it.</li>
+<li><strong>Why:</strong> a run took 6.6 minutes, nearly all of it the check-script test running the whole check 71 times in series. Five of the last 60 pull-request runs failed on a 504 from GitHub's release host while downloading agnix or gitleaks, one with retries five seconds apart; the other failures were real defects in the pull requests.</li>
+<li><strong>Alternatives rejected:</strong> a matrix job per shard (each pays the checkout and tool setup, and the status splits); dropping or moving cases out of the pull-request run; retrying every curl error, which also retries a 404 or 403 until the window ends, so a connection reset mid-download is not retried and the cache covers it instead.</li>
+<li><strong>Revisit when:</strong> the shards take more than a few minutes, or a cache miss downloads on most runs.</li>
 </ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>
