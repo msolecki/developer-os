@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-16
 ---
 
 # Decisions
@@ -491,6 +491,21 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Alternatives rejected:** generating the site from Markdown (adds a build to a repository with none);
   a docs-sync run on every PR in CI (paid, and evals stay out of CI per D13).
 - **Revisit when:** the word comparison needs a per-page exception, or skill pages drift despite review.
+
+## D29. One CI job, its slow test sharded, its tools cached
+
+- **Date:** 2026-11-16
+- **Decision:** `scripts/check.sh` runs `tests/check.test.sh` in CI as one shard per CPU, side by side, each in its own
+  copy of the repository; every case still runs on every push. The YAML stage parses all files in one process. CI keeps
+  one job and one `check` status. The agnix, gitleaks and ripgrep tarballs and npm's cache live in an `actions/cache`
+  entry keyed by the workflow file; each tarball is still checked against its pinned SHA-256 on every run (D18), and
+  ripgrep comes from its release instead of `apt-get`.
+- **Why:** a run took 6.6 minutes, nearly all of it the check-script test running the whole check 71 times in
+  series. Five of the last 60 pull-request runs failed on a 504 from GitHub's release host while downloading agnix or
+  gitleaks, one with retries five seconds apart; the other failures were real defects in the pull requests.
+- **Alternatives rejected:** a matrix job per shard (each pays the checkout and tool setup, and the status splits);
+  dropping or moving cases out of the pull-request run.
+- **Revisit when:** the shards take more than a few minutes, or a cache miss downloads on most runs.
 
 ## Rules history
 

@@ -132,10 +132,15 @@ if git grep --untracked -nE '/Users/|/home/|~/www|\.claude2' -- plugin site >&2;
   fail paths plugin "local path (/Users/, /home/, ~/www or .claude2) above"
 fi
 
-files '*.base' 'evals/*.yaml' | while IFS= read -r -d '' f; do
-  ruby -e 'require "date"; require "yaml"; YAML.safe_load($stdin.read, permitted_classes: [Date], aliases: true)' < "$f" \
-    || fail yaml "$f" "invalid YAML"
-done
+# One ruby for every file: a process per file cost about 3 s of every check run.
+files '*.base' 'evals/*.yaml' | ruby -e '
+  require "date"; require "yaml"
+  $stdin.read.split("\0").each do |f|
+    YAML.safe_load(File.read(f), permitted_classes: [Date], aliases: true)
+  rescue Psych::Exception => e
+    warn e.message
+    abort "yaml: #{f}: invalid YAML"
+  end'
 
 # Every eval case directory has a case.yaml whose name is the folder, a prompt.md, the scaffold_script it names,
 # graders/*.md of a known type with at least one deterministic (non-llm) grader and one positive grader, and its own row in evals/README.md.
@@ -405,12 +410,29 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
   sitemap.tally.each { |u, n| errs << "site: site/sitemap.xml: #{u} is listed #{n} times" if n > 1 }
   abort errs.uniq.join("\n") unless errs.empty?'
 
-# tests/check.test.sh runs the whole check once per case (minutes), so it runs only in CI or with CI=1.
 for t in tests/*.test.sh; do
-  [ -e "$t" ] || continue
-  [ "$t" != tests/check.test.sh ] || [ -n "${CI:-}" ] || continue
+  [ -e "$t" ] && [ "$t" != tests/check.test.sh ] || continue
   sh "$t" || fail tests "$t" "exited non-zero"
 done
+# tests/check.test.sh runs the whole check once per case (minutes), so it runs only in CI or with CI=1, split into
+# one shard per CPU (CHECK_TEST_SHARDS overrides), each in its own copy of the repository, run side by side.
+if [ -e tests/check.test.sh ] && [ -n "${CI:-}" ]; then
+  n=${CHECK_TEST_SHARDS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
+  [[ $n =~ ^[1-9][0-9]*$ ]] || fail tests tests/check.test.sh "CHECK_TEST_SHARDS=$n is not a positive number"
+  logs=$(mktemp -d)
+  pids=()
+  for ((i = 1; i <= n; i++)); do
+    CHECK_TEST_SHARD="$i/$n" sh tests/check.test.sh > "$logs/$i" 2>&1 &
+    pids+=($!)
+  done
+  bad=0
+  for ((i = 1; i <= n; i++)); do
+    wait "${pids[i - 1]}" || bad=1
+    cat "$logs/$i"
+  done
+  rm -rf "$logs"
+  [ "$bad" -eq 0 ] || fail tests tests/check.test.sh "exited non-zero"
+fi
 
 # --strict fails on unknown or misspelled manifest keys and on any warning: a missing version, or a marketplace
 # entry whose version differs from plugin.json.
