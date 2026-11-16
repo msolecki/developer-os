@@ -67,9 +67,9 @@ every pull request. A newer push to the same ref cancels the older run, and the 
 Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.57.0, `--strict`, target `claude-code`),
 a static lint of skills, hooks and manifests configured in `.agnix.toml`; every rule disabled there carries its reason.
 It puts gitleaks (v8.30.1) and ripgrep (15.1.0, for `tests/skill-usage.test.sh`) there too. Each of the three is a release
-tarball pinned by its SHA-256 in the workflow and checked on every run. The tarballs and npm's cache are kept in an
+tarball pinned by its SHA-256 in the workflow and checked on every run. The tarballs are kept in an
 `actions/cache` entry keyed by the workflow file, so a run downloads them only after the file changes; `curl` retries
-with exponential backoff for up to 15 minutes, because GitHub's release host has answered 504 for minutes at a time (D29).
+with exponential backoff for up to 5 minutes per tarball, because GitHub's release host has answered 504 for minutes at a time (D29).
 It pins its actions to commit SHAs, does not persist credentials, has
 read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`),
 and, on a pull request, runs `gitleaks git` over the PR's commits, so a secret added and

@@ -22,14 +22,12 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      # The release tarballs and npm's cache, keyed by this file, so a version bump starts a new cache.
+      # The release tarballs, keyed by this file, so a version bump starts a new cache.
       # A hit only skips the download: every tarball is checked against its pinned SHA-256 below on every run.
       - id: tools-cache
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          path: |
-            ~/.cache/dos-tools
-            ~/.npm
+          path: ~/.cache/dos-tools
           key: check-tools-${{ runner.os }}-${{ hashFiles('.github/workflows/check.yml') }}
       # agnix: static lint of skills, hooks and plugin manifests, run by scripts/check.sh; settings and suppressions in .agnix.toml.
       # ripgrep: tests/skill-usage.test.sh fails without it in CI. Each binary is pinned by its own hash, not by a
@@ -43,7 +41,7 @@ jobs:
           fetch() {
             f="$cache/$1.tar.gz"
             if ! echo "$3  $f" | sha256sum -c --status - 2>/dev/null; then
-              curl -sSfL --retry 10 --retry-all-errors --retry-max-time 900 --connect-timeout 20 --max-time 300 -o "$f" "$2"
+              curl -sSfL --retry 10 --retry-all-errors --retry-max-time 300 --connect-timeout 20 --max-time 300 -o "$f" "$2"
               echo "$3  $f" | sha256sum -c - || { rm -f "$f"; exit 1; }
             fi
             tar -xzf "$f" -C "$bin" --strip-components="$5" "$4"
@@ -55,21 +53,19 @@ jobs:
           fetch ripgrep-15.1.0 https://github.com/BurntSushi/ripgrep/releases/download/15.1.0/ripgrep-15.1.0-x86_64-unknown-linux-musl.tar.gz \
             1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599 ripgrep-15.1.0-x86_64-unknown-linux-musl/rg 1
           echo "$bin" >> "$GITHUB_PATH"
-      # --ignore-scripts skips every dependency's lifecycle script; only Claude Code's own postinstall,
-      # which links its native binary, runs, by name.
-      - name: Install Claude Code
-        run: |
-          npm install -g --ignore-scripts --prefer-offline --fetch-retries=5 @anthropic-ai/claude-code@2.1.300
-          node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
-          claude --version
       # Saved as soon as the downloads are verified, so a later failing step still leaves the cache for the next run.
       - if: steps.tools-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          path: |
-            ~/.cache/dos-tools
-            ~/.npm
+          path: ~/.cache/dos-tools
           key: ${{ steps.tools-cache.outputs.cache-primary-key }}
+      # --ignore-scripts skips every dependency's lifecycle script; only Claude Code's own postinstall,
+      # which links its native binary, runs, by name. npm's cache is not kept: nothing here would check it.
+      - name: Install Claude Code
+        run: |
+          npm install -g --ignore-scripts --fetch-retries=5 @anthropic-ai/claude-code@2.1.300
+          node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
+          claude --version
       - name: gitleaks over the pull request's commits
         if: github.event_name == 'pull_request'
         env:

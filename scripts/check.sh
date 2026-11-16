@@ -419,6 +419,9 @@ done
 if [ -e tests/check.test.sh ] && [ -n "${CI:-}" ]; then
   n=${CHECK_TEST_SHARDS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
   [[ $n =~ ^[1-9][0-9]*$ ]] || fail tests tests/check.test.sh "CHECK_TEST_SHARDS=$n is not a positive number"
+  # No more shards than case lines (a loop line runs several cases), so no shard is left empty.
+  cases=$(grep -cE '^[[:space:]]*(run |if mine;)' tests/check.test.sh) || true
+  [ "${cases:-0}" -ge 1 ] && [ "$n" -gt "$cases" ] && n=$cases
   logs=$(mktemp -d)
   pids=()
   for ((i = 1; i <= n; i++)); do

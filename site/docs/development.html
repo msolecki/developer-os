@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@6974e487935c">
+<meta name="dos-source" content="docs/development.md@dde89afdfeca">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -100,9 +100,9 @@
     Before the check it puts agnix on <code>PATH</code> for the agnix stage (<code>agent-sh/agnix</code> v0.57.0, <code>--strict</code>, target <code>claude-code</code>),
     a static lint of skills, hooks and manifests configured in <code>.agnix.toml</code>; every rule disabled there carries its reason.
     It puts gitleaks (v8.30.1) and ripgrep (15.1.0, for <code>tests/skill-usage.test.sh</code>) there too. Each of the three is a release
-    tarball pinned by its SHA-256 in the workflow and checked on every run. The tarballs and npm's cache are kept in an
+    tarball pinned by its SHA-256 in the workflow and checked on every run. The tarballs are kept in an
     <code>actions/cache</code> entry keyed by the workflow file, so a run downloads them only after the file changes; <code>curl</code> retries
-    with exponential backoff for up to 15 minutes, because GitHub's release host has answered 504 for minutes at a time (D29).
+    with exponential backoff for up to 5 minutes per tarball, because GitHub's release host has answered 504 for minutes at a time (D29).
     It pins its actions to commit SHAs, does not persist credentials, has
     read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.300</code> (with <code>--ignore-scripts</code>, then only its own <code>install.cjs</code>, which links the native binary, then <code>claude --version</code>),
     and, on a pull request, runs <code>gitleaks git</code> over the PR's commits, so a secret added and
