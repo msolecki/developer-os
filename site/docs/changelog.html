@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@eb588e28a4a9">
+<meta name="dos-source" content="CHANGELOG.md@2e73ca474e9e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -57,6 +57,20 @@ agent, which runs on the session's model.</li>
     </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
+<li>CI runs <code>tests/check.test.sh</code> as one shard per CPU side by side and the YAML stage in one process; a run
+took 6.6 minutes, nearly all of it that test (D29).</li>
+<li>CI keeps the pinned agnix, gitleaks and ripgrep tarballs in <code>actions/cache</code>, checks each
+tarball's SHA-256 on every run, retries downloads with backoff, and takes ripgrep from its release
+instead of <code>apt-get</code>; GitHub's release host had failed five pull-request runs with a 504.</li>
+<li>Core rules: judge a gate by its own exit status, never through <code>| tail</code> or <code>| grep</code> without <code>pipefail</code>.</li>
+<li>database-reviewer flags a migration that adds or narrows a constraint while seeds or fixtures hold rows
+it rejects.</li>
+<li>code-review records the commit it reads and, when the checkout is elsewhere or shared, reads a trusted
+head from a detached worktree outside the repository, removed after the review.</li>
+<li>pr-cycle records a base squash of commits the branch already has with <code>git merge -s ours</code> before
+merging the base, only when the trees are identical, reports that commit and undoes it on abort.</li>
+<li>parallel-lanes passes each lane its own decision-number range and, at integration, keeps both sides of
+a numbered decisions file whose conflicts only add entries, checking every base number survived.</li>
       <li>implement-backlog launches <code>S</code> and <code>M</code> delegates on sonnet, and every delegate brief in
 implement-backlog and parallel-lanes carries the shell and edit rules (one operation per call, no
 <code>$(…)</code> or heredoc scripts, no <code>git checkout --</code>, Read before Edit, a refused command is final).</li>

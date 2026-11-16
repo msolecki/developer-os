@@ -35,7 +35,7 @@ Full suite (before push/PR): <the whole test suite and build>
 <!-- At most three mistakes an agent has actually made in this repository, each with its
      evidence. The docs-sync skill proposes them from history. Delete an item once a check
      or a rule prevents it.
-     - <mistake and the correct action> — evidence: commit <sha> or session <YYYY-MM-DD> -->
+     - <mistake and the correct action> - evidence: commit <sha> or session <YYYY-MM-DD> -->
 
 ## Stack
 

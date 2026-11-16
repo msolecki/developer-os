@@ -15,7 +15,7 @@ non-blocking hook error and the session goes on as if they were absent. Why Pyth
 [decisions D2](../product/decisions.md#d2-no-runtime-small-hook-scripts-without-dependencies).
 Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh`, `tests/repeat-failure.test.sh`, `tests/capture-nudge.test.sh`.
 
-## SessionStart — core rules and state card
+## SessionStart - core rules and state card
 
 The core rules and the state card are separate `SessionStart` entries that run independently on compact, resume and fork, so the card is not guaranteed to follow the rules.
 
@@ -67,7 +67,7 @@ even when a project moves its plans; `Newest plan` reads only `docs/plans/` too.
 **Failure:** every error exits 0; malformed input, another `source`, a `cwd` that does not exist or a directory
 outside git print nothing, so the session has the rules alone.
 
-## SessionStart on startup — `notices.py`
+## SessionStart on startup - `notices.py`
 
 Claude Code has no install or update hook, so this hook stands in for one, and for a schedule: it
 reminds, it runs nothing. Matcher `startup`, so it never runs beside the state card (`compact|resume|fork`);
@@ -114,7 +114,7 @@ another user, the hook prints nothing, because without markers every notice woul
 **Failure:** every error exits 0 with no output. `DEVELOPER_OS_NOTICES=off` and `sdk-*` entrypoints
 (`claude -p`, the SDK) print nothing.
 
-## PreToolUse on Bash, Edit, Write and MultiEdit — `guard.py`
+## PreToolUse on Bash, Edit, Write and MultiEdit - `guard.py`
 
 **Matcher:** `Bash|Edit|Write|MultiEdit`.
 
@@ -196,7 +196,7 @@ confirmation: quoting, an alias, a variable built at run time or a script can ge
 boundary is Claude Code's permission rules and its sandbox (`sandbox.enabled`, or `/sandbox`), which
 restrict writes and network for every command whatever its text.
 
-## PostToolUseFailure — `repeat-failure.py`
+## PostToolUseFailure - `repeat-failure.py`
 
 **Matcher:** none: every tool. Claude Code fires the event when a tool call fails, for Bash when the
 command exits non-zero; a call rejected before it runs (permission denial, invalid input) or cancelled
@@ -230,7 +230,7 @@ and exits 0. No decision: the call has already failed. Checked in `claude -p`: t
 removed after 8 days; the hook fails open when that directory or its parent is a symlink or owned by
 another user. It stores hashes only, never commands or errors.
 
-## Stop — `capture-nudge.py`
+## Stop - `capture-nudge.py`
 
 **Input:** the hook JSON on stdin; uses `stop_hook_active`, `agent_id`, `session_id`,
 `transcript_path`, `background_tasks`.

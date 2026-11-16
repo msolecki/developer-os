@@ -19,16 +19,16 @@
 <meta property="og:image:alt" content="developer-os agents and output styles">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="dos-source" content="plugin/agents/code-reviewer.md@ca6e32b3526c">
-<meta name="dos-source" content="plugin/agents/performance-engineer.md@bb02daec2f3f">
+<meta name="dos-source" content="plugin/agents/performance-engineer.md@a9a57dced7a7">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@51af119a191d">
-<meta name="dos-source" content="plugin/agents/research-analyst.md@89c690b4a0ed">
+<meta name="dos-source" content="plugin/agents/research-analyst.md@4282d16059ca">
 <meta name="dos-source" content="plugin/agents/scout.md@c37a0ec7cb6e">
 <meta name="dos-source" content="plugin/agents/verifier.md@28852e17195a">
-<meta name="dos-source" content="plugin/agents/security-auditor.md@8c7fd76732b6">
-<meta name="dos-source" content="plugin/agents/database-reviewer.md@a31093b64b9f">
-<meta name="dos-source" content="plugin/agents/dependency-upgrader.md@fd834f489034">
-<meta name="dos-source" content="plugin/agents/infra-reviewer.md@0338a1c56542">
-<meta name="dos-source" content="plugin/agents/docs-writer.md@69397204da06">
+<meta name="dos-source" content="plugin/agents/security-auditor.md@df61b011b658">
+<meta name="dos-source" content="plugin/agents/database-reviewer.md@929e6a1d11fd">
+<meta name="dos-source" content="plugin/agents/dependency-upgrader.md@caeeaaebbb0e">
+<meta name="dos-source" content="plugin/agents/infra-reviewer.md@f354c4a0df1a">
+<meta name="dos-source" content="plugin/agents/docs-writer.md@29972c1cb88c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -111,7 +111,7 @@
     <h3 id="what-database-reviewer-checks">What database-reviewer checks</h3>
     <ul>
       <li>The engine and migration tool first, and the schema the migration starts from, not only the migration.</li>
-      <li>Destructive or irreversible migrations, locks and rewrites on large tables, migrations and code that cannot run side by side during a rolling deploy, missing indexes and constraints, writes outside a transaction, N+1 and unbounded queries, SQL built by concatenation, a down migration that does not undo the up.</li>
+      <li>Destructive or irreversible migrations, locks and rewrites on large tables, migrations and code that cannot run side by side during a rolling deploy, missing indexes and constraints, a new or narrowed constraint that seeds or fixtures violate, writes outside a transaction, N+1 and unbounded queries, SQL built by concatenation, a down migration that does not undo the up.</li>
     </ul>
     <h3 id="database-reviewer-report">database-reviewer report</h3>
     <p>Findings under P0–P3, each with <code>file:line</code>, the mechanism, the condition that triggers it and a fix, labelled MEASURED or INFERRED. It ends with the deploy order the change needs, or <code>No ordering constraint</code>.</p>

@@ -12,6 +12,20 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- CI runs `tests/check.test.sh` as one shard per CPU side by side and the YAML stage in one process; a run
+  took 6.6 minutes, nearly all of it that test (D29).
+- CI keeps the pinned agnix, gitleaks and ripgrep tarballs in `actions/cache`, checks each
+  tarball's SHA-256 on every run, retries downloads with backoff, and takes ripgrep from its release
+  instead of `apt-get`; GitHub's release host had failed five pull-request runs with a 504.
+- Core rules: judge a gate by its own exit status, never through `| tail` or `| grep` without `pipefail`.
+- database-reviewer flags a migration that adds or narrows a constraint while seeds or fixtures hold rows
+  it rejects.
+- code-review records the commit it reads and, when the checkout is elsewhere or shared, reads a trusted
+  head from a detached worktree outside the repository, removed after the review.
+- pr-cycle records a base squash of commits the branch already has with `git merge -s ours` before
+  merging the base, only when the trees are identical, reports that commit and undoes it on abort.
+- parallel-lanes passes each lane its own decision-number range and, at integration, keeps both sides of
+  a numbered decisions file whose conflicts only add entries, checking every base number survived.
 - implement-backlog launches `S` and `M` delegates on sonnet, and every delegate brief in
   implement-backlog and parallel-lanes carries the shell and edit rules (one operation per call, no
   `$(…)` or heredoc scripts, no `git checkout --`, Read before Edit, a refused command is final).

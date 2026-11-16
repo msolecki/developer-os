@@ -21,7 +21,7 @@ and through lines and keys in files the user already has, which the skills read.
 | `"outputStyle": "developer-os:<name>"` | Claude Code settings | Claude Code; a bare name silently falls back to the default style | The user |
 | Rule overrides | `~/.claude/CLAUDE.md` | The model, alongside the core rules | The user |
 | `DEVELOPER_OS_CAPTURE_NUDGE`, `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | Shell environment | The `Stop` hook ([hooks.md](hooks.md#environment-variables)) | The user |
-| `DEVELOPER_OS_NOTICES` | Shell environment | The `SessionStart` notices hook; `off` disables the version and upkeep notices ([hooks.md](hooks.md#sessionstart-on-startup--noticespy)) | The user |
+| `DEVELOPER_OS_NOTICES` | Shell environment | The `SessionStart` notices hook; `off` disables the version and upkeep notices ([hooks.md](hooks.md#sessionstart-on-startup---noticespy)) | The user |
 | `DEVELOPER_OS_REPEAT_FAILURE` | Shell environment | The `PostToolUseFailure` hook; `off` disables the repeated-failure reminder ([hooks.md](hooks.md#environment-variables)) | The user |
 
 brain-setup and the brain skills' vault lookup resolve the config directory
