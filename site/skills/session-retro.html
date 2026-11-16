@@ -55,6 +55,7 @@
       <div class="fact"><dt>Writes</dt><dd>Approved items only: brain notes and additions to them, rule and preference diffs, doc edits, backlog items from a closed plan, the plan (deleted with <code>docs/plans/.devos-state.md</code> when finished)</dd></div>
       <div class="fact"><dt>Asks before</dt><dd>Each item, by number; every cleanup command</dd></div>
     </dl>
+    <p>Any searching or collecting it delegates goes to the <a href="../agents.html#scout">scout</a> agent, never to a general-purpose agent, which would run on your session's model.</p>
 
     <h2 id="when-it-runs">When it runs</h2>
     <p>At the end of a session, when the <code>Stop</code> hook asks for it, or when you ask to wrap up. Unlike the built-in <code>/recap</code> one-line summary, it checks git state and routes each lesson to where it belongs. Say it in your own words, for example:</p>

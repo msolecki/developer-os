@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@2e73ca474e9e">
+<meta name="dos-source" content="CHANGELOG.md@877ebb24a064">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -53,7 +53,8 @@
     <ul>
       <li><code>scout</code> agent (sonnet, read-only): finds and collects facts for the caller. session-retro, docs-sync,
 brain-search and brain-capture delegate searching and collecting to it instead of a general-purpose
-agent, which runs on the session's model.</li>
+agent, which runs on the session's model. It runs only read-only git and <code>gh</code>; the <code>scout-no-edit</code> eval
+checks that it hands an edit back to the caller.</li>
     </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>

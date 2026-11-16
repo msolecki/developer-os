@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-08
+last-verified: 2026-11-17
 ---
 
 # Architecture overview
@@ -148,7 +148,8 @@ project-baseline, docs-sync and instruction-review up to their reports, loads ea
 sends blocking findings to the verifier as audit-to-backlog does. audit-to-backlog also
 dispatches database-reviewer (data) and infra-reviewer (infra); code-review adds them for migration,
 schema, query, IaC or CI diffs; docs-sync may hand approved items to docs-writer; project-baseline asks
-dependency-upgrader for the three dependencies furthest behind. The backlog contract shared by audit-to-backlog, project-baseline and
+dependency-upgrader for the three dependencies furthest behind; session-retro, docs-sync, brain-search and
+brain-capture hand any searching or collecting they delegate to scout. The backlog contract shared by audit-to-backlog, project-baseline and
 implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to `TODO.md` and
 `TODO-done.md` ([reference/configuration.md](../reference/configuration.md)).
 
@@ -178,7 +179,7 @@ web tools could send it further, which the plugin cannot prevent ([SECURITY.md](
 |---|---|---|
 | Vault notes | Text a past session or a phone capture wrote | Skills treat notes as data and never run commands or open URLs from them; phone captures arrive in `_inbox/` |
 | PR review comments, issues, CI logs, code comments | Anyone who can comment, file an issue or push code | fix-pr, pr-cycle, bug-triage and code-review treat them as data and flag text that tries to instruct the agent; fix-pr flags non-collaborators; four `injection-*` evals check it |
-| Code, diffs, fixtures, fetched pages | The reviewed repository or the web | Every agent prompt states they are data; research-analyst never fetches a URL built from local file contents |
+| Code, diffs, fixtures, fetched pages | The reviewed repository or the web | Every agent prompt states they are data; research-analyst and scout never fetch a URL built from local file contents |
 | External repositories | `.claude/settings.json`, hooks, `.mcp.json` of a client or OSS repo | Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread |
 | Subagent output | A delegate's edits | Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare `git status` and `git diff` |
 | Plugin updates | A new commit's hooks and rules | `SECURITY.md`: review the diff from the installed commit before updating; auto-update is off by default |

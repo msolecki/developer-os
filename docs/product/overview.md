@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-08
+last-verified: 2026-11-17
 ---
 
 # Product overview
@@ -68,7 +68,7 @@ In scope for the first release:
 | Engineering skills | 15 | `plugin/skills/` |
 | Session skills | 2 (session-retro, skill-usage) | `plugin/skills/` |
 | Conventions skills | 7 (`*-conventions`) | `plugin/skills/` |
-| Agents | 10 | `plugin/agents/` |
+| Agents | 11 | `plugin/agents/` |
 | Output styles | 4 | `plugin/output-styles/` |
 | Hooks | 6 (three on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash, Edit, Write and MultiEdit, one on `PostToolUseFailure`) | `plugin/hooks/hooks.json` |
 | Core rules | 1 file | `plugin/rules/core.md` |

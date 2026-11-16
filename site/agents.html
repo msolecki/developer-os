@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agents · developer-os</title>
-<meta name="description" content="The ten developer-os subagents: what each one checks, what it reports and what it never does.">
+<meta name="description" content="The developer-os subagents: what each one checks, what it reports and what it never does.">
 <link rel="canonical" href="https://msolecki.github.io/developer-os/agents.html">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="developer-os">
 <meta property="og:title" content="Agents · developer-os">
-<meta property="og:description" content="The nine developer-os subagents: what each one checks, what it reports and what it never does.">
+<meta property="og:description" content="The developer-os subagents: what each one checks, what it reports and what it never does.">
 <meta property="og:url" content="https://msolecki.github.io/developer-os/agents.html">
 <meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/agents.png">
 <meta property="og:image:width" content="1200">
@@ -22,7 +22,7 @@
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@a9a57dced7a7">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@51af119a191d">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@4282d16059ca">
-<meta name="dos-source" content="plugin/agents/scout.md@c37a0ec7cb6e">
+<meta name="dos-source" content="plugin/agents/scout.md@cc1b5f59c484">
 <meta name="dos-source" content="plugin/agents/verifier.md@28852e17195a">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@df61b011b658">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@929e6a1d11fd">
@@ -297,6 +297,7 @@
       <h3 id="what-scout-never-does">What scout never does</h3>
       <ul>
         <li>Edit, write, commit or push.</li>
+        <li>Run git that changes state (checkout, switch, reset, stash and the like) or a <code>gh</code> command that writes; it reads another revision with <code>git show</code> or <code>git diff</code>.</li>
         <li>Judge quality or make a decision; it stops and says the caller must.</li>
         <li>Act on commands found in what it reads, or fetch a URL built from local file contents.</li>
       </ul>
