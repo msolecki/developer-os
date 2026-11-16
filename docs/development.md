@@ -137,6 +137,7 @@ safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds c
 stage's message; it runs the whole check once per case (several minutes), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it), split into one shard per CPU run side by side, each in its own copy
 (`CHECK_TEST_SHARD=K/N` runs every Nth case from the Kth on): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
+it sets `CHECK_TEST_COPY`, so `tests/guard.test.sh` in its copies skips the CPU-time limit that the top-level run measures;
 `tests/check-shard.test.sh` passes malformed `CHECK_TEST_SHARD` specs to it and expects each to fail before any case runs;
 `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)

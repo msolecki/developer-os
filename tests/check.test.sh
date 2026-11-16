@@ -12,6 +12,9 @@ case $shard in
 esac
 if [ "$k" -lt 1 ] || [ "$k" -gt "$n" ]; then echo "check: CHECK_TEST_SHARD=$shard is not K/N with 1 <= K <= N" >&2; exit 1; fi
 i=0 ran=0
+# Tells tests/guard.test.sh in each copy to skip its CPU-time limit: shards side by side share the CPUs, and the
+# top-level check already measured the same code.
+export CHECK_TEST_COPY=1
 mine() { i=$((i + 1)); [ $(((i - 1) % n + 1)) -eq "$k" ] || return 1; ran=$((ran + 1)); }
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT

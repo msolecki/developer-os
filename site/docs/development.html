@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@ea3fd9e00c06">
+<meta name="dos-source" content="docs/development.md@fa156cc78fbf">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -141,6 +141,7 @@
     stage's message; it runs the whole check once per case (several minutes), so <code>scripts/check.sh</code> runs it
     only when <code>CI</code> is set (GitHub Actions sets it), split into one shard per CPU run side by side, each in its own copy
     (<code>CHECK_TEST_SHARD=K/N</code> runs every Nth case from the Kth on): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;
+    it sets <code>CHECK_TEST_COPY</code>, so <code>tests/guard.test.sh</code> in its copies skips the CPU-time limit that the top-level run measures;
     <code>tests/check-shard.test.sh</code> passes malformed <code>CHECK_TEST_SHARD</code> specs to it and expects each to fail before any case runs;
     <code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
     transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)

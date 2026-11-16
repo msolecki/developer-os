@@ -484,11 +484,16 @@ check ask "$(fx 'git commit -m \"$(pnpm add zod)\"')" "Dependency install"
 c=$(python3 -c "print('echo ' + '\\\\\"a\\\\\" ' * 10000)")
 check pass "$(fa $r "$c")"
 # CPU time, not wall time: parallel sessions load the machine, and the cost under test is the guard's own work.
-python3 -c "import json,resource,subprocess,sys
+# Inside tests/check.test.sh's copies (CHECK_TEST_COPY) the shards share the CPUs and inflate it; the top-level run measures.
+if [ -n "${CHECK_TEST_COPY:-}" ]; then
+  echo "SKIP 10000 quoted words CPU time: inside tests/check.test.sh"
+else
+  python3 -c "import json,resource,subprocess,sys
 p=json.dumps({'tool_name':'Bash','tool_input':{'command':'echo '+'\"a\" '*10000}})
 subprocess.run([sys.executable,sys.argv[1]],input=p.encode(),capture_output=True)
 u=resource.getrusage(resource.RUSAGE_CHILDREN);sys.exit(u.ru_utime+u.ru_stime>1)" "$guard" ||
-  { fail=1; echo "FAIL: 10000 quoted words took over 1 s of CPU"; }
+    { fail=1; echo "FAIL: 10000 quoted words took over 1 s of CPU"; }
+fi
 # FLOW-40: submodule and bisect reads
 for c in 'git submodule status' 'git submodule' 'git submodule --quiet summary' 'git bisect log' 'git bisect visualize' 'git bisect view'; do
   check pass "$(fa $r "$c")"
