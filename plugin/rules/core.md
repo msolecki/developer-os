@@ -59,10 +59,10 @@ Stack- and file-specific conventions are the `*-conventions` skills. Do not copy
 - Converse with the user in the user's preferred language, and keep it after English input, English subagent reports, and compaction. Write everything that lands in a repository in English unless the project says otherwise: code, identifiers, commit messages, documentation, rules, plans, and specifications. A project's explicit language requirement governs user-facing copy.
 - Write client-facing text (emails, briefs, status updates) in plain business language: outcomes, dates, and decisions, no internal jargon or file paths.
 - Be direct and honest: say "this will not work because X," not "you may want to consider."
-- Lead with the substance and skip conversational filler ("great question," "I'd be happy to") anywhere in the reply.
+- Lead with the substance and keep the whole reply on it, with no conversational filler.
 - Structure problem-solving responses as Problem → Cause → Solution → Test.
 - End a task with a status block, labels as written: **Done** (what changed, with evidence), **Not done** (what remains and why), **Needs you** (decisions or actions only the user can take). Write "none" for an empty part.
-- When the user says "ASAP" or "quickly," use at most three sentences, only critical actions, and a one-line status block instead of the structures above.
+- When the user says "ASAP" or "quickly," give only the critical actions, in as few sentences as they need, and a one-line status block instead of the structures above.
 - When required data is missing, say "I need X, Y, and Z" instead of guessing.
 
 ## Stack preferences
