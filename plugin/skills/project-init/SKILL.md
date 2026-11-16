@@ -1,6 +1,6 @@
 ---
 name: project-init
-description: Adopt developer-os in a repository in one pass — detect the stack, pick the skills that apply, run project-baseline, docs-sync and instruction-review, audit the code against each applicable conventions skill, then give one report and one approval; for a code audit alone, audit-to-backlog. Use when starting with developer-os in a repository, for example "init developer-os here", "check the whole project", "set the repo up for developer-os".
+description: Adopt developer-os in a repository in one pass - detect the stack, pick the skills that apply, run project-baseline, docs-sync and instruction-review, audit the code against each applicable conventions skill, then give one report and one approval; for a code audit alone, audit-to-backlog. Use when starting with developer-os in a repository, for example "init developer-os here", "check the whole project", "set the repo up for developer-os".
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -19,8 +19,8 @@ An orchestrator: it runs other skills up to their reports, adds a conventions au
 
 | Skill | Applies when | Otherwise |
 |---|---|---|
-| `developer-os:project-baseline` | always | — |
-| `developer-os:docs-sync` | always | — |
+| `developer-os:project-baseline` | always | - |
+| `developer-os:docs-sync` | always | - |
 | `developer-os:instruction-review` | a `CLAUDE.md` or `AGENTS.md` exists | skip; docs-sync lists the missing `AGENTS.md` |
 | `developer-os:typescript-conventions` | `tsconfig.json` or `*.ts` files in app code | not applicable |
 | `developer-os:nextjs-conventions` | `next.config.*` or a `next` dependency | not applicable |
@@ -53,15 +53,15 @@ A rule that needs judgment (function size, composition) is sampled, not swept: r
 ## 5. Report and ask
 
 ```
-Project init — <repo> at <short sha>
+Project init - <repo> at <short sha>
 Stack: TypeScript, Next.js 15, Vitest, GitHub Actions, Postgres (Prisma)
 Applies: project-baseline, docs-sync, instruction-review, typescript, nextjs, testing, error-handling, defensive-coding
 Not applicable: monitoring-conventions (no infrastructure code)   Not run: deploy-checklist (run it before the next release)
 Baseline: missing 4   Docs: missing 3, drift 5   Instructions: 2 proposals   Conventions: 6 findings
-Needs your decision: test runner — package.json has both jest and vitest
+Needs your decision: test runner - package.json has both jest and vitest
 
 1. [baseline] BASE-01 · P2 · Secret scanning in CI
-2. [docs] drift — AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
+2. [docs] drift - AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
 3. [instructions] AGENTS.md: replace line 22 "Use pnpm." with "Use pnpm (pnpm-lock.yaml)."
 4. [conventions] CONV-01 · P2 · Empty catch in src/webhooks/deliver.ts:40
 ...
