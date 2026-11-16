@@ -4,6 +4,19 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Core rules: judge a gate by its own exit status, never through `| tail` or `| grep` without `pipefail`.
+- database-reviewer flags a migration that adds or narrows a constraint while seeds or fixtures hold rows
+  it rejects.
+- code-review records the commit it reads and, in a shared or moved checkout, reads code from a fresh
+  worktree at the reviewed head.
+- pr-cycle records a base squash of commits the branch already has with `git merge -s ours` before
+  merging the base, only when the trees are identical, and keeps a file the branch added when the base
+  never had it.
+- parallel-lanes gives each lane its own decision-number range and checks that every base row of a
+  numbered decisions file survives a conflict.
+
 ## [0.2.9] - 2026-11-09
 
 ### Added
