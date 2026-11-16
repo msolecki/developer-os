@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@ebb9133092e9">
+<meta name="dos-source" content="CHANGELOG.md@e7aa85e680f4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,13 +54,12 @@
 <li>Core rules: judge a gate by its own exit status, never through <code>| tail</code> or <code>| grep</code> without <code>pipefail</code>.</li>
 <li>database-reviewer flags a migration that adds or narrows a constraint while seeds or fixtures hold rows
 it rejects.</li>
-<li>code-review records the commit it reads and, in a shared or moved checkout, reads code from a fresh
-worktree at the reviewed head.</li>
+<li>code-review records the commit it reads and, when the checkout is elsewhere or shared, reads a trusted
+head from a detached worktree outside the repository, removed after the review.</li>
 <li>pr-cycle records a base squash of commits the branch already has with <code>git merge -s ours</code> before
-merging the base, only when the trees are identical, and keeps a file the branch added when the base
-never had it.</li>
-<li>parallel-lanes gives each lane its own decision-number range and checks that every base row of a
-numbered decisions file survives a conflict.</li>
+merging the base, only when the trees are identical, reports that commit and undoes it on abort.</li>
+<li>parallel-lanes passes each lane its own decision-number range and, at integration, keeps both sides of
+a numbered decisions file whose conflicts only add entries, checking every base number survived.</li>
     </ul>
     <h2 id="029---2026-11-09">[0.2.9] - 2026-11-09</h2>
     <h3 id="029-added">Added</h3>
