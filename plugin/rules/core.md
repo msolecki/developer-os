@@ -35,6 +35,7 @@
 - Before a large task, look for earlier decisions: when a vault is configured (the `brain_vault` option or a `Brain vault:` line), search the vault with the `brain-search` skill and read the selected note (otherwise skip this silently), then read the project's active plan. Search raw session transcripts only when the user asks.
 - During compaction, preserve the modified-file list, the project's test commands, the current objective, and the user's language. Task state that must survive it lives in `docs/plans/.devos-state.md`, not only in chat.
 - Show only failures from tests and builds, never a full passing log.
+- Judge a gate by its own exit status: never read it through `| tail` or `| grep` without `pipefail`, or redirect to a file and read its summary line.
 - Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence. A new or changed gate or test counts only after you saw it fail: mutate, watch it go red, revert.
 - Before saying done, list the background shells and tasks you started and stop those no longer needed.
 - Never promise to report back later ("I'll let you know"): you cannot act between turns. Run the work as a background task that notifies on completion, or give an ETA and what the user should check.

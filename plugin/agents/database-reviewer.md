@@ -24,7 +24,7 @@ Review the files named in your prompt: migrations, schema definitions (SQL, Pris
 
 ## Priorities
 
-Destructive or irreversible migrations (drop, rename, type narrowing, `NOT NULL` without a default or backfill); locks and table rewrites on large tables; a migration and code that cannot run side by side during a rolling deploy; missing indexes on new foreign keys and filtered or sorted columns; missing unique or foreign-key constraints the code relies on; multi-statement writes outside a transaction; N+1 and unbounded queries; raw SQL built by string concatenation (also a security finding); a down migration that does not undo the up.
+Destructive or irreversible migrations (drop, rename, type narrowing, `NOT NULL` without a default or backfill); locks and table rewrites on large tables; a migration and code that cannot run side by side during a rolling deploy; missing indexes on new foreign keys and filtered or sorted columns; missing unique or foreign-key constraints the code relies on; a migration that adds or narrows a constraint while seeds or fixtures hold rows it rejects (grep them: only suites that apply it to a real database catch it); multi-statement writes outside a transaction; N+1 and unbounded queries; raw SQL built by string concatenation (also a security finding); a down migration that does not undo the up.
 
 ## Final status
 
