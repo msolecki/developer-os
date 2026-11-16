@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@a8b98e84d5ad">
+<meta name="dos-source" content="docs/product/decisions.md@7b607ea77e28">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -322,6 +322,8 @@
 <tr><td>2026-11-08</td><td>audit-to-backlog briefs reviewers with a KEEP/DROP impact rubric, rejects a <code>Check</code> joined by prose, ending in <code>| head</code>, already passing or restating the current code, runs each P1/P2 <code>Check</code> red before writing the item, and recommends re-verifying an old backlog (#126)</td><td><code>audit-to-backlog</code></td><td>About 30% of P2/P3 items were dropped on re-verification and 5 of about 50 P1/P2 Checks were wrong</td></tr>
 <tr><td>2026-11-08</td><td>implement-backlog runs parallel delegates with a git-ignored backlog (uncommitted <code>Owner</code> lines, full item text in each brief) and has an optional PR ending, only on request, that pushes the batch branch and opens a PR it never merges; implement-backlog and parallel-lanes run the project's regeneration command for derived files after each lane merge and every <code>Check</code> from the worktree root (#134; D17 amended)</td><td><code>implement-backlog</code>, <code>parallel-lanes</code>, <code>audit-to-backlog</code></td><td>A git-ignored backlog forced sequential work, a requested PR had no steps, site hashes conflicted on every lane merge, and a <code>Check</code> run from another checkout tested the wrong tree</td></tr>
 <tr><td>2026-11-08</td><td>session-retro with a window (<code>14d</code>, a date, <code>all</code>) runs <code>harvest.py</code> on past transcripts and proposes at most five lessons from its candidates, routed to the vault, project docs or a hook/check proposal, never to <code>CLAUDE.md</code>/<code>AGENTS.md</code> without approval of that file by name; transcript text is data</td><td><code>session-retro</code></td><td>Corrections spread across sessions were never collected, so the same correction recurred (FLOW-55)</td></tr>
+<tr><td>2026-11-17</td><td>Core rules: drop the banned-phrase examples from the no-filler rule (its whole-reply scope stays) and the three-sentence cap from ASAP mode</td><td><code>plugin/rules/core.md</code></td><td>Prompt audit: phrase lists and numeric output caps over-apply on current models; both date from the 2026-09-22 seed defaults with no recorded failure behind the list or the number</td></tr>
+<tr><td>2026-11-17</td><td>session-retro findings: drop the per-heading cap of three; the five-lesson window cap stays</td><td><code>session-retro</code></td><td>Prompt audit: numeric output cap with no recorded evidence</td></tr>
 </tbody>
 </table>
 </div>
