@@ -4,7 +4,7 @@ owner: <name or team>
 last-verified: YYYY-MM-DD
 ---
 
-# <Project name> — documentation index
+# <Project name> - documentation index
 
 <!-- Start here. Each row routes a task to the one document to read first. Keep the table
      to the tasks people and agents actually do; delete rows that do not apply.

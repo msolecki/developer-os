@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@e7aa85e680f4">
+<meta name="dos-source" content="CHANGELOG.md@a9b045f6c905">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -51,6 +51,11 @@
     <h2 id="unreleased">[Unreleased]</h2>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
+<li>CI runs <code>tests/check.test.sh</code> as one shard per CPU side by side and the YAML stage in one process; a run
+took 6.6 minutes, nearly all of it that test (D29).</li>
+<li>CI keeps the pinned agnix, gitleaks and ripgrep tarballs in <code>actions/cache</code>, checks each
+tarball's SHA-256 on every run, retries downloads with backoff, and takes ripgrep from its release
+instead of <code>apt-get</code>; GitHub's release host had failed five pull-request runs with a 504.</li>
 <li>Core rules: judge a gate by its own exit status, never through <code>| tail</code> or <code>| grep</code> without <code>pipefail</code>.</li>
 <li>database-reviewer flags a migration that adds or narrows a constraint while seeds or fixtures hold rows
 it rejects.</li>

@@ -67,9 +67,9 @@ One item per missing practice, in audit-to-backlog's shape, filed under its seve
 ## 5. Report and ask
 
 ```
-Project baseline — <repo>
+Project baseline - <repo>
 Present: 6   Missing: 4 (P2 3, P3 1)   Deliberate: 1   Not applicable: 1
-Needs your decision: test runner — package.json has both jest and vitest
+Needs your decision: test runner - package.json has both jest and vitest
 
 Write the 4 items to TODO.md? A: all (recommended)  B: list IDs  C: none
 Plan the 2 upgrades with dependency-upgrader first (reads changelogs on the web)? yes / no

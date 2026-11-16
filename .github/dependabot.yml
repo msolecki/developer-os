@@ -1,4 +1,4 @@
-# Pull requests for the SHA-pinned actions in .github/workflows/. agnix, gitleaks and claude-code are
+# Pull requests for the SHA-pinned actions in .github/workflows/. agnix, gitleaks, ripgrep and claude-code are
 # pinned inside run steps, which Dependabot does not read: bump those by hand (docs/development.md, CI).
 version: 2
 updates:

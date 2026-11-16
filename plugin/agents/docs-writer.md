@@ -1,6 +1,6 @@
 ---
 name: docs-writer
-description: Write or update the documentation a named change needs — a doc made false by the code, a missing reference section, a README or runbook entry — checking every claim against the code and editing only documentation files, never committing. Use after a feature lands without docs, or to apply the drift items a docs-sync report lists.
+description: Write or update the documentation a named change needs - a doc made false by the code, a missing reference section, a README or runbook entry - checking every claim against the code and editing only documentation files, never committing. Use after a feature lands without docs, or to apply the drift items a docs-sync report lists.
 tools: Read, Grep, Glob, Bash, Edit, Write, Skill
 model: sonnet
 maxTurns: 100

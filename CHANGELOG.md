@@ -6,6 +6,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- CI runs `tests/check.test.sh` as one shard per CPU side by side and the YAML stage in one process; a run
+  took 6.6 minutes, nearly all of it that test (D29).
+- CI keeps the pinned agnix, gitleaks and ripgrep tarballs in `actions/cache`, checks each
+  tarball's SHA-256 on every run, retries downloads with backoff, and takes ripgrep from its release
+  instead of `apt-get`; GitHub's release host had failed five pull-request runs with a 504.
 - Core rules: judge a gate by its own exit status, never through `| tail` or `| grep` without `pipefail`.
 - database-reviewer flags a migration that adds or narrows a constraint while seeds or fixtures hold rows
   it rejects.

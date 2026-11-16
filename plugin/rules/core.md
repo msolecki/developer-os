@@ -6,19 +6,19 @@
 - Ask before running a dependency install (`npm install`, `pip install`, `cargo add`, `npx -y`, and the like): it rewrites dependencies and the lockfile.
 - Do not delete or skip tests to make a build pass; a green build without its tests proves nothing.
 
-### Validation — two tiers
+### Validation - two tiers
 
 - Before each commit, run the fast check: lint, types, and the tests of the changed area. Run the full suite before a push or PR, or when a skill's gate requires it; never mid-task on your own. The project declares both in its agent instructions (`CLAUDE.md`/`AGENTS.md`); otherwise derive them from its package manifest or README/CONTRIBUTING/Makefile. If neither exists, say so and ask before committing.
 - Before changing test config, coverage or CI gates, update the governing decision record in the same change.
 
-### Subagents — verify their work
+### Subagents - verify their work
 
 - Treat any authentication, 2FA, or security change from a subagent as unauthorized until reviewed. A subagent can add an environment-flag bypass that disables a second factor.
 - After a subagent finishes, compare the working tree with the commit using `git status` and `git diff`; uncommitted subagent changes are yours to commit.
 - A reviewer's finding is a hypothesis: read the code and the project's canonical helper or schema before fixing; a framework claim needs the framework's docs or source.
 - Run the area's tests before applying a reviewer's fix; a red pinned test means it reverses a decision, so surface it.
 
-### External repositories (clients and OSS) — first-session procedure
+### External repositories (clients and OSS) - first-session procedure
 
 - Before the first session in an external repository, read its `.claude/settings.json`, `.claude/hooks/`, and `.mcp.json` (and the equivalents for any other agent). Its hooks run in your shell, and its MCP servers run once you approve them.
 - Use a sandbox or a plan-only permission mode for the first session in an external repository. Inspect first, then grant permissions.
@@ -41,7 +41,7 @@
 - Never promise to report back later ("I'll let you know"): you cannot act between turns. Run the work as a background task that notifies on completion, or give an ETA and what the user should check.
 - If the user asks for the same thing three times, say so and propose a skill or hook.
 
-### Parallel agents — one checkout each
+### Parallel agents - one checkout each
 
 - Run every parallel agent in its own git worktree (`git worktree add`, or the project's worktree script). Two sessions in one checkout corrupt each other's staging area, and a push from one restarts CI on the other's older state.
 - Stage explicit paths, never `git add -A` or `git add .`; if a checkout is shared anyway, commit with `git commit -F <msg-file> -- <paths>`. Re-run `git status` right before the first edit.
