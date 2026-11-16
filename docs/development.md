@@ -63,13 +63,15 @@ committed.
 ## CI
 
 `.github/workflows/check.yml` runs `scripts/check.sh` on pushes to `development` and `main` and on
-every pull request. A newer push to the same ref cancels the older run, and the job times out after 20 minutes.
+every pull request. A newer push to the same ref cancels the older run, and the job times out after 25 minutes.
 Before the check it puts agnix on `PATH` for the agnix stage (`agent-sh/agnix` v0.57.0, `--strict`, target `claude-code`),
 a static lint of skills, hooks and manifests configured in `.agnix.toml`; every rule disabled there carries its reason.
 It puts gitleaks (v8.30.1) and ripgrep (15.1.0, for `tests/skill-usage.test.sh`) there too. Each of the three is a release
 tarball pinned by its SHA-256 in the workflow and checked on every run. The tarballs are kept in an
-`actions/cache` entry keyed by the workflow file, so a run downloads them only after the file changes; `curl` retries
-with exponential backoff for up to 5 minutes per tarball, because GitHub's release host has answered 504 for minutes at a time (D29).
+`actions/cache` entry keyed by the workflow file, so a run downloads them only after the file changes; a corrupt entry
+is downloaded again on every run until the file changes, since a cache key is never overwritten. `curl` retries transient
+errors with exponential backoff for up to 5 minutes per tarball (each try at most 60 s), and the setup step times out after 15
+minutes, because GitHub's release host has answered 504 for minutes at a time (D29).
 It pins its actions to commit SHAs, does not persist credentials, has
 read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then only its own `install.cjs`, which links the native binary, then `claude --version`),
 and, on a pull request, runs `gitleaks git` over the PR's commits, so a secret added and
@@ -135,6 +137,7 @@ safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds c
 stage's message; it runs the whole check once per case (several minutes), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it), split into one shard per CPU run side by side, each in its own copy
 (`CHECK_TEST_SHARD=K/N` runs every Nth case from the Kth on): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
+`tests/check-shard.test.sh` passes malformed `CHECK_TEST_SHARD` specs to it and expects each to fail before any case runs;
 `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
 and expects one count per message; when `rg` is missing it prints SKIP locally and fails in CI,
