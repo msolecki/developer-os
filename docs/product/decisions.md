@@ -302,7 +302,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   from the plan files only; the state file's own `Plan:` line prints inside the state section.
 - **Amended 2026-10-16:** the state-file path is fixed at `docs/plans/.devos-state.md` even when a
   project overrides its planning location; skills and core rules name that path. A project that moves
-  its plans still git-ignores `docs/plans/` (or that file) so the card shows it — the one extra
+  its plans still git-ignores `docs/plans/` (or that file) so the card shows it - the one extra
   `.gitignore` entry D16 rejected `.claude/devos-state.md` for.
 - **Amended 2026-10-16:** the card comes from its own hook, `state-card.py`, matched to `compact` and
   `resume`; the core rules print from a separate `cat` hook (D2), so the card is no longer guaranteed

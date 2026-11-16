@@ -63,7 +63,7 @@ Never carry a secret into a proposal: redact everything brain-capture's step 4 l
 ## 4. Show and ask
 
 ```
-Memory import — <project>: 14 files → vault <V>
+Memory import - <project>: 14 files → vault <V>
 new: 4 (3 notes)   add: 3   preference: 2   project-rule: 1   covered: 3   skip: 1   conflicts: 1
 
 1. [new] git-fetch-prunetags-deletes-local-tags.md → _inbox/why-do-local-git-tags-disappear-after-git-fetch.md
