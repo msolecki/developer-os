@@ -507,7 +507,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   series. Five of the last 60 pull-request runs failed on a 504 from GitHub's release host while downloading agnix or
   gitleaks, one with retries five seconds apart; the other failures were real defects in the pull requests.
 - **Alternatives rejected:** a matrix job per shard (each pays the checkout and tool setup, and the status splits);
-  dropping or moving cases out of the pull-request run.
+  dropping or moving cases out of the pull-request run; retrying every curl error, which also retries a 404 or 403
+  until the window ends, so a connection reset mid-download is not retried and the cache covers it instead.
 - **Revisit when:** the shards take more than a few minutes, or a cache miss downloads on most runs.
 
 ## Rules history

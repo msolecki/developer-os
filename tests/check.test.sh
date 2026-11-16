@@ -6,7 +6,7 @@
 shard=${CHECK_TEST_SHARD:-1/1}
 k=${shard%%/*} n=${shard#*/}
 case $shard in
-  */*/* | *[!0-9/]*) echo "check: CHECK_TEST_SHARD=$shard is not K/N" >&2; exit 1 ;;
+  */*/* | *[!0-9/]* | 0[0-9]*/* | */0[0-9]*) echo "check: CHECK_TEST_SHARD=$shard is not K/N" >&2; exit 1 ;;
   [0-9]*/[0-9]*) ;;
   *) echo "check: CHECK_TEST_SHARD=$shard is not K/N" >&2; exit 1 ;;
 esac
