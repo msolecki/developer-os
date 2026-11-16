@@ -6,7 +6,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `scout` agent (sonnet, read-only): finds and collects facts for the caller. session-retro, docs-sync,
+- `scout` agent (sonnet, read-only commands only): finds and collects facts for the caller. session-retro, docs-sync,
   brain-search and brain-capture delegate searching and collecting to it instead of a general-purpose
   agent, which runs on the session's model. It runs only read-only git and `gh`; the `scout-no-edit` eval
   checks that it hands an edit back to the caller.
