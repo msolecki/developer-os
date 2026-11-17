@@ -79,6 +79,9 @@ removed inside one PR still fails. The same step fails a PR that changes `.gitle
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
 only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
 `.github/dependabot.yml` proposes weekly updates of the SHA-pinned actions, each release at least 7 days old, as pull requests to `development`.
+GitHub reads that file from the default branch, so the target takes effect once a release brings it to `main`, and
+`target-branch` covers version updates only: a Dependabot security update still opens its pull request against
+`main`. Close it and carry the bump into `development` instead, since `main` moves only on a release (D20).
 Dependabot does not read the agnix, gitleaks, ripgrep and claude-code versions in the run steps: bump them by hand, and
 the claude-code one together with `claude_code` in `.agnix.toml` (the Tool versions stage).
 
@@ -153,8 +156,11 @@ safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds c
 stage's message; it runs the whole check once per case (several minutes), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it), split into one shard per CPU run side by side, each in its own copy
 (`CHECK_TEST_SHARD=K/N` runs every Nth case from the Kth on): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
-it sets `CHECK_TEST_COPY`, so `tests/guard.test.sh` in its copies skips the CPU-time limit that the top-level run measures;
-`tests/check-shard.test.sh` passes malformed `CHECK_TEST_SHARD` specs to it and expects each to fail before any case runs;
+it sets `CHECK_TEST_COPY`, so `tests/guard.test.sh` in its copies skips the CPU-time limits that the top-level run measures;
+a cancelled or timed-out job still prints what each shard wrote so far;
+`tests/check-shard.test.sh` passes malformed `CHECK_TEST_SHARD` specs to it and expects each to fail before any case runs,
+and with `CHECK_TEST_LIST=<file>` (each shard lists the cases it owns instead of running them) expects 4 shards to own
+every case exactly once;
 `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
 and expects one count per message; when `rg` is missing it prints SKIP locally and fails in CI,
@@ -233,7 +239,8 @@ Release, by hand:
    `CHANGELOG.md` to `[<version>] - <date>` under a new empty `[Unreleased]`, refresh the site pages
    the Site stage names, run `bash scripts/check.sh`, and merge the pull request. After the release's eval
    run, keep its scores: `python3 scripts/eval-summary.py evals/results/<run>/aggregate-result.json` writes
-   `eval-history/<version>.json` (tracked), and `--diff <old> <new>` on two of those files exits 1 when a
+   `eval-history/<version>.json` (tracked; an existing one is replaced only with `--force`), and
+   `--diff <old> <new>` on two of those files exits 1 when a
    case's with-plugin score fell by more than 0.1 or the case is missing from the new summary. In
    `site/docs/changelog.html`, add the version's `<h2>` under `[Unreleased]` and rename that section's
    `unreleased-*` heading ids to `<version>-*` (e.g. `025-added`); the Site stage compares the words, not

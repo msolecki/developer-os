@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@398d84bd0996">
+<meta name="dos-source" content="CHANGELOG.md@0c506ea47b59">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -202,6 +202,42 @@ directory, how to give them one, and how to check a headless run (#145).</li>
 <li><code>tests/guard.test.sh</code> skips its CPU-time limits for many <code>-c</code> words and pairs inside <code>tests/check.test.sh</code>'s
 copies, as it already did for 10000 quoted words; the shards share the CPUs, and <code>check</code> on <code>development</code>
 failed after #141. The top-level run still measures them.</li>
+<li>parallel-lanes: Status and Resume accept a lane worktree when the orchestrator works in a linked worktree (the
+lane's <code>.git</code> points into the main checkout's <code>.git/worktrees</code>) or when git wrote a relative <code>gitdir:</code>; before,
+every such lane was marked changed and Resume refused it.</li>
+<li>parallel-lanes: <code>lanes.json</code> is refused when an <code>allow</code> rule or <code>fast_check</code> opens any command (bare <code>Bash</code>,
+<code>Bash(*)</code>, <code>env</code>, <code>xargs</code>, <code>sudo</code>, <code>find</code>, <code>awk</code>, a shell, interpreter or package runner without a script, module
+or package such as <code>sh -c</code>, <code>node -e</code>, <code>python3.12 -c</code> or <code>npx:*</code>), or a file rule names an absolute, <code>~</code> or <code>..</code>
+path; the git check alone let <code>Bash(sh:*)</code> run <code>sh -c 'git …'</code>. <code>python3 -m pytest</code> and <code>node --test</code> stay
+allowed, and the refusal says to put anything else in a script.</li>
+<li>parallel-lanes: lanes are also denied <code>**/.git</code> and <code>**/.git/**</code>, so a lane cannot plant a repository in a
+subdirectory whose config runs a command on its own <code>git status</code>.</li>
+<li>parallel-lanes: launch refuses a <code>.worktrees/&lt;lane&gt;</code> that is a plain directory (the lane would commit on the
+checkout's branch), builds every lane's arguments before the first start, refuses a control character in
+<code>fast_check</code> or <code>allow</code>, and names the lanes started before one that cannot start.</li>
+<li>parallel-lanes: a lane counts as running only while its PID's command line holds its session id, so a reused PID
+of another <code>claude -p</code> does not; Status strips terminal control sequences from lane output and warns when
+<code>hashes.txt</code> is missing.</li>
+<li>Guard: a database drop or redis flush run through <code>docker exec</code>, <code>docker compose exec</code>, <code>podman exec</code>,
+<code>kubectl exec --</code> or <code>ssh</code> asks, as does a flush piped into <code>redis-cli</code>; a <code>DROP</code> in another <code>&amp;&amp;</code> link of the line
+no longer does.</li>
+<li>Guard: a Bash command that writes, moves or removes the project's <code>.claude/developer-os-guard.json</code> (<code>rm</code>, <code>sed -i</code>,
+a redirect into it, <code>mv</code>, <code>git checkout --</code>, also <code>rm .claude/*</code> or the name in another case) asks, as an Edit of
+it does; reading or staging it passes.</li>
+<li>Guard: the worktree boundary and project path rules compare paths without case, as macOS volumes do.</li>
+<li>Guard: <code>pnpm exec npm publish</code>, <code>npx npm publish</code> and the like ask; <code>curl … | ash</code>, <code>csh</code>, <code>fish</code>, <code>mksh</code> or
+<code>$SHELL</code> and a backquoted download handed to <code>bash -c</code> ask; <code>--help</code> of an asked command passes, and an <code>az</code> or
+<code>gcloud</code> option value such as <code>-n delete-test</code> is no operand.</li>
+<li>patterns: <code>def exec(</code>, <code>function eval(</code> and a method definition such as <code>exec(sql) {</code> no longer fire.</li>
+<li>brain-capture offers no append to an expired inbox note, which brain-search no longer answers from.</li>
+<li>brain-review shows the <code>Expired</code> group with the first page only; "archive the expired ones" still names it later.</li>
+<li>testing-conventions references prove a test red by running it before the fix, or undoing the fix with one edit,
+not by checking out the unfixed commit.</li>
+<li><code>scripts/eval-summary.py</code> refuses to replace an existing <code>eval-history/&lt;version&gt;.json</code> without <code>--force</code>, which
+may stand anywhere among the arguments.</li>
+<li>CI: <code>tests/check-shard.test.sh</code> checks that 4 shards own every case exactly once, and a cancelled or timed-out
+job still prints each shard's output and stops the shards. <code>docs/development.md</code> says that Dependabot security updates still target
+<code>main</code>.</li>
     </ul>
     <h2 id="029---2026-11-09">[0.2.9] - 2026-11-09</h2>
     <h3 id="029-added">Added</h3>

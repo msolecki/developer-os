@@ -27,7 +27,25 @@ GIT_RULE = re.compile(r"(^|[^A-Za-z0-9_.-])git([^A-Za-z0-9_.-]|$)")
 DENY = ["Makefile", ".husky/**", ".githooks/**", ".claude/**"]
 # Never dropped: a lane that rewrites its worktree's .git file points git at a config of its own, and git runs
 # commands that config names (core.fsmonitor, filters) for the lane's `git status` and for the orchestrator's.
-GIT_DENY = [".git", ".git/**"]
+# The `**/` forms cover a nested repository a lane could plant in a subdirectory and run `git status` in.
+GIT_DENY = [".git", ".git/**", "**/.git", "**/.git/**"]
+# A first word that runs a command or a program text it is given: through it a rule allows any command, git
+# included. `find` runs one with -exec, `awk` takes its program on the command line.
+WRAPPERS = re.compile(r"env|xargs|exec|eval|command|builtin|nohup|sudo|doas|time|timeout|nice|watch|script|busybox"
+                      r"|find|[gmn]?awk|nix-shell|parallel|setsid|strace")
+# A shell, interpreter or package runner is allowed only with a script, module or package after it (`sh check.sh`,
+# `node check.mjs`, `python3 -m pytest`, `node --test`, `npx eslint`), never alone or with an option such as -c or -e,
+# which take the program text from the command line. The check is best-effort: a script the rule names can still
+# run anything, so the launch question names that risk.
+INTERPRETERS = re.compile(r"(ba|z|da|k|mk|a|c|tc)?sh|fish|python[0-9.]*|pypy[0-9.]*|node(js)?|deno|bun|bunx|perl"
+                          r"|ruby|php|lua(jit)?|osascript|pwsh|powershell|tclsh|wish|R|Rscript|npx|pnpx|uvx|pipx")
+# Package managers that run an arbitrary package or binary through one of these subcommands.
+RUNNER_SUBS = {"npm": {"exec", "x"}, "pnpm": {"exec", "dlx"}, "yarn": {"exec", "dlx"}, "bun": {"x", "run"},
+               "uv": {"run"}, "pipx": {"run"}}
+# Options that name a module or a test runner, so the program is not on the command line.
+SAFE_OPTIONS = {"-m", "--test"}
+REMEDY = "; put the command in a script and allow it as `sh <script>` or `node <script>`"
+FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "Read"}
 # No lane-chosen config may run a command when this script itself calls git.
 GIT_SAFE = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null")
 LANE = r"[a-z0-9][a-z0-9-]*"
@@ -63,6 +81,43 @@ def strings(value):
     return isinstance(value, list) and all(isinstance(x, str) and x and not x.startswith("-") for x in value)
 
 
+def opens_any_command(command):
+    """True when a command prefix lets its rule run any command: a shell, a wrapper or an interpreter without a script."""
+    words = command.replace("'", " ").replace('"', " ").split()
+    if not words or words[0] in ("*", ":*"):
+        return True
+    first = os.path.basename(words[0])
+    if WRAPPERS.fullmatch(first) or "=" in words[0]:
+        return True
+    if first in RUNNER_SUBS and (len(words) < 2 or words[1] in RUNNER_SUBS[first] and len(words) < 3):
+        return True  # `npm:*` alone, or `pnpm exec:*` with no package after it
+    if not INTERPRETERS.fullmatch(first):
+        return False
+    if len(words) < 2 or words[1].startswith((":", "*")):
+        return True
+    if words[1] in SAFE_OPTIONS:
+        return words[1] == "-m" and (len(words) < 3 or words[2].startswith(("-", ":", "*")))
+    return words[1].startswith("-")
+
+
+def rule_problem(rule):
+    """Returns why an `allow` rule may not reach a lane, or None. One tool rule, no wildcard Bash, no path outside."""
+    m = re.fullmatch(r"([A-Za-z_]+)(?:\(([^(),\n]+)\))?", rule)
+    if not m:
+        return "is not a single tool rule such as Bash(node check.mjs:*)"
+    tool, inner = m.group(1), m.group(2)
+    if tool == "Bash":
+        if inner is None:
+            return "allows every Bash command; name a command prefix such as Bash(node check.mjs:*)"
+        if opens_any_command(inner[:-2] if inner.endswith(":*") else inner):
+            return "allows a shell, wrapper, interpreter or package runner that can run any command" + REMEDY
+    if tool in FILE_TOOLS and inner is not None:
+        path = inner.strip()
+        if path.startswith(("/", "~", "$")) or ".." in path.split("/"):
+            return "names a path outside the lane's worktree"
+    return None
+
+
 def validate(cfg):
     """Returns the reasons lanes.json cannot be launched; an empty list when it can."""
     if not isinstance(cfg, dict):
@@ -95,15 +150,20 @@ def validate(cfg):
             errors.append("%s: budget_usd is required: a positive number of US dollars, there is no default" % name)
         check = lane.get("fast_check")
         # Claude Code splits tool rules on commas and spaces: a bracket or comma would close this rule and open another.
-        if not (isinstance(check, str) and check.strip() and not re.search(r"[\n(),]", check)):
-            errors.append("%s: fast_check is not a one-line command without ( ) or ," % name)
+        if not (isinstance(check, str) and check.strip() and not re.search(r"[\x00-\x1f\x7f(),]", check)):
+            errors.append("%s: fast_check is not a one-line command without ( ) , or control characters" % name)
         elif GIT_RULE.search(check):
             errors.append("%s: fast_check runs git; a lane gets only git status, add and commit" % name)
+        elif opens_any_command(check):
+            errors.append("%s: fast_check starts with a shell, wrapper, interpreter or package runner that can run any "
+                          "command%s" % (name, REMEDY))
         allow = lane.get("allow", [])
-        if not (strings(allow) and all(re.fullmatch(r"[A-Za-z_]+(\([^(),\n]+\))?", x) for x in allow)):
+        if not strings(allow) or any(re.search(r"[\x00-\x1f\x7f]", x) for x in allow):
             errors.append("%s: allow is not a list of single tool rules such as Bash(node check.mjs:*)" % name)
         elif any(GIT_RULE.search(x) for x in allow):
             errors.append("%s: allow names a git command; a lane gets only git status, add and commit" % name)
+        else:
+            errors += ["%s: allow entry %s %s" % (name, x, rule_problem(x)) for x in allow if rule_problem(x)]
         drop = lane.get("drop_deny", [])
         known = DENY + (cfg["manifests"] if strings(cfg.get("manifests")) else [])
         if not (strings(drop) and all(p in known for p in drop)):
@@ -206,18 +266,32 @@ def pids(run):
     return last
 
 
+def common_dir(root):
+    """The repository's shared git directory: <root>/.git for a main checkout, the main checkout's .git when root is
+    itself a linked worktree. None when git cannot tell."""
+    code, out = git(root, "rev-parse", "--git-common-dir")
+    if code != 0 or not out.strip():
+        return None
+    return os.path.realpath(os.path.join(root, out.strip()))
+
+
 def own_gitdir(root, name):
     """The lane's worktree still has the .git file `git worktree add` wrote: a pointer into the repository's own
-    .git/worktrees. Anything else is a lane-made git directory, and git must not run in it."""
+    <common dir>/worktrees, absolute or relative to the worktree (worktree.useRelativePaths). Anything else is a
+    lane-made git directory, and git must not run in it."""
+    tree = os.path.join(root, ".worktrees", name)
     try:
-        with open(os.path.join(root, ".worktrees", name, ".git"), "rb") as f:
+        with open(os.path.join(tree, ".git"), "rb") as f:
             text = f.read(4096).decode("utf-8", "replace").strip()
     except OSError:
         return False
     if not text.startswith("gitdir: ") or "\n" in text:
         return False
-    want = os.path.join(os.path.realpath(root), ".git", "worktrees")
-    return os.path.dirname(os.path.realpath(text[len("gitdir: "):])) == want
+    common = common_dir(root)
+    if common is None:
+        return False
+    target = os.path.realpath(os.path.join(tree, text[len("gitdir: "):]))
+    return os.path.dirname(target) == os.path.join(common, "worktrees")
 
 
 def ps(pid, field):
@@ -229,9 +303,11 @@ def ps(pid, field):
     return p.stdout.strip()
 
 
-def running(pid):
-    # The PID is the `sh -c` wrapper, whose command line holds the script text; a reused PID does not.
-    return "claude -p" in ps(pid, "command")
+def running(pid, sid=""):
+    # The PID is the `sh -c` wrapper, whose command line holds the script text and the lane's session id; a reused
+    # PID holds neither. A pids.txt line from before session ids is matched on the script text alone.
+    command = ps(pid, "command")
+    return "claude -p" in command and (not sid or sid in command)
 
 
 def report_line(root, rel, lane):
@@ -243,7 +319,9 @@ def report_line(root, rel, lane):
 
 
 def one_line(text, limit):
-    text = " ".join(str(text).split())
+    # Lane output is data: a terminal escape sequence in it must not reach the user's terminal.
+    text = re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]|[\x00-\x1f\x7f-\x9f]", " ", str(text))
+    text = " ".join(text.split())
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
@@ -256,7 +334,15 @@ def launch(run):
         name = lane["name"]
         if not os.path.isfile(os.path.join(run, "prompt-%s.md" % name)):
             problems.append("%s: no prompt-%s.md in the run directory" % (name, name))
-        if git(os.path.join(root, ".worktrees", name), "rev-parse", "HEAD")[1].strip() != cfg["base"]:
+        tree = os.path.join(root, ".worktrees", name)
+        # A plain directory inside the checkout answers rev-parse with the main checkout's HEAD: the lane would
+        # commit on the user's branch. Only a worktree `git worktree add` made, rooted at its own path, counts.
+        code, top = git(tree, "rev-parse", "--show-toplevel")
+        if code != 0 or os.path.realpath(top.strip()) != os.path.realpath(tree) or not own_gitdir(root, name):
+            problems.append("%s: %s is not a git worktree of this repository (git worktree add)" % (name, tree))
+            continue
+        code, head = git(tree, "rev-parse", "HEAD")
+        if code != 0 or head.strip() != cfg["base"]:
             problems.append("%s: worktree HEAD is not %s" % (name, cfg["base"]))
     if not os.path.isfile(os.path.join(run, "LANES.md")):
         problems.append("no LANES.md in the run directory")
@@ -268,12 +354,22 @@ def launch(run):
         if code != 0:
             fail("cannot hash %s" % path)
         lines.append("%s %s\n" % (out.strip(), os.path.relpath(path, root)))
+    # Every argument list is built before the first lane starts, so a lane that cannot start leaves none running.
+    plans = [(lane["name"], session_id(), lane) for lane in cfg["lanes"]]
+    argvs = [[os.path.join(run, "prompt-%s.md" % name), "--session-id", sid] + lane_args(cfg, lane)
+             for name, sid, lane in plans]
+    if any("\x00" in a for argv in argvs for a in argv):
+        fail("a lane argument holds a NUL byte")
     with open(os.path.join(run, "hashes.txt"), "w", encoding="utf-8") as f:
         f.writelines(lines)
-    for lane in cfg["lanes"]:
-        name, sid = lane["name"], session_id()
-        pid = spawn(START, [os.path.join(run, "prompt-%s.md" % name), "--session-id", sid] + lane_args(cfg, lane),
-                    os.path.join(root, ".worktrees", name), os.path.join(run, "log-%s.txt" % name), "wb")
+    started = []
+    for (name, sid, _), argv in zip(plans, argvs):
+        try:
+            pid = spawn(START, argv, os.path.join(root, ".worktrees", name), os.path.join(run, "log-%s.txt" % name), "wb")
+        except (OSError, ValueError) as e:
+            fail("%s: cannot start: %s" % (name, e),
+                 "started before it: %s; check them with status" % (", ".join(started) or "none"))
+        started.append(name)
         with open(os.path.join(run, "pids.txt"), "a", encoding="utf-8") as f:
             f.write("%s %d %s\n" % (name, pid, sid))
         print("%s %d %s" % (name, pid, sid))
@@ -292,7 +388,7 @@ def resume(run, name):
     pid, sid = pids(run).get(name, ("", ""))
     if not sid:
         fail("%s: no session id in pids.txt" % name)
-    if running(pid):
+    if running(pid, sid):
         fail("%s is still running" % name)
     if report_line(root, rel, name).startswith(FINAL):
         fail("%s has a final report" % name)
@@ -377,7 +473,9 @@ def status(run):
     lanes = pids(run)
     if not lanes:
         fail("no lanes launched from %s" % run)
-    changed = changed_files(run, root) or []
+    changed = changed_files(run, root)
+    unhashed = changed is None
+    changed = changed or []
     names = [os.path.basename(path) for path in changed]
     rows, notes, live, resumable = [], [], 0, []
     for name in sorted(lanes):
@@ -385,7 +483,7 @@ def status(run):
         tree = os.path.join(root, ".worktrees", name)
         cost, code, result, last = read_log(os.path.join(run, "log-%s.txt" % name))
         report = report_line(root, rel, name)
-        alive = running(pid)
+        alive = running(pid, sid)
         why = ["%s changed since launch" % n for n in names if n in ("LANES.md", "lanes.json", "prompt-%s.md" % name)]
         if alive:
             live += 1
@@ -420,6 +518,8 @@ def status(run):
             notes.append("%s %s: %s; %s" % (WARN, name, "; ".join(why), quote(result, last)))
     print("| Lane | State | Idle for | Report | Commits | Uncommitted | Cost |")
     print("|---|---|---|---|---|---|---|")
+    if unhashed:
+        notes.append("%s no hashes.txt in %s: changes since launch cannot be checked, and resume refuses" % (WARN, run))
     for line in rows + notes + ["changed since launch: %s" % path for path in changed]:
         print(line)
     print("%d running, %d finished. Resumable: %s" % (live, len(lanes) - live, ", ".join(resumable) or "none"))
@@ -436,11 +536,11 @@ def conflicts(run):
         return
     root, rel, _ = locate(run)
     lanes = pids(run)
-    done = [n for n in sorted(lanes) if report_line(root, rel, n).startswith("DONE") and not running(lanes[n][0])]
+    done = [n for n in sorted(lanes) if report_line(root, rel, n).startswith("DONE") and not running(*lanes[n])]
     broken = False
     for i, a in enumerate(done):
         for b in done[i + 1:]:
-            # Writes no ref and no working-tree file; the merged tree goes to the object database only.
+            # Writes no ref and no working-tree file; the merged tree goes to the object database as loose objects.
             code, out = git(root, "merge-tree", "--write-tree", "--name-only", "--no-messages", "lanes/" + a, "lanes/" + b)
             if code == 1:
                 for path in out.splitlines()[1:]:

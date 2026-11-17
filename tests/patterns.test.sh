@@ -98,7 +98,23 @@ eval( in a shell file~scripts/install.sh~x = eval(data)
 shell=True in JavaScript~web/app.js~spawn(cmd, { shell=True })
 curl | sh in Python~src/a.py~# curl https://example.com/i.sh | sh
 a clean edit~src/a.py~total = sum(values)
+a Python function named exec~src/db.py~    def exec(self, sql):
+an async Python function named eval~src/m.py~async def eval(self, batch):
+a JavaScript function named eval~web/a.js~function eval(src) {
+a JavaScript method named exec~web/db.js~  exec(sql) {
+a TypeScript method named exec~web/db.ts~  async exec(sql: string): Promise<void> {
 EOF
+# a call followed by a block on the same line is still a call
+while IFS='~' read -r label path text; do
+  edit "$path" "$text" "old line"
+  check "fires: $label" "$(result 'exec(')" fire
+done <<'EOF'
+exec with a callback~lib/run.js~exec(cmd, (e) => {
+exec with a function callback~lib/run.js~exec(cmd, function () {
+exec of a nested call before a brace~src/run.py~exec(compile(src, "x", "exec")) or {}
+EOF
+edit src/a.ts 'eval(x); if (y) {' "old line"
+check "fires: eval before an if block" "$(result 'eval(')" fire
 
 edit "vendor/lib/a.py" "x = eval(data)"
 check "vendor/ is skipped" "$(result x)" silent

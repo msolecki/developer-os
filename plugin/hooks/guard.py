@@ -327,23 +327,58 @@ CLI_VALUE = {"docker": {"-H", "--host", "-c", "--context", "--config", "-l", "--
                      "--cli-read-timeout", "--cli-connect-timeout"},
              "npm": PM_VALUE | {"--registry", "--tag", "--otp", "--access", "-w", "--workspace"},
              "pnpm": PM_VALUE | {"--registry", "--tag", "--otp", "--access"},
-             "yarn": {"--cwd", "--registry", "--tag", "--otp", "--access"}}
+             "yarn": {"--cwd", "--registry", "--tag", "--otp", "--access"},
+             "az": {"-n", "--name", "-g", "--resource-group", "--subscription", "-l", "--location", "--ids", "--query",
+                    "-o", "--output"},
+             "gcloud": {"--project", "--zone", "--region", "--format", "--filter", "--account", "--configuration"}}
 # Commands whose dry run changes nothing, so it passes.
 DRY_RUN = {"npm", "pnpm", "yarn", "cargo", "aws"}
 DB_CLIENTS = {"psql", "mysql", "mariadb", "sqlite3"}
+# Commands that run a command they are given in a container, a pod or on another host (`docker exec db psql`,
+# `kubectl exec pod -- psql`, `ssh host "psql ..."`): a database client after one is run, wherever it stands.
+REMOTE = {"docker", "podman", "nerdctl", "docker-compose", "kubectl", "oc", "ssh"}
 # `drop` or `truncate` as a word of its own: not `dropbox`, `drop.sql`, `--add-drop-table`.
 SQL_DROP = re.compile(r"(?<![\w.-])(?:drop|truncate)(?![\w.-])", re.I)
 FETCHERS = {"curl", "wget"}
-RUN_SHELL = re.compile(r"(ba|z|da|k)?sh")
+# A shell that reads its script from a pipe; `SHELL` is `$SHELL` once a view drops the `$`.
+RUN_SHELL = re.compile(r"(ba|z|da|k|mk|a|c|tc)?sh|fish|SHELL")
 RUN_INTERP = re.compile(r"python[0-9.]*|perl|ruby|node|php")
+
+
+def remote_names(words):
+    """Base names of the words after a REMOTE command in command position: the command it runs elsewhere is among
+    them. Empty when the segment has no REMOTE command."""
+    for i in starts(words):
+        if words[i].rsplit("/", 1)[-1] in REMOTE:
+            return {w.rsplit("/", 1)[-1] for w in words[i + 1:]}
+    return set()
+
+
+def run_positions(words):
+    """Command positions, plus the word past RUNNERS and their options (`pnpm exec npm publish`, `npx npm publish`).
+    The runner's own position stays, so `pnpm publish` is still pnpm's."""
+    out = []
+    for i in starts(words):
+        out.append(i)
+        j = i
+        while j < len(words) and words[j].rsplit("/", 1)[-1] in RUNNERS:
+            j += 1
+            while j < len(words) and words[j].startswith("-"):
+                j += 1
+        if i < j < len(words):
+            out.append(j)
+    return out
 
 
 def classes(words):
     """(REASONS key, rule name) for a command from CLASSES or one of the cloud and redis forms below, in command
-    position; None otherwise. A dry run of a DRY_RUN command passes."""
-    for i in starts(words):
+    position or after RUNNERS; None otherwise. A dry run of a DRY_RUN command passes, as does `--help`."""
+    for i in run_positions(words):
         name, rest = words[i].rsplit("/", 1)[-1], words[i + 1:]
         values = CLI_VALUE.get(name, ())
+        # `--help` as a flag of its own prints help; as the value of an option (`--body --help`) it is text.
+        if any(x == "--help" and (k == 0 or rest[k - 1] not in values) for k, x in enumerate(rest)):
+            continue
         ops = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in values)]
         flags = {x.split("=")[0] for x in rest if x.startswith("-")}
         # `--dry-run=false` and `--dry-run false` (npm reads the next word as the value) are no dry run; the last
@@ -386,14 +421,29 @@ def classes(words):
 
 
 def drops_data(line):
-    """A database client in command position anywhere in the line and `DROP` or `TRUNCATE` as a word anywhere in
-    it: the statement may sit in `-c`, after a `;` inside it, or come through a pipe."""
-    if not SQL_DROP.search(line):
-        return False
-    for seg in re.split(r"[;&|()`]", line):
-        words = [w for w in re.split(r"[ \t\n]+", seg) if w]
-        if any(words[i].rsplit("/", 1)[-1] in DB_CLIENTS for i in starts(words)):
-            return True
+    """A database client in command position, or run through a REMOTE command, and `DROP` or `TRUNCATE` as a word
+    in the same `&&` chain link: the statement may sit in `-c`, after a `;` inside it, or come through a pipe. `&&`
+    splits the line because a view keeps no quotes; SQL rarely holds `&&`, while `;` and `||` are common in it."""
+    for chain in line.split("&&"):
+        if not SQL_DROP.search(chain):
+            continue
+        for seg in re.split(r"[;&|()`]", chain):
+            words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+            if any(words[i].rsplit("/", 1)[-1] in DB_CLIENTS for i in starts(words)) or DB_CLIENTS & remote_names(words):
+                return True
+    return False
+
+
+def flushes_redis(line):
+    """`FLUSHALL` or `FLUSHDB` and `redis-cli` (in command position or after a REMOTE command) in one `&&` link, so
+    a flush piped in (`echo FLUSHALL | redis-cli`, `... | docker exec -i cache redis-cli`) asks too."""
+    for chain in line.split("&&"):
+        if not re.search(r"(?<![\w.-])(?:flushall|flushdb)(?![\w.-])", chain, re.I):
+            continue
+        for seg in re.split(r"[;&|()`]", chain):
+            words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+            if any(words[i].rsplit("/", 1)[-1] == "redis-cli" for i in starts(words)) or "redis-cli" in remote_names(words):
+                return True
     return False
 
 
@@ -421,7 +471,8 @@ def runs_download(line):
             last = before[-1] if before else ""
             runner = any(RUN_SHELL.fullmatch(n) or n in ("eval", "source", ".")
                          for n in [before[i].rsplit("/", 1)[-1] for i in starts(before)])
-            if delim == "(" and runner and (last.endswith("<") or last == "eval" or re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", last)):
+            # `$(curl u)` or a backquoted `` `curl u` `` handed to a shell's -c, `eval` or `<(...)`.
+            if delim in ("(", "`") and runner and (last.endswith("<") or last == "eval" or re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", last)):
                 return True
             piped = True
         before = words
@@ -523,6 +574,8 @@ def scan(line):
     # Whole-line classes last, so a command the per-segment checks know keeps its own reason.
     if drops_data(line):
         return "data", "sql-drop"
+    if flushes_redis(line):
+        return "data", "redis-flush"
     if runs_download(line):
         return "remote-code", "curl-pipe-shell"
     return None
@@ -816,10 +869,12 @@ def other_worktree(cwd, path):
         return False
     out = subprocess.run(["git", "-C", top, "worktree", "list", "--porcelain"], stdin=subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3).stdout.decode("utf-8", "replace")
-    trees = [os.path.realpath(line[9:]) for line in out.splitlines() if line.startswith("worktree ")]
+    # Compared without case, as protected() does: on a macOS volume `MAIN/a.txt` is the main checkout's file.
+    trees = [os.path.realpath(line[9:]).lower() for line in out.splitlines() if line.startswith("worktree ")]
+    top = top.lower()
     if top not in trees:  # a submodule's `.git` is a file too
         return False
-    t = target(cwd, path)
+    t = target(cwd, path).lower()
     holds = [w for w in trees if t == w or t.startswith(w + os.sep)]
     return bool(holds) and max(holds, key=len) != top
 
@@ -904,14 +959,18 @@ def glob_match(pat, s):
 
 
 def project_path(cwd, path):
-    """True when file_path, relative to the project root, matches a path rule of the project."""
+    """True when file_path, relative to the project root, matches a path rule of the project; compared without
+    case, so `infra/PROD/x.tf` on a macOS volume matches `infra/prod/**` (on a case-sensitive one it asks once
+    more than needed)."""
     root, _, globs = project_rules(cwd)
     if not globs:
         return False
+    root = root.lower()
     for t in {target(cwd, path), os.path.abspath(os.path.join(os.path.realpath(cwd), os.path.expanduser(path)))}:
+        t = t.lower()
         if t.startswith(root + os.sep) and len(t) < 4096:
             rel = t[len(root) + 1:].replace(os.sep, "/")
-            if any(glob_match(g, rel) for g in globs):
+            if any(glob_match(g.lower(), rel) for g in globs):
                 return True
     return False
 
@@ -930,6 +989,45 @@ def project_command(cwd, views):
                 base = [got[0].rsplit("/", 1)[-1]] + got[1:]
                 if any(got[:len(c)] == c or base[:len(c)] == c for c in commands):
                     return True
+    return False
+
+
+def names_rules(word):
+    """A word that can stand for the project's rules file, compared without case: the file itself, the `.claude`
+    directory that holds it, or a glob inside `.claude/` that may expand to it (`rm .claude/*`)."""
+    w = word.lower().rstrip("/")
+    return (w.endswith(RULES_FILE.rsplit("/", 1)[1]) or w == ".claude" or w.endswith("/.claude")
+            or (".claude/" in w and re.search(r"[*?\[]", w) is not None))
+
+
+def rules_file_written(line):
+    """A command that writes, moves or removes the project's rules file: a WRITE_BIN command with it among the
+    operands it writes (for `mv` the source too: moving it away drops it), `sed`/`perl -i` on it, a git write of it
+    other than staging (`git add`, `git restore --staged` change no file), or a redirect into it. Reading it, or a
+    write of another file in the same command, passes."""
+    for m in re.finditer(r"(?<![<=-])>[>|]?\s*&?([^\s;&|()<>]+)", line):
+        if names_rules(m.group(1)):
+            return True
+    for seg in re.split(r"[;&|()`]", line):
+        words = [w for w in re.split(r"[ \t\n]+", seg) if w]
+        if not any(names_rules(w) for w in words):
+            continue
+        pos = starts(words)
+        for i in pos:
+            name = words[i].rsplit("/", 1)[-1]
+            ops = [w for w in words[i + 1:] if not w.startswith("-")]
+            if name in WRITE_BIN and name not in ("mkdir", "chmod", "chown", "chgrp"):
+                targets = ops[-1:] if name in ("cp", "install", "ln") else ops
+                if any(names_rules(t) for t in targets):
+                    return True
+            if name in ("sed", "perl") and any(w == "--in-place" or w.startswith("--in-place=") or re.match(r"-(?![MmI])[a-zA-Z]*i", w)
+                                               for w in words[i + 1:]) and any(names_rules(o) for o in ops):
+                return True
+        for sub, rest in git_subs(words, pos):
+            staged_only = sub == "restore" and {"--staged", "-S"} & set(rest) and not {"--worktree", "-W"} & set(rest)
+            if sub in GIT_WRITE and sub != "add" and not staged_only and any(
+                    names_rules(w) for w in rest if not w.startswith("-")):
+                return True
     return False
 
 
@@ -1055,7 +1153,11 @@ def main():
     # A redirect inside quotes is a program's text (`awk '$1>3'`); unbalanced quotes check every view.
     u = unquoted(cmd)
     redirect = redirects(u) if u is not None else any(redirects(v) for v in views)
-    if read_only(raw) and (redirect or any(writes(v) for v in views)):
+    # A command that writes, moves or removes the project's rules file (`rm`, `sed -i`, `> file`, `git checkout --`):
+    # one such command would drop every question the project added, as an Edit of the file would.
+    if any(rules_file_written(v) for v in views):
+        ask("rules", "rules")
+    elif read_only(raw) and (redirect or any(writes(v) for v in views)):
         ask("readonly")
     elif safe(project_command, safe(hook_cwd, raw), views):
         ask("project", "project-command")

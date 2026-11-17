@@ -15,7 +15,13 @@ i=0 ran=0
 # Tells tests/guard.test.sh in each copy to skip its CPU-time limit: shards side by side share the CPUs, and the
 # top-level check already measured the same code.
 export CHECK_TEST_COPY=1
-mine() { i=$((i + 1)); [ $(((i - 1) % n + 1)) -eq "$k" ] || return 1; ran=$((ran + 1)); }
+# CHECK_TEST_LIST=<file> appends the number of each case this shard owns to that file instead of running it, also
+# from a subshell, whose output a `$(...)` would swallow (tests/check-shard.test.sh checks that the shards together
+# own every case exactly once).
+mine() {
+  i=$((i + 1)); [ $(((i - 1) % n + 1)) -eq "$k" ] || return 1; ran=$((ran + 1))
+  if [ -n "${CHECK_TEST_LIST:-}" ]; then echo "$i" >> "$CHECK_TEST_LIST"; return 1; fi
+}
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
 failed=0
@@ -331,6 +337,7 @@ run "a secret in an untracked file" fail "leaks found"
 jq '.plugins[0].version = "9.9.9"' "$r/.claude-plugin/marketplace.json" > "$tmp/x" && mv "$tmp/x" "$r/.claude-plugin/marketplace.json"
 run "marketplace and plugin versions differ" fail 'Entry declares version "9.9.9"'
 
+if [ -n "${CHECK_TEST_LIST:-}" ]; then echo "total $i"; exit 0; fi
 if [ "$ran" -eq 0 ]; then echo "check: shard $shard ran no case" >&2; exit 1; fi
 [ "$failed" -eq 0 ] && echo "check: all passed ($ran cases, shard $shard)"
 exit "$failed"

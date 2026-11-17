@@ -73,8 +73,23 @@ sed 's/"partial": false/"partial": true/' "$F/v2/aggregate-result.json" > "$T/v2
 s --out-dir "$T/partial" "$T/v2-partial.json" >/dev/null 2>"$T/err"
 expect "a partial run still exits 0" 0 $?
 expect "a partial run warns on stderr" 1 "$(grep -c '^warning: run .* is partial$' "$T/err")"
-s --out-dir "$T/partial" "$F/v2/aggregate-result.json" >/dev/null 2>"$T/err"
+s --force --out-dir "$T/partial" "$F/v2/aggregate-result.json" >/dev/null 2>"$T/err"
 expect "a complete run prints no warning" 0 "$(grep -c 'partial' "$T/err")"
+
+# A release's kept scores are replaced only on request.
+before=$(cat "$T/h/9.1.0.json")
+s --out-dir "$T/h" "$T/v2-partial.json" >/dev/null 2>"$T/err"
+expect "an existing summary is not replaced without --force" 2 $?
+expect "the refusal names --force" 1 "$(grep -c 'exists; pass --force' "$T/err")"
+expect "the kept summary is unchanged" "$before" "$(cat "$T/h/9.1.0.json")"
+s --force --out-dir "$T/h" "$T/v2-partial.json" >/dev/null 2>&1
+expect "--force replaces it" 0 $?
+s --out-dir "$T/h" "$T/v2-partial.json" --force >/dev/null 2>&1
+expect "--force after the file also replaces it" 0 $?
+s --out-dir "$T/h" --force "$T/v2-partial.json" >/dev/null 2>&1
+expect "--force after --out-dir also replaces it" 0 $?
+s --out-dir "$T/h" "$T/v2-partial.json" --bogus >/dev/null 2>&1
+expect "an unknown flag exits 2" 2 $?
 
 s --out-dir "$T/mixed" "$F/v1-baseline/aggregate-result.json" "$F/v2/aggregate-result.json" >/dev/null 2>&1
 expect "runs of two versions exit 2" 2 $?
