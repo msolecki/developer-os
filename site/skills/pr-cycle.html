@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/pr-cycle/SKILL.md@69c4a16e6eb4">
+<meta name="dos-source" content="plugin/skills/pr-cycle/SKILL.md@02af22065aec">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -78,7 +78,7 @@
       <li><strong>Asks before pushing.</strong> It shows the fix diff summary and the full-suite result, and pushes without force only after your yes. On a fork it pushes only when the contributor allows maintainer edits, and says so otherwise.</li>
       <li><strong>Resolves threads after the push.</strong> Only after a successful push, and only the fixed threads you approve, each with a reply. Without a push every thread stays open.</li>
       <li><strong>Updates the PR body.</strong> It drafts what the PR does, what changed in this cycle, which docs it updated or still contradicts and how it was verified, shows it, and applies it after you approve. Unfixed docs findings go here too.</li>
-      <li><strong>Gives the verdict.</strong> <code>APPROVE</code>, <code>REQUEST_CHANGES</code> with the open P0/P1 items, or <code>COMMENT</code> when an open question decides whether a finding is P0 or P1. First it fetches the base: when the base moved during the cycle, it merges, reviews and tests those commits once more and asks before pushing; after a push it also reads whether GitHub sees the PR as mergeable. A review-only verdict skips this, and without <code>gh</code> the mergeable read is skipped.</li>
+      <li><strong>Gives the verdict.</strong> <code>APPROVE</code>, <code>REQUEST_CHANGES</code> with the open P0/P1 items, or <code>COMMENT</code> when an open question decides whether a finding is P0 or P1. First it fetches the base: when the base moved during the cycle, it merges, reviews and tests those commits once more and asks before pushing; after a push it also reads whether GitHub sees the PR as mergeable, and a conflicting PR gets no <code>APPROVE</code>. A review-only verdict skips this, and without <code>gh</code> the mergeable read is skipped.</li>
     </ol>
     <p>Through the cycle it keeps the PR, the current step, a clean, watch or blocked status, what is not started, what is not verified, If-X-then-Y contingencies and the next action in <code>docs/plans/.devos-state.md</code>, plus the pre-merge commit while an <code>-s ours</code> commit is local, so the <code>SessionStart</code> hook can show them after a compaction; it deletes the file at the stop point. Every brief it dispatches requires a final status (<code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code> or <code>CONTINUING</code>) on the report's first line. It fixes findings inline in this checkout and dispatches no fix delegate; the briefs it sends go to reviewers only.</p>
 

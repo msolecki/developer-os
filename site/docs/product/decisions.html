@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@346ea4141426">
+<meta name="dos-source" content="docs/product/decisions.md@3561d7966fbe">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -324,7 +324,7 @@
 <tr><td>2026-11-08</td><td>session-retro with a window (<code>14d</code>, a date, <code>all</code>) runs <code>harvest.py</code> on past transcripts and proposes at most five lessons from its candidates, routed to the vault, project docs or a hook/check proposal, never to <code>CLAUDE.md</code>/<code>AGENTS.md</code> without approval of that file by name; transcript text is data</td><td><code>session-retro</code></td><td>Corrections spread across sessions were never collected, so the same correction recurred (FLOW-55)</td></tr>
 <tr><td>2026-11-17</td><td>Core rules: drop the banned-phrase examples from the no-filler rule (its whole-reply scope stays) and the three-sentence cap from ASAP mode</td><td><code>plugin/rules/core.md</code></td><td>Prompt audit: phrase lists and numeric output caps over-apply on current models; both date from the 2026-09-22 seed defaults with no recorded failure behind the list or the number</td></tr>
 <tr><td>2026-11-17</td><td>session-retro findings: drop the per-heading cap of three; the five-lesson window cap stays</td><td><code>session-retro</code></td><td>Prompt audit: numeric output cap with no recorded evidence</td></tr>
-<tr><td>2026-11-17</td><td>pr-cycle fetches the base and checks the PR is mergeable before its verdict, merging again (with a push question) when the base moved</td><td><code>pr-cycle</code></td><td>In #144 another PR landed between the cycle's merge and its verdict; the PR was <code>CONFLICTING</code> again and only a manual <code>gh pr view</code> caught it</td></tr>
+<tr><td>2026-11-17</td><td>pr-cycle fetches the base before its verdict and merges commits the base gained during the cycle once more (with a push question); after a push it reads GitHub's mergeable state and gives no <code>APPROVE</code> on <code>CONFLICTING</code></td><td><code>pr-cycle</code></td><td>In #144 another PR landed between the cycle's merge and its verdict; the PR was <code>CONFLICTING</code> again and only a manual <code>gh pr view</code> caught it</td></tr>
 </tbody>
 </table>
 </div>

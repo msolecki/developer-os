@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@3f350d90b324">
+<meta name="dos-source" content="CHANGELOG.md@745e215d8f94">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -51,8 +51,8 @@
     <h2 id="unreleased">[Unreleased]</h2>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
-<li>pr-cycle fetches the base and checks the PR is mergeable before its verdict; when the base moved during
-the cycle it merges again and asks before pushing.</li>
+<li>pr-cycle fetches the base before its verdict; when the base gained commits during the cycle it merges,
+reviews and tests them once more and asks before pushing; after a push it reads GitHub's mergeable state.</li>
 <li>The Counts stage also reads scope-table rows (<code>Agents</code>, <code>Brain skills</code>, <code>Output styles</code>, <code>Hooks</code>) and
 totals in words before "developer-os"; it caught a stale agent total in the agents page's description.</li>
 <li><code>tests/check.test.sh</code> commits in its copy with signing off, so a user-level <code>commit.gpgsign</code> with no
