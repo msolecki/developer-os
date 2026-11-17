@@ -324,6 +324,16 @@ err=$(l launch "$R" 2>&1)
 expect "a fast_check that runs git is refused" 1 $?
 has "the refusal names the git fast_check" "a: fast_check runs git" "$err"
 [ ! -e "$R/pids.txt" ] && ok "nothing starts with git in a lane's commands" || bad "pids.txt written with git in a lane's commands"
+# The git match sees through a path and a quote, and leaves words that only start with git alone.
+gitrule() { python3 -I -c 'import importlib.util, sys
+s = importlib.util.spec_from_file_location("lanes", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print("git" if m.GIT_RULE.search(sys.argv[2]) else "clean")' "$lanes" "$1"; }
+for c in '/usr/bin/git diff --output=x' 'Bash(/usr/bin/git diff:*)' "sh -c 'git diff --output=x'" 'sh -c "git log"' 'Bash(git diff:*)'; do
+  expect "git is found in: $c" git "$(gitrule "$c")"
+done
+for c in 'pnpm lint' 'npm run gitleaks' 'make digit' 'node git-hooks.mjs' 'Bash(node checks/a.mjs:*)'; do
+  expect "no git is found in: $c" clean "$(gitrule "$c")"
+done
 
 # --- status: the cost of a session whose latest result is a zero-cost crash, and a PID another process reused
 mkrepo zerocost

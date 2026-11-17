@@ -346,12 +346,13 @@ def classes(words):
         values = CLI_VALUE.get(name, ())
         ops = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in values)]
         flags = {x.split("=")[0] for x in rest if x.startswith("-")}
-        # `--dry-run=false` and `--dry-run false` (npm reads the next word as the value) are no dry run.
+        # `--dry-run=false` and `--dry-run false` (npm reads the next word as the value) are no dry run; the last
+        # occurrence wins, as in npm (`--dry-run --dry-run=false` publishes).
         off = ("false", "0", "no")
-        dry = any(x.split("=")[0] in ("--dry-run", "--dryrun")
-                  and (x.split("=")[-1].lower() not in off if "=" in x
-                       else not (k + 1 < len(rest) and rest[k + 1].lower() in off))
-                  for k, x in enumerate(rest))
+        runs = [x.split("=")[-1].lower() not in off if "=" in x
+                else not (k + 1 < len(rest) and rest[k + 1].lower() in off)
+                for k, x in enumerate(rest) if x.split("=")[0] in ("--dry-run", "--dryrun")]
+        dry = bool(runs) and runs[-1]
         if name in DRY_RUN and dry:
             continue
         for cmd, sub, reason, rule in CLASSES:

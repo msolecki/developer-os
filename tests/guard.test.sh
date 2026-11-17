@@ -669,7 +669,7 @@ for c in 'npm publish --dry-run' 'cargo publish --dry-run' 'npm pack' 'npm run p
   check pass "$(fx "$c")"
 done
 # npm reads the word after --dry-run as its value: `--dry-run false` is a real publish.
-for c in 'npm publish --dry-run false' 'pnpm publish --dry-run 0' 'npm publish --dry-run=no'; do
+for c in 'npm publish --dry-run false' 'pnpm publish --dry-run 0' 'npm publish --dry-run=no' 'npm publish --dry-run --dry-run=false'; do
   check ask "$(fx "$c")" "publishes, merges or deletes"
 done
 check pass "$(fx 'npm publish --dry-run true')"

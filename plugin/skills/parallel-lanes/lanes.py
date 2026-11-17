@@ -21,7 +21,8 @@ USAGE = "usage: lanes.py launch|status|conflicts <run-dir> | resume <run-dir> <l
 TOOLS = ["Read", "Edit", "Write", "Glob", "Grep",
          "Bash(git status:*)", "Bash(git add:*)", "Bash(git commit:*)"]
 # The lane's own git commands are the ones above; any other, through fast_check or allow, could take an output path.
-GIT_RULE = re.compile(r"(^|[\s(;&|`])git(\s|:|\)|;|&|\||$)")
+# `git` as a word of its own, also after a path or a quote (`/usr/bin/git`, `sh -c 'git ...'`); not `gitleaks`.
+GIT_RULE = re.compile(r"(^|[^A-Za-z0-9_.-])git([^A-Za-z0-9_.-]|$)")
 # What the allowed fast check and `git commit` run; a lane must not rewrite it and then run it unprompted.
 DENY = ["Makefile", ".husky/**", ".githooks/**", ".claude/**"]
 # Never dropped: a lane that rewrites its worktree's .git file points git at a config of its own, and git runs

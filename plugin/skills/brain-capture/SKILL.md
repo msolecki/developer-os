@@ -58,7 +58,7 @@ When you started the capture yourself (the user did not ask for it: no "capture"
 
 ## 6. Write the note
 
-An approved addition is written with the Edit tool into the existing note: the `### <today>` paragraph and the `updated:` line, nothing else; its `status`, `expires` and every other key stay. Then commit it as below with its path, and skip to the report.
+An approved addition is written with the Edit tool into the existing note: the `### <today>` paragraph and the `updated:` line, nothing else; its `status`, `expires` and every other key stay. The paragraph cites no repository path that the note's `refs:` lacks, since its `verified:` date stays: cite such a path in a new note instead. Then commit it as below with its path, and skip to the report.
 
 Write a new note with the Write tool, never a shell redirect or heredoc, so the write is one reviewable tool call. Path: `<vault>/_inbox/<kebab-case-topic>.md`, ASCII only (`[a-z0-9-]`, no diacritics: "café" becomes `cafe`), the rule brain-review checks before a move. Note names must be unique across the whole vault, because `[[name]]` links resolve by name, case-insensitively. If the name is taken anywhere (`find "$V" -iname '<name>.md' -not -path '*/templates/*'`), add a suffix (`-2`). One topic per note. The body uses exactly these headings, in this order: `## Context`, `## Decision`, `## Why`, `## Links`. For a lesson, the `## Decision` section states the lesson. Link related notes as `[[note-name]]` under `## Links`.
 
@@ -107,12 +107,13 @@ When the vault is a git work tree (`git -C "$V" rev-parse --is-inside-work-tree`
 
 ```
 Captured: _inbox/release-notes-in-changelog.md (decision, status: inbox)
-  (or: Appended: DEV/release-process.md, ### 2026-10-14 under ## Why)
 Possible duplicate: DEV/release-process.md
 Redacted: nothing
 Committed: 3f2a1c9 (or: skipped, something was already staged)
 Review it with the brain-review skill or in Obsidian (_views/Inbox.base).
 ```
+
+After an approved addition the report has `Appended: <note path>, ### <today> under ## <section>` in place of the `Captured:` and `Possible duplicate:` lines.
 
 ## Stop point
 
