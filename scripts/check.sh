@@ -253,9 +253,10 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
       break if f == "CHANGELOG.md" && l.start_with?("## [") && !l.start_with?("## [Unreleased]")
       break if f == "site/docs/changelog.html" && l =~ /<h2[^>]*>\[/ && l !~ /\[Unreleased\]/
       l.scan(/\b[0-9]+ (?:skills|agents|output styles|hooks|eval cases|cases)\b(?! of\b)/) { |m| puts "#{f}:#{i}:#{m}" }
-      # A total in words names the plugin ("The ten developer-os subagents"); other number words are prose.
+      # A total in words names the plugin ("The ten developer-os subagents"); other number words are prose. Only
+      # zero to twenty are read; the tail of a compound ("twenty-eight") is not a total of its own.
       words = %w[zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty]
-      l.scan(/\b(#{words.join("|")}) developer-os (skills|agents|subagents|output styles|hooks)\b/i) do |w, k|
+      l.scan(/(?<![\w-])(#{words.join("|")}) developer-os (skills|agents|subagents|output styles|hooks)\b/i) do |w, k|
         puts "#{f}:#{i}:#{words.index(w.downcase)} #{k.downcase.sub("subagents", "agents")}"
       end
       # A scope table states counts as rows: "| Agents | 11 |" in Markdown, <td>Agents</td><td>11</td> on its page.

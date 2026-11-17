@@ -7,7 +7,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - pr-cycle fetches the base before its verdict; when the base gained commits during the cycle it merges,
-  reviews and tests them once more and asks before pushing; after a push it reads GitHub's mergeable state.
+  reviews and tests them once more and asks before pushing; then, pushed or not, it reads GitHub's mergeable state.
 - The Counts stage also reads scope-table rows (`Agents`, `Brain skills`, `Output styles`, `Hooks`) and
   totals in words before "developer-os"; it caught a stale agent total in the agents page's description.
 - `tests/check.test.sh` commits in its copy with signing off, so a user-level `commit.gpgsign` with no

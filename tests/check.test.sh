@@ -242,6 +242,9 @@ run "a wrong count in a scope-table row on the site" fail "says 99 agents"
 edit site/agents.html 's/content="The developer-os subagents:/content="The nine developer-os subagents:/'
 run "a wrong total in words before developer-os" fail "says 9 agents"
 
+edit site/agents.html 's/content="The developer-os subagents:/content="The twenty-eight developer-os subagents:/'
+run "the tail of a compound number word is no total" pass
+
 edit site/index.html 's|<li><span>Agents, output styles</span><span>[0-9]*, |<li><span>Agents, output styles</span><span>99, |'
 run "a wrong count in a landing-page fact row" fail "says 99 agents"
 
