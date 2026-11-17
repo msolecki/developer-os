@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-16
+last-verified: 2026-11-17
 ---
 
 # Development guide
