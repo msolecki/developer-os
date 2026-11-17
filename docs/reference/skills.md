@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-12
+last-verified: 2026-11-17
 ---
 
 # Skills reference
@@ -301,10 +301,13 @@ lane is a detached `claude -p` in its own worktree and session, so it outlives t
 starts from the base commit recorded in `lanes.json`, which the launch checks. Each lane runs with a
 recorded `--session-id`, a `--max-turns` cap, `--max-budget-usd`, `--output-format json`, and
 `--disallowedTools` for edits to the manifest,
-`Makefile`, hook directories and `.claude/` unless it owns them, and always for `.git` and anything under
-it: a lane that rewrote its worktree's `.git` file could point git at a config of its own. `lanes.py`
+`Makefile`, hook directories and `.claude/` unless it owns them, and always for `.git`, anything under
+it and a `.git` in a subdirectory: a lane that rewrote its worktree's `.git` file, or planted a repository in a
+subdirectory, could point git at a config of its own. `lanes.py`
 refuses a `lanes.json` with an unknown key, a budget or turn cap that is not a finite number, a
-`fast_check` holding a bracket or a comma, or an `allow` entry that is not one tool rule; its prompt allows only the lane's
+`fast_check` holding a parenthesis, a comma or a control character, a `fast_check` or `allow` entry that runs git or
+opens any command (a bare `Bash`, a shell, a wrapper or an interpreter with no script after it), an `allow` entry that
+is not one tool rule, or a file rule with an absolute, `~` or `..` path; its prompt allows only the lane's
 paths and commits in the worktree, and its report starts with a final status and lists what is not
 started, what is not verified and If-X-then-Y contingencies. The status table reads
 the PIDs, the `EXIT=` line and the result in each log, what the lane spent (Cost), the time since the
@@ -409,7 +412,8 @@ code is re-read in the current tree and cited as repository path plus defining s
 a PR number, not a SHA. The note gets `expires:` (30 days after `created`) and, for the paths it
 cites, `refs: ["<project slug>:<path>"]` with `verified:` today. When a note already covers the topic,
 it shows a dated paragraph for that note and asks A (append), B (new inbox note) or C (nothing); it
-appends only on A, whoever started the capture.
+appends only on A, whoever started the capture. An expired inbox note is no candidate for an append:
+it is named as a possible duplicate and only B or C is offered for it.
 
 ### brain-review
 
@@ -420,7 +424,8 @@ a named active note by another active one (not itself, not one already supersede
 stays in its folder). When a project hub links a promoted, merged or rejected note as
 `(waiting for review)`, it shows the hub-line change as a diff and applies it only after a yes.
 Expired inbox notes are shown as one group that "archive the expired ones" names; the group belongs to the
-page shown, so its numbers can be answered like the others. Above 20 notes it
+page shown, so its numbers can be answered like the others (later pages do not repeat the group, and its numbers
+count only while the first page is the page shown last). Above 20 notes it
 shows pages of 20 grouped by proposed folder, each line with `recommend: promote | merge into <note> |
 reject` and a reason, and takes range answers (`1-12 promote, 13 reject`) for the page shown.
 

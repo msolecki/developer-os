@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-12
+last-verified: 2026-11-17
 ---
 
 # Hooks reference
@@ -197,7 +197,7 @@ quotes run by a shell (`bash -c 'echo x > f'`), a formatter that writes by defau
 cover them (both write files); only their prompts limit them to read-only git. In every agent the prompt is the
 first layer: an ask that is approved, by the user or by auto mode, still runs the command (#110).
 
-**Order:** the first hit asks. For Bash: the size bound of each view before its scan, the built-in categories, then the read-only-agent check, then the
+**Order:** the first hit asks. For Bash: the size bound of each view before its scan, the built-in categories, then the write to the project's guard rules file, then the read-only-agent check, then the
 project's command rules, then the commit reminder. For Edit, Write and MultiEdit: protected file, skipped
 test, worktree boundary, project path rule. A project rule therefore never replaces a built-in reason.
 

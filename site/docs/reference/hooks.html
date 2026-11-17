@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@09e4bcea41e7">
+<meta name="dos-source" content="docs/reference/hooks.md@a1c45aa471dc">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -209,7 +209,7 @@ Worktrees:
     <p><strong>Git state in the other agents:</strong> qa-expert and docs-writer also have Bash, but the guard does not
     cover them (both write files); only their prompts limit them to read-only git. In every agent the prompt is the
     first layer: an ask that is approved, by the user or by auto mode, still runs the command (#110).</p>
-<p><strong>Order:</strong> the first hit asks. For Bash: the size bound of each view before its scan, the built-in categories, then the read-only-agent check, then the
+<p><strong>Order:</strong> the first hit asks. For Bash: the size bound of each view before its scan, the built-in categories, then the write to the project's guard rules file, then the read-only-agent check, then the
 project's command rules, then the commit reminder. For Edit, Write and MultiEdit: protected file, skipped
 test, worktree boundary, project path rule. A project rule therefore never replaces a built-in reason.</p>
 <p><strong>Reasons:</strong> every reason is a fixed string in <code>guard.py</code>, and the reasons of the cloud, database, Docker,

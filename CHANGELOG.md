@@ -4,6 +4,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- brain-setup dates the new vault's example inbox note today, so brain-search no longer skips it as
+  expired and the setup smoke test finds it.
+
 ## [0.3.0] - 2026-11-17
 
 ### Added
