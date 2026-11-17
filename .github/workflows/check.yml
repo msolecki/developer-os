@@ -26,7 +26,7 @@ jobs:
       # A hit only skips the download: every tarball is checked against its pinned SHA-256 below on every run.
       # A key is never overwritten, so a corrupt entry is downloaded again on every run until this file changes.
       - id: tools-cache
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/dos-tools
           key: check-tools-${{ runner.os }}-${{ hashFiles('.github/workflows/check.yml') }}
