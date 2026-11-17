@@ -6,6 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- pr-cycle fetches the base and checks the PR is mergeable before its verdict; when the base moved during
+  the cycle it merges again and asks before pushing.
+- The Counts stage also reads scope-table rows (`Agents`, `Brain skills`, `Output styles`, `Hooks`) and
+  totals in words before "developer-os"; it caught a stale agent total in the agents page's description.
+- `tests/check.test.sh` commits in its copy with signing off, so a user-level `commit.gpgsign` with no
+  working signer no longer fails 59 of its tests.
 - CI runs `tests/check.test.sh` as one shard per CPU side by side and the YAML stage in one process; a run
   took 6.6 minutes, nearly all of it that test (D29).
 - CI keeps the pinned agnix, gitleaks and ripgrep tarballs in `actions/cache`, checks each
