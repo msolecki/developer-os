@@ -14,5 +14,25 @@ for spec in 0/2 3/2 1/0 a/b 1/2/3 /2 2/ 1-2 1/08 01/2; do
   if [ "$got" = fail ]; then echo "ok   CHECK_TEST_SHARD=$spec fails"; else echo "FAIL CHECK_TEST_SHARD=$spec: got $got" >&2; failed=1; fi
 done
 
+# The shards together own every case exactly once: a `run` inside a pipe or `$(...)` would stop advancing the case
+# counter in the parent shell, so a case would run twice or in no shard while every job still passed.
+list=$(mktemp) || exit 1
+trap 'rm -f "$list"' EXIT
+for n in 4; do
+  : > "$list"
+  total=""
+  for k in $(seq 1 "$n"); do
+    out=$(CHECK_TEST_LIST="$list" CHECK_TEST_SHARD="$k/$n" sh tests/check.test.sh 2>/dev/null)
+    total=$(printf '%s\n' "$out" | sed -n 's/^total //p')
+  done
+  got=$(sort -n "$list" | tr '\n' ' ')
+  want=$(seq 1 "${total:-0}" | tr '\n' ' ')
+  if [ -n "$total" ] && [ "$total" -gt 0 ] && [ "$got" = "$want" ]; then
+    echo "ok   $n shards own each of the $total cases once"
+  else
+    echo "FAIL $n shards: want cases $want, got $got" >&2; failed=1
+  fi
+done
+
 [ "$failed" -eq 0 ] && echo "check-shard: all passed"
 exit "$failed"

@@ -435,6 +435,20 @@ if [ -e tests/check.test.sh ] && [ -n "${CI:-}" ]; then
   [ "${cases:-0}" -ge 1 ] && [ "$n" -gt "$cases" ] && n=$cases
   logs=$(mktemp -d)
   pids=()
+  # A cancelled or timed-out job (SIGINT, then SIGTERM) still shows what every shard printed so far, and stops each
+  # shard with the checks it started (children first, so none is left running in its copy).
+  # Exit 130 or 143 as a shell does for SIGINT or SIGTERM; `${pids[@]+...}` keeps bash 3.2 under `set -u` from
+  # failing on an empty list when the signal lands before the first shard starts.
+  killtree() { local c; for c in $(pgrep -P "$1" 2>/dev/null); do killtree "$c"; done; kill "$1" 2>/dev/null || true; }
+  interrupted() {
+    echo "tests/check.test.sh: interrupted; shard output so far:" >&2
+    for f in "$logs"/*; do [ -f "$f" ] && cat "$f"; done
+    for p in ${pids[@]+"${pids[@]}"}; do killtree "$p"; done
+    rm -rf "$logs"
+    exit "$1"
+  }
+  trap 'interrupted 130' INT
+  trap 'interrupted 143' TERM
   for ((i = 1; i <= n; i++)); do
     CHECK_TEST_SHARD="$i/$n" sh tests/check.test.sh > "$logs/$i" 2>&1 &
     pids+=($!)
@@ -444,6 +458,7 @@ if [ -e tests/check.test.sh ] && [ -n "${CI:-}" ]; then
     wait "${pids[i - 1]}" || bad=1
     cat "$logs/$i"
   done
+  trap - INT TERM
   rm -rf "$logs"
   [ "$bad" -eq 0 ] || fail tests tests/check.test.sh "exited non-zero"
 fi

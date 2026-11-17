@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Keeps eval scores between releases: evals/results/ is git-ignored, eval-history/ is tracked.
 
-  python3 scripts/eval-summary.py [--out-dir DIR] evals/results/<run>/aggregate-result.json...
+  python3 scripts/eval-summary.py [--force] [--out-dir DIR] evals/results/<run>/aggregate-result.json...
       Merges the runs of one plugin version into DIR/<version>.json (default: eval-history/ at the
-      repository root): plugin version, agent model, judge model and, per case, the with-plugin score,
+      repository root; an existing file is replaced only with --force): plugin version, agent model,
+      judge model and, per case, the with-plugin score,
       the baseline score and their delta. Baseline and delta are null for a run without a baseline arm.
       When a case is in several runs, the run that started last wins. A case whose with-plugin runs all
       ended in an error is skipped and named on stderr: it has no score, only a 0.
@@ -58,7 +59,7 @@ def run_key(path, data):
     return version, agent, judge
 
 
-def summarize(paths, out_dir):
+def summarize(paths, out_dir, force=False):
     runs = []
     for path in paths:
         data = load(path)
@@ -95,6 +96,9 @@ def summarize(paths, out_dir):
                "runs": [r[0] for r in runs], "cases": {k: cases[k] for k in sorted(cases)}}
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, version + ".json")
+    # A release's kept scores are the baseline the next release is compared with: replacing them is a choice.
+    if os.path.exists(out) and not force:
+        raise Refuse("%s exists; pass --force to replace the kept scores of %s" % (out, version))
     with open(out, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
         f.write("\n")
@@ -140,13 +144,25 @@ def main(argv):
             raise Refuse("usage: eval-summary.py --diff OLD.json NEW.json")
         return diff(argv[1], argv[2])
     out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "eval-history")
-    if argv[:1] == ["--out-dir"]:
-        if len(argv) < 2:
-            raise Refuse("usage: eval-summary.py [--out-dir DIR] aggregate-result.json...")
-        out_dir, argv = argv[1], argv[2:]
-    if not argv or any(a.startswith("--") for a in argv):
-        raise Refuse("usage: eval-summary.py [--out-dir DIR] aggregate-result.json... | --diff OLD.json NEW.json")
-    return summarize(argv, out_dir)
+    usage = "usage: eval-summary.py [--force] [--out-dir DIR] aggregate-result.json... | --diff OLD.json NEW.json"
+    force, paths, k = False, [], 0
+    # The flags may stand anywhere among the result files.
+    while k < len(argv):
+        a = argv[k]
+        if a == "--force":
+            force = True
+        elif a == "--out-dir":
+            if k + 1 >= len(argv):
+                raise Refuse(usage)
+            out_dir, k = argv[k + 1], k + 1
+        elif a.startswith("--"):
+            raise Refuse(usage)
+        else:
+            paths.append(a)
+        k += 1
+    if not paths:
+        raise Refuse(usage)
+    return summarize(paths, out_dir, force)
 
 
 if __name__ == "__main__":

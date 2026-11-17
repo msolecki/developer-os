@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-17
+
 ### Added
 
 - Guard: asks before cloud deletes (`aws … delete-*`/`terminate-*`, `aws s3 rm --recursive`, `aws s3 rb`,
@@ -71,7 +73,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `scripts/eval-summary.py` keeps eval scores between releases in `eval-history/<version>.json`, and
   `--diff <old> <new>` exits 1 and names each case whose with-plugin score fell by more than 0.1 or that is
   missing from the new summary; it refuses to compare runs of different agent or judge models.
-- Evals: eighteen new cases, none run yet: the security-auditor, database-reviewer and infra-reviewer agents
+- Evals: eighteen new cases: the security-auditor, database-reviewer and infra-reviewer agents
   on a planted defect and on clean input; four `core.md` rules (`core-asks-before-install`,
   `core-evidence-before-fixed`, `core-no-skipped-test`, `core-status-block`); `brain-search-expired-inbox`,
   `brain-review-pages`, `brain-search-stale-ref`, `spec-reads-vault`, `spec-research-map`,
@@ -152,6 +154,48 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `docs/reference/hooks.md`: why hooks silently do not run in a sandbox that cannot write the plugin data
   directory, how to give them one, and how to check a headless run (#145).
 - Dependabot opens its pull requests against `development`.
+
+### Fixed
+
+- `tests/guard.test.sh` skips its CPU-time limits for many `-c` words and pairs inside `tests/check.test.sh`'s
+  copies, as it already did for 10000 quoted words; the shards share the CPUs, and `check` on `development`
+  failed after #141. The top-level run still measures them.
+- parallel-lanes: Status and Resume accept a lane worktree when the orchestrator works in a linked worktree (the
+  lane's `.git` points into the main checkout's `.git/worktrees`) or when git wrote a relative `gitdir:`; before,
+  every such lane was marked changed and Resume refused it.
+- parallel-lanes: `lanes.json` is refused when an `allow` rule or `fast_check` opens any command (bare `Bash`,
+  `Bash(*)`, `env`, `xargs`, `sudo`, `find`, `awk`, a shell, interpreter or package runner without a script, module
+  or package such as `sh -c`, `node -e`, `python3.12 -c` or `npx:*`), or a file rule names an absolute, `~` or `..`
+  path; the git check alone let `Bash(sh:*)` run `sh -c 'git …'`. `python3 -m pytest` and `node --test` stay
+  allowed, and the refusal says to put anything else in a script.
+- parallel-lanes: lanes are also denied `**/.git` and `**/.git/**`, so a lane cannot plant a repository in a
+  subdirectory whose config runs a command on its own `git status`.
+- parallel-lanes: launch refuses a `.worktrees/<lane>` that is a plain directory (the lane would commit on the
+  checkout's branch), builds every lane's arguments before the first start, refuses a control character in
+  `fast_check` or `allow`, and names the lanes started before one that cannot start.
+- parallel-lanes: a lane counts as running only while its PID's command line holds its session id, so a reused PID
+  of another `claude -p` does not; Status strips terminal control sequences from lane output and warns when
+  `hashes.txt` is missing.
+- Guard: a database drop or redis flush run through `docker exec`, `docker compose exec`, `podman exec`,
+  `kubectl exec --` or `ssh` asks, as does a flush piped into `redis-cli`; a `DROP` in another `&&` link of the line
+  no longer does.
+- Guard: a Bash command that writes, moves or removes the project's `.claude/developer-os-guard.json` (`rm`, `sed -i`,
+  a redirect into it, `mv`, `git checkout --`, also `rm .claude/*` or the name in another case) asks, as an Edit of
+  it does; reading or staging it passes.
+- Guard: the worktree boundary and project path rules compare paths without case, as macOS volumes do.
+- Guard: `pnpm exec npm publish`, `npx npm publish` and the like ask; `curl … | ash`, `csh`, `fish`, `mksh` or
+  `$SHELL` and a backquoted download handed to `bash -c` ask; `--help` of an asked command passes, and an `az` or
+  `gcloud` option value such as `-n delete-test` is no operand.
+- patterns: `def exec(`, `function eval(` and a method definition such as `exec(sql) {` no longer fire.
+- brain-capture offers no append to an expired inbox note, which brain-search no longer answers from.
+- brain-review shows the `Expired` group with the first page only; "archive the expired ones" still names it later.
+- testing-conventions references prove a test red by running it before the fix, or undoing the fix with one edit,
+  not by checking out the unfixed commit.
+- `scripts/eval-summary.py` refuses to replace an existing `eval-history/<version>.json` without `--force`, which
+  may stand anywhere among the arguments.
+- CI: `tests/check-shard.test.sh` checks that 4 shards own every case exactly once, and a cancelled or timed-out
+  job still prints each shard's output and stops the shards. `docs/development.md` says that Dependabot security updates still target
+  `main`.
 
 ## [0.2.9] - 2026-11-09
 

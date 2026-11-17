@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@d892564ffb4f">
+<meta name="dos-source" content="docs/development.md@433328cf939e">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -110,6 +110,9 @@
     <code>.gitleaksignore</code> or adds a <code>gitleaks&#58;allow</code> marker; the workflow file itself comes from the PR, so
     only a branch ruleset that requires review of <code>.github/</code> stops a PR that edits the step away.
     <code>.github/dependabot.yml</code> proposes weekly updates of the SHA-pinned actions, each release at least 7 days old, as pull requests to <code>development</code>.
+    GitHub reads that file from the default branch, so the target takes effect once a release brings it to <code>main</code>, and
+    <code>target-branch</code> covers version updates only: a Dependabot security update still opens its pull request against
+    <code>main</code>. Close it and carry the bump into <code>development</code> instead, since <code>main</code> moves only on a release (D20).
     Dependabot does not read the agnix, gitleaks, ripgrep and claude-code versions in the run steps: bump them by hand, and
     the claude-code one together with <code>claude_code</code> in <code>.agnix.toml</code> (the Tool versions stage).</p>
     <h2 id="the-site">The site</h2>
@@ -140,8 +143,11 @@ safe to show, and that the card is cut to its cap; <code>tests/guard.test.sh</co
 stage's message; it runs the whole check once per case (several minutes), so <code>scripts/check.sh</code> runs it
 only when <code>CI</code> is set (GitHub Actions sets it), split into one shard per CPU run side by side, each in its own copy
 (<code>CHECK_TEST_SHARD=K/N</code> runs every Nth case from the Kth on): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;
-it sets <code>CHECK_TEST_COPY</code>, so <code>tests/guard.test.sh</code> in its copies skips the CPU-time limit that the top-level run measures;
-<code>tests/check-shard.test.sh</code> passes malformed <code>CHECK_TEST_SHARD</code> specs to it and expects each to fail before any case runs;
+it sets <code>CHECK_TEST_COPY</code>, so <code>tests/guard.test.sh</code> in its copies skips the CPU-time limits that the top-level run measures;
+a cancelled or timed-out job still prints what each shard wrote so far;
+<code>tests/check-shard.test.sh</code> passes malformed <code>CHECK_TEST_SHARD</code> specs to it and expects each to fail before any case runs,
+and with <code>CHECK_TEST_LIST=&lt;file&gt;</code> (each shard lists the cases it owns instead of running them) expects 4 shards to own
+every case exactly once;
 <code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
 and expects one count per message; when <code>rg</code> is missing it prints SKIP locally and fails in CI,
@@ -204,7 +210,7 @@ and add a fixture for the case you changed.</p>
 <code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages
 the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request. After the release's eval
 run, keep its scores: <code>python3 scripts/eval-summary.py evals/results/&lt;run&gt;/aggregate-result.json</code> writes
-<code>eval-history/&lt;version&gt;.json</code> (tracked), and <code>--diff &lt;old&gt; &lt;new&gt;</code> on two of those files exits 1 when a
+<code>eval-history/&lt;version&gt;.json</code> (tracked; an existing one is replaced only with <code>--force</code>), and <code>--diff &lt;old&gt; &lt;new&gt;</code> on two of those files exits 1 when a
 case's with-plugin score fell by more than 0.1 or the case is missing from the new summary. In
 <code>site/docs/changelog.html</code>, add the version's <code>&lt;h2&gt;</code> under <code>[Unreleased]</code> and rename that section's
 <code>unreleased-*</code> heading ids to <code>&lt;version&gt;-*</code> (e.g. <code>025-added</code>); the Site stage compares the words, not

@@ -417,6 +417,106 @@ out=$(PATH="$T/oldgit:$PATH" python3 -I "$lanes" conflicts "$R")
 expect "old git exits 0" 0 $?
 has "old git skips the preview" "preview skipped" "$out"
 
+has "status warns when hashes.txt is missing" "no hashes.txt in" "$(l status "$R")"
+# A PID whose command line holds `claude -p` but another session id is not this lane.
+python3 -c 'import time; time.sleep(30)' claude -p &
+other=$!
+echo "b $other 00000000-0000-4000-8000-000000000000" >> "$R/pids.txt"
+has "a claude -p process of another session is not this lane" "| finished" "$(l status "$R" | grep -E '^\| (⚠ )?b \|')"
+kill "$other" 2>/dev/null
+wait "$other" 2>/dev/null
+
+# --- allow and fast_check rules that would let a lane run any command, git included, or write outside its worktree
+n=0
+for rule in 'Bash' 'Bash(*)' 'Bash(sh:*)' 'Bash(env:*)' 'Bash(sh -c:*)' 'Bash(xargs:*)' 'Bash(python3 -c:*)' \
+  'Write(//etc/**)' 'Edit(../main/**)' 'Write(~/.zshrc)' 'Bash(python3.12 -c x:*)' 'Bash(python3.12:*)' \
+  'Bash(nodejs -e x:*)' 'Bash(pwsh -c x:*)' 'Bash(tclsh:*)' 'Bash(nix-shell:*)' 'Bash(find:*)' 'Bash(npx:*)' \
+  'Bash(pnpm exec:*)' 'Bash(pnpm dlx:*)' 'Bash(npm:*)' 'Bash(awk:*)' 'Bash(python3 -m:*)'; do
+  n=$((n + 1))
+  mkrepo "wide$n"
+  sed "s#\"allow\": \[\"Bash(node checks/a.mjs:\*)\"\]#\"allow\": [\"$rule\"]#" "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+  err=$(l launch "$R" 2>&1)
+  expect "allow $rule is refused" 1 $?
+  has "the refusal names the allow entry $rule" "a: allow entry $rule" "$err"
+  [ ! -e "$R/pids.txt" ] || bad "pids.txt written with allow $rule"
+done
+for check in 'env pnpm lint' 'sh -c pnpm' 'node -e x' 'bash'; do
+  n=$((n + 1))
+  mkrepo "wide$n"
+  sed "s/\"fast_check\": \"sh check.sh\", \"allow\"/\"fast_check\": \"$check\", \"allow\"/" "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+  err=$(l launch "$R" 2>&1)
+  expect "fast_check '$check' is refused" 1 $?
+  has "the refusal names fast_check '$check'" "a: fast_check starts with a shell" "$err"
+  has "the refusal names the way out for '$check'" "put the command in a script" "$err"
+done
+# Common test commands name a module, a test runner or a package, not a program text: they stay allowed.
+rules() { python3 -I -c 'import importlib.util, sys
+s = importlib.util.spec_from_file_location("lanes", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print("refused" if m.opens_any_command(sys.argv[2]) else "allowed")' "$lanes" "$1"; }
+for c in 'python3 -m pytest' 'python -m pytest -q' 'node --test' 'npx eslint .' 'pnpm lint' 'pnpm exec jest' \
+  'npm test' 'bun run test' 'sh check.sh' 'node checks/a.mjs' 'uv run pytest' 'make check'; do
+  expect "fast_check '$c' is allowed" allowed "$(rules "$c")"
+done
+mkrepo nul
+sed 's/"fast_check": "sh check.sh", "allow"/"fast_check": "sh check.sh\\u0000x", "allow"/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+err=$(l launch "$R" 2>&1)
+expect "a NUL byte in fast_check is refused" 1 $?
+has "the refusal names the control character" "control characters" "$err"
+[ ! -e "$R/pids.txt" ] && ok "nothing starts with a NUL byte" || bad "pids.txt written with a NUL byte"
+
+# --- a nested repository is denied too
+has "the lane may not write a nested .git directory" "Write(**/.git/**)" "$(tr '\n' ' ' < "$STUB/args-a")"
+
+# --- a plain directory where the lane's worktree should be is refused: the lane would commit on the user's branch
+mkrepo plain
+git -C "$repo" worktree remove --force "$repo/.worktrees/a"
+mkdir -p "$repo/.worktrees/a"
+err=$(l launch "$R" 2>&1)
+expect "a plain directory as a worktree is refused" 1 $?
+has "the refusal names the missing worktree" "a: $repo/.worktrees/a is not a git worktree" "$err"
+[ ! -e "$R/pids.txt" ] && ok "nothing starts in a plain directory" || bad "pids.txt written for a plain directory"
+
+# --- a worktree whose .git file points relatively (worktree.useRelativePaths) is the lane's own
+mkrepo relgit
+printf 'gitdir: ../../.git/worktrees/a\n' > "$repo/.worktrees/a/.git"
+l launch "$R" > /dev/null 2>&1
+expect "launch accepts a relative gitdir" 0 $?
+settle
+hasnt "status accepts a relative gitdir" "worktree .git file changed" "$(l status "$R")"
+
+# --- the orchestrator in a linked worktree: lane worktrees point into the main checkout's .git/worktrees
+mkrepo orchmain
+orch="$T/orch"
+git -C "$repo" worktree add -q "$orch" -b orch "$base"
+R="$orch/docs/plans/lanes/run"
+mkdir -p "$R"
+for lane in a b; do
+  git -C "$orch" worktree add -q "$orch/.worktrees/$lane" -b "lanes/o$lane" "$base"
+  printf 'Lane %s.\n' "$lane" > "$R/prompt-$lane.md"
+done
+printf '# Lanes\n' > "$R/LANES.md"
+sed "s#\"root\": \"$repo\"#\"root\": \"$orch\"#" "$repo/docs/plans/lanes/run/lanes.json" > "$R/lanes.json"
+l launch "$R" > /dev/null 2>&1
+expect "launch works from a linked worktree" 0 $?
+settle
+out=$(l status "$R")
+hasnt "status from a linked worktree flags no lane" "worktree .git file changed" "$out"
+has "lanes launched from a linked worktree are resumable" "Resumable: a, b" "$out"
+l resume "$R" a > /dev/null 2>&1
+expect "resume works from a linked worktree" 0 $?
+settle
+
+# --- lane output is data: a terminal escape in the result text does not reach the terminal
+mkrepo escape
+printf '{"type":"result","subtype":"success","session_id":"x","result":"red \\u001b[31mtext\\u001b[0m end","total_cost_usd":0.1}\n' > "$STUB/result-a"
+l launch "$R" > /dev/null 2>&1
+settle
+rm -f "$STUB/result-a"
+out=$(l status "$R")
+esc=$(printf '\033')
+case $out in *"$esc"*) bad "an escape sequence from a lane reached the status output" ;; *) ok "status strips escape sequences from lane output" ;; esac
+has "the text around the escape is kept" 'red text end' "$out"
+
 l bogus "$R" > /dev/null 2>&1
 expect "an unknown subcommand exits 2" 2 $?
 

@@ -33,10 +33,12 @@ SH = ("sh", "bash", "zsh")
 YAML = ("yml", "yaml")
 
 # (name shown, extensions, pattern, what it does, safer form). The order is the order of the lines.
+# A call, not a definition: `def exec(`, `function eval(` and a JS method `exec(sql) {` name the function.
+CALL = r"(?<![\w.])(?<!def )(?<!function )%s\((?![^()\n]*\)\s*(?::[^{\n=]*)?\{)"
 RULES = (
-    ("eval(", PY + JS, r"(?<![\w.])eval\(", "runs a string as code",
+    ("eval(", PY + JS, CALL % "eval", "runs a string as code",
      "parse the data (json.loads, ast.literal_eval, JSON.parse) or call a named function"),
-    ("exec(", PY + JS, r"(?<![\w.])exec\(", "runs a string as code or as a shell line",
+    ("exec(", PY + JS, CALL % "exec", "runs a string as code or as a shell line",
      "call the function directly, or run the program with an argument list (subprocess.run([...]), execFile)"),
     ("pickle.load", PY, r"\bpickle\.loads?\(", "runs code stored in the data it reads",
      "use json for data from outside the process"),
