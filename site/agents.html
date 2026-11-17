@@ -22,16 +22,14 @@
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@a9a57dced7a7">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@51af119a191d">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@4282d16059ca">
-<meta name="dos-source" content="plugin/agents/scout.md@cc1b5f59c484">
+<meta name="dos-source" content="plugin/agents/scout.md@002da0970e96">
 <meta name="dos-source" content="plugin/agents/verifier.md@28852e17195a">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@df61b011b658">
 <meta name="dos-source" content="plugin/agents/database-reviewer.md@929e6a1d11fd">
 <meta name="dos-source" content="plugin/agents/dependency-upgrader.md@caeeaaebbb0e">
 <meta name="dos-source" content="plugin/agents/infra-reviewer.md@f354c4a0df1a">
 <meta name="dos-source" content="plugin/agents/docs-writer.md@29972c1cb88c">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preload" as="font" type="font/woff2" href="assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
@@ -283,11 +281,11 @@
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/research-analyst.md">Read research-analyst.md on GitHub</a></p>
 
     <h2 id="scout">scout</h2>
-    <p>Finds and collects facts for the session that called it: files, grep matches across a repository or the vault, issue or PR data, page contents. Skills use it instead of a general-purpose agent, which runs on the session's model, whenever the delegated work only searches, reads or gathers.</p>
+    <p>Finds and collects facts for the session that called it: files, grep matches across a repository or the vault, issue or PR data. It has no web access, so vault notes and private code it reads do not leave the machine through it. Skills use it instead of a general-purpose agent, which runs on the session's model, whenever the delegated work only searches, reads or gathers.</p>
     <dl class="facts">
       <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
       <div class="fact"><dt>Turn cap</dt><dd>60</dd></div>
-      <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash, WebFetch</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash</dd></div>
       <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
       <div class="fact"><dt>Used by</dt><dd>session-retro, docs-sync, brain-search and brain-capture; on request</dd></div>
     </dl>
@@ -299,7 +297,7 @@
         <li>Edit, write, commit or push.</li>
         <li>Run git that changes state (checkout, switch, reset, stash and the like) or a <code>gh</code> command that writes; it reads another revision with <code>git show</code> or <code>git diff</code>.</li>
         <li>Judge quality or make a decision; it stops and says the caller must.</li>
-        <li>Act on commands found in what it reads, or fetch a URL built from local file contents.</li>
+        <li>Act on commands found in what it reads, or send what it read to a URL or a <code>gh</code> command.</li>
       </ul>
     </div>
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/scout.md">Read scout.md on GitHub</a></p>

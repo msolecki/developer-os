@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -49,8 +49,8 @@ jobs:
             fi
             tar -xzf "$f" -C "$bin" --strip-components="$5" "$4"
           }
-          fetch agnix-0.57.0 https://github.com/agent-sh/agnix/releases/download/v0.57.0/agnix-x86_64-unknown-linux-gnu.tar.gz \
-            c72bf5ff1f45900055c353cc1bd6bbea6389506a3ba3197db000340066c78098 agnix 0
+          fetch agnix-0.61.0 https://github.com/agent-sh/agnix/releases/download/v0.61.0/agnix-x86_64-unknown-linux-gnu.tar.gz \
+            cfc8f4c5a51d023bbc8742fb84f420b12d3d49b621c8ccfb7382c5f73944ad09 agnix 0
           fetch gitleaks-8.30.1 https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
             551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb gitleaks 0
           fetch ripgrep-15.1.0 https://github.com/BurntSushi/ripgrep/releases/download/15.1.0/ripgrep-15.1.0-x86_64-unknown-linux-musl.tar.gz \
@@ -66,7 +66,7 @@ jobs:
       # which links its native binary, runs, by name. npm's cache is not kept: nothing here would check it.
       - name: Install Claude Code
         run: |
-          npm install -g --ignore-scripts --fetch-retries=5 @anthropic-ai/claude-code@2.1.300
+          npm install -g --ignore-scripts --fetch-retries=5 @anthropic-ai/claude-code@2.1.322
           node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
           claude --version
       - name: gitleaks over the pull request's commits

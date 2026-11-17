@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-08
+last-verified: 2026-11-12
 ---
 
 # Your first 30 minutes
@@ -74,7 +74,9 @@ In a terminal, copy the project template into your repository:
 cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/
 ```
 
-`-n` keeps any file that already exists. Then ask Claude Code to run `project-init` in that
+`-n` keeps any file that already exists. Without the copy, project-init and docs-sync propose the
+missing files one by one, and `setup-check` reports what the machine itself lacks (`python3`, `rg`, `jq`,
+`gh`, the vault path). Then ask Claude Code to run `project-init` in that
 repository. It detects the stack, runs project-baseline, docs-sync and instruction-review, audits
 the code against the conventions that apply, and gives one numbered report. It writes nothing until
 you approve items from that one report.

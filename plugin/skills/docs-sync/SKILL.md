@@ -7,7 +7,7 @@ compatibility: "Claude Code"
 
 # Docs sync
 
-Read-only until the user approves a numbered list of changes. Delegate the docs-versus-code comparison of a large repository to the `scout` agent, never to a general-purpose agent.
+Read-only until the user approves a numbered list of changes. In a large repository, delegate the step-3 probes (collecting the commands, paths, versions and names the docs cite, and whether each exists in the code) to the `developer-os:scout` agent, never to a general-purpose agent; the drift verdict stays with this skill.
 
 ## The standard
 

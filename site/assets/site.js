@@ -1,4 +1,4 @@
-// developer-os site: sidebar navigation, on-page contents, heading anchors, copy buttons.
+// developer-os site: sidebar navigation, on-page contents, heading anchors, copy buttons, full-size diagrams, the skill filter.
 // Every page sets <html data-root="../"> (the path back to site/); links below are relative to site/.
 (function () {
   var NAV = [
@@ -144,6 +144,95 @@
     });
   });
 
+  // Wide diagrams (.table-wrap.wide-fig): an "Open full size" button under each opens the diagram in a
+  // full-viewport dialog, and the on-page contents step aside while a diagram passes them.
+  var figs = document.querySelectorAll('.table-wrap.wide-fig');
+  if (figs.length) {
+    var dlg = null, figHome = null, figOpener = null;
+    var figTitle = function (wrap) {
+      for (var e = wrap.previousElementSibling; e; e = e.previousElementSibling) {
+        if (/^H[1-4]$/.test(e.tagName)) {
+          var copy = e.cloneNode(true);
+          copy.querySelectorAll('.anchor').forEach(function (a) { a.remove(); });
+          return copy.textContent;
+        }
+      }
+      return 'Diagram';
+    };
+    var openFig = function (wrap, btn) {
+      var svg = wrap.querySelector('svg');
+      if (!svg) return;
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.className = 'fig-dialog';
+        dlg.innerHTML = '<div class="fig-bar"><span></span><button type="button" class="wf-btn">Close</button></div><div class="fig-body" tabindex="0"></div>';
+        document.body.appendChild(dlg);
+        dlg.querySelector('button').addEventListener('click', function () { dlg.close(); });
+        // Escape closes a modal dialog by itself; either way the diagram goes back and focus returns to its button.
+        dlg.addEventListener('close', function () {
+          var moved = dlg.querySelector('.fig-body svg');
+          if (moved && figHome) figHome.appendChild(moved);
+          if (figHome) figHome.style.minHeight = '';
+          document.documentElement.classList.remove('fig-lock');
+          if (figOpener) figOpener.focus();
+        });
+      }
+      figHome = wrap; figOpener = btn;
+      var title = figTitle(wrap);
+      dlg.setAttribute('aria-label', title + ', full size');
+      dlg.querySelector('.fig-bar span').textContent = title;
+      wrap.style.minHeight = wrap.offsetHeight + 'px';
+      dlg.querySelector('.fig-body').appendChild(svg);
+      document.documentElement.classList.add('fig-lock');
+      dlg.showModal();
+    };
+    if (window.HTMLDialogElement) {
+      figs.forEach(function (wrap) {
+        var p = document.createElement('p');
+        p.className = 'fig-tools';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'wf-btn';
+        btn.textContent = 'Open full size';
+        btn.addEventListener('click', function () { openFig(wrap, btn); });
+        p.appendChild(btn);
+        wrap.insertAdjacentElement('afterend', p);
+      });
+    }
+    if (toc && toc.isConnected) {
+      var asked = false;
+      var clearToc = function () {
+        asked = false;
+        var t = toc.getBoundingClientRect(), hit = false;
+        if (t.width) {
+          figs.forEach(function (f) {
+            var r = f.getBoundingClientRect();
+            if (r.right > t.left - 8 && r.bottom > t.top - 8 && r.top < t.bottom + 8) hit = true;
+          });
+        }
+        toc.classList.toggle('is-covered', hit);
+      };
+      var askClear = function () { if (!asked) { asked = true; requestAnimationFrame(clearToc); } };
+      window.addEventListener('scroll', askClear, { passive: true });
+      window.addEventListener('resize', askClear);
+      clearToc();
+    }
+  }
+
+  // 404.html sets <base>, so a "#id" link there would lead to the base URL: move within the page instead.
+  if (document.querySelector('base')) {
+    document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        var target = document.getElementById(a.getAttribute('href').slice(1));
+        if (!target) return;
+        e.preventDefault();
+        if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+        target.focus();
+        target.scrollIntoView();
+      });
+    });
+  }
+
   var filter = document.getElementById('skill-filter');
   if (filter) {
     filter.addEventListener('input', function () {
@@ -155,5 +244,11 @@
         g.hidden = !g.querySelector('.lib li:not([hidden])');
       });
     });
+    // skills/index.html?q=review arrives filtered: the form on 404.html sends its query this way.
+    var asked0 = window.URLSearchParams ? new URLSearchParams(location.search).get('q') : '';
+    if (asked0) {
+      filter.value = asked0;
+      filter.dispatchEvent(new Event('input'));
+    }
   }
 })();

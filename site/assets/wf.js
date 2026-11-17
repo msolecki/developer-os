@@ -1,5 +1,6 @@
-/* developer-os site: the animated workflow diagrams on the landing page and workflow.html.
-   Each block starts only when its element is on the page; with reduced motion everything renders at rest. */
+/* developer-os site: the terminal session on the landing page, and the daily loop, the life of a note and the
+   hook timeline on workflow.html. Each block starts only when all of its elements are on the page, so each
+   diagram lives on one page; with reduced motion everything renders at rest. */
 (function () {
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var NS = 'http://www.w3.org/2000/svg';
@@ -68,9 +69,8 @@
 
   /* The life of a note: review decisions move a note card between folders. */
   (function life() {
-    var note = $('wf-note');
-    if (!note) return;
-    var noteSt = $('wf-note-st'), cap = $('wf-cap'), old = $('wf-old'), oldSt = $('wf-old-st'), oldSb = $('wf-old-sb');
+    var note = $('wf-note'), noteSt = $('wf-note-st'), cap = $('wf-cap'), old = $('wf-old'), oldSt = $('wf-old-st'), oldSb = $('wf-old-sb');
+    if (!note || !noteSt || !cap || !old || !oldSt || !oldSb) return;
     var ACTS = {
       capture: { col: 0, s: 'inbox', c: '--ask', old: 'active',
         txt: 'The agent writes the decision to _inbox/ with status: inbox. It is a draft: brain-search shows it with a warning that nobody has reviewed it yet.' },
@@ -100,12 +100,14 @@
   /* Hooks in one session: a timeline lights each hook as the session passes it. */
   (function hooks() {
     var track = $('wf-track'), fill = $('wf-fill'), cards = $('wf-hooks');
-    if (!track) return;
+    if (!track || !fill || !cards) return;
     var HOOKS = [
       { at: 4, lbl: 'start', ev: 'SessionStart', c: '--pine', s: '--pine-soft', name: 'core.md · notices.py',
         p: 'The core rules on every start. On a fresh start, at most a few one-line notices: a new version, inbox notes older than 7 days, no garden run for 30 days.' },
       { at: 30, lbl: 'git push --force?', ev: 'PreToolUse', c: '--ask', s: '--ask-soft', name: 'guard.py',
-        p: 'Before Bash, Edit, Write and MultiEdit: asks before destructive commands, dependency installs and writes to protected files. On git commit it reminds the agent of the fast check.' },
+        p: 'Before Bash, Edit, Write and MultiEdit: asks before destructive commands, cloud deletes, database drops, publish and merge commands, dependency installs and writes to protected files. On git commit it reminds the agent of the fast check.' },
+      { at: 43, lbl: 'edit adds eval(', ev: 'PostToolUse', c: '--pine', s: '--pine-soft', name: 'patterns.py',
+        p: 'After Edit, Write and MultiEdit: when the edit adds a known risky construct, one note with the safer form. It never blocks.' },
       { at: 55, lbl: 'same failure, third time', ev: 'PostToolUseFailure', c: '--ask', s: '--ask-soft', name: 'repeat-failure.py',
         p: 'The same failed call a third time in one run: one reminder to change the approach instead of retrying.' },
       { at: 72, lbl: 'compaction', ev: 'SessionStart', c: '--pine', s: '--pine-soft', name: 'state-card.py',
@@ -193,7 +195,7 @@
   ];
   (function term() {
     var out = $('wf-term'), chips = $('wf-term-steps'), btn = $('wf-term-play');
-    if (!out) return;
+    if (!out || !chips) return;
     var chipEls = [], ops = [], idx = 0, k = 0, cur = null, timer = null, paused = false, started = false;
     function line(kind, text) {
       // Follow the newest line only while the reader is already at the bottom.

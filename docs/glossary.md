@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-09
+last-verified: 2026-11-12
 ---
 
 # Glossary
@@ -9,7 +9,7 @@ last-verified: 2026-11-09
 | Term | Meaning |
 |---|---|
 | Action skill | Any skill that is not read-only. It must end with `## Stop point` and `## Never`, even when, like bug-triage, deploy-checklist and client-reply, it writes nothing itself. |
-| Read-only skill | A skill exempt from the `## Stop point`/`## Never` check (`read_only` in `scripts/check.sh`): brain-search, code-review, plan-status, skill-usage and the `*-conventions` skills. It changes nothing and proposes no action. |
+| Read-only skill | A skill exempt from the `## Stop point`/`## Never` check (`read_only` in `scripts/check.sh`): brain-search, code-review, plan-status, setup-check, skill-usage and the `*-conventions` skills. It changes nothing and proposes no action. |
 | Conventions skill | A `*-conventions` skill with stack- or file-specific rules, loaded only when its description matches the work. |
 | Core rules | `plugin/rules/core.md`, printed into every session by the `SessionStart` hook. |
 | Brain, vault | The user's Obsidian vault of Markdown notes, the agent's long-term memory. |

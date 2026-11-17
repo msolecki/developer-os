@@ -9,6 +9,7 @@ agent research-analyst
 agent scout
 agent security-auditor
 agent verifier
+hook PostToolUse
 hook PostToolUseFailure
 hook PreToolUse
 hook SessionStart
@@ -16,6 +17,7 @@ hook Stop
 hook-script capture-nudge.py
 hook-script guard.py
 hook-script notices.py
+hook-script patterns.py
 hook-script repeat-failure.py
 hook-script state-card.py
 output-style architect
@@ -50,6 +52,7 @@ skill pr-cycle
 skill project-baseline
 skill project-init
 skill session-retro
+skill setup-check
 skill skill-usage
 skill spec
 skill testing-conventions

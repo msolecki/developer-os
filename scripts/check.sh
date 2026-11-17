@@ -23,11 +23,11 @@ done
 # Skill descriptions are 80-1024 characters, and the model-visible ones together at most 12000: they load into every
 # session's skill listing. A skill with disable-model-invocation: true is not in the listing, so it does not count.
 # Every skill has a non-empty ## Stop point and a ## Never section with at least one `- ` rule, except the read-only ones: *-conventions,
-# brain-search, code-review, plan-status and skill-usage (they write nothing inside the repository, send nothing and change no git state).
+# brain-search, code-review, plan-status, setup-check and skill-usage (they write nothing inside the repository, send nothing and change no git state).
 # No skill body holds a bare $<digit>: Claude Code substitutes it with the skill's argument.
 files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
   require "date"; require "yaml"
-  read_only = %w[brain-search code-review plan-status skill-usage]
+  read_only = %w[brain-search code-review plan-status setup-check skill-usage]
   total = 0
   $stdin.read.split("\0").each do |f|
     bad = ->(why) { abort "frontmatter: #{f}: #{why}" }
