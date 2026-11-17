@@ -7,7 +7,7 @@ compatibility: "Claude Code"
 
 # Docs sync
 
-Read-only until the user approves a numbered list of changes.
+Read-only until the user approves a numbered list of changes. Delegate the docs-versus-code comparison of a large repository to the `scout` agent, never to a general-purpose agent.
 
 ## The standard
 
