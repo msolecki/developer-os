@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-17
+
 ### Added
 
 - Guard: asks before cloud deletes (`aws … delete-*`/`terminate-*`, `aws s3 rm --recursive`, `aws s3 rb`,
@@ -71,7 +73,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `scripts/eval-summary.py` keeps eval scores between releases in `eval-history/<version>.json`, and
   `--diff <old> <new>` exits 1 and names each case whose with-plugin score fell by more than 0.1 or that is
   missing from the new summary; it refuses to compare runs of different agent or judge models.
-- Evals: eighteen new cases, none run yet: the security-auditor, database-reviewer and infra-reviewer agents
+- Evals: eighteen new cases: the security-auditor, database-reviewer and infra-reviewer agents
   on a planted defect and on clean input; four `core.md` rules (`core-asks-before-install`,
   `core-evidence-before-fixed`, `core-no-skipped-test`, `core-status-block`); `brain-search-expired-inbox`,
   `brain-review-pages`, `brain-search-stale-ref`, `spec-reads-vault`, `spec-research-map`,
@@ -152,6 +154,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `docs/reference/hooks.md`: why hooks silently do not run in a sandbox that cannot write the plugin data
   directory, how to give them one, and how to check a headless run (#145).
 - Dependabot opens its pull requests against `development`.
+
+### Fixed
+
+- `tests/guard.test.sh` skips its CPU-time limits for many `-c` words and pairs inside `tests/check.test.sh`'s
+  copies, as it already did for 10000 quoted words; the shards share the CPUs, and `check` on `development`
+  failed after #141. The top-level run still measures them.
 
 ## [0.2.9] - 2026-11-09
 

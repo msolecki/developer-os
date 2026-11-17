@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@8a2c8d97be78">
+<meta name="dos-source" content="CHANGELOG.md@398d84bd0996">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -47,7 +47,8 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
-    <h3 id="unreleased-added">Added</h3>
+    <h2 id="030---2026-11-17">[0.3.0] - 2026-11-17</h2>
+    <h3 id="030-added">Added</h3>
 <ul>
 <li>Guard: asks before cloud deletes (<code>aws … delete-*</code>/<code>terminate-*</code>, <code>aws s3 rm --recursive</code>, <code>aws s3 rb</code>,
 <code>gcloud … delete</code>, <code>az … delete</code>), database drops (<code>psql</code>/<code>mysql</code>/<code>sqlite3</code> with <code>DROP</code> or <code>TRUNCATE</code>,
@@ -114,7 +115,7 @@ vulnerability scan, and <code>enableAllProjectMcpServers</code> not <code>true</
 <li><code>scripts/eval-summary.py</code> keeps eval scores between releases in <code>eval-history/&lt;version&gt;.json</code>, and
 <code>--diff &lt;old&gt; &lt;new&gt;</code> exits 1 and names each case whose with-plugin score fell by more than 0.1 or that is
 missing from the new summary; it refuses to compare runs of different agent or judge models.</li>
-<li>Evals: eighteen new cases, none run yet: the security-auditor, database-reviewer and infra-reviewer agents
+<li>Evals: eighteen new cases: the security-auditor, database-reviewer and infra-reviewer agents
 on a planted defect and on clean input; four <code>core.md</code> rules (<code>core-asks-before-install</code>,
 <code>core-evidence-before-fixed</code>, <code>core-no-skipped-test</code>, <code>core-status-block</code>); <code>brain-search-expired-inbox</code>,
 <code>brain-review-pages</code>, <code>brain-search-stale-ref</code>, <code>spec-reads-vault</code>, <code>spec-research-map</code>,
@@ -127,7 +128,7 @@ brain-search and brain-capture delegate searching and collecting to it instead o
 agent, which runs on the session's model. It runs only read-only git and <code>gh</code>; the <code>scout-no-edit</code> eval
 checks that it hands an edit back to the caller.</li>
 </ul>
-    <h3 id="unreleased-changed">Changed</h3>
+    <h3 id="030-changed">Changed</h3>
     <ul>
 <li>Evals: the eighteen new cases were measured once per arm on 2026-11-12 (the scores are in <code>evals/README.md</code>); brain-review's paging sentence now names the lower-case <code>recommend:</code>, a reason on every line, one page only and the literal question, and two Python error-handling graders accept the function name in place of a line number.</li>
 <li>Core rules: an interrupted lane is resumed only through parallel-lanes' Resume mode; the rule no longer
@@ -195,6 +196,12 @@ exits 1 until the test exists; implement-backlog's triage reads that as red, not
 <li><code>docs/reference/hooks.md</code>: why hooks silently do not run in a sandbox that cannot write the plugin data
 directory, how to give them one, and how to check a headless run (#145).</li>
 <li>Dependabot opens its pull requests against <code>development</code>.</li>
+    </ul>
+    <h3 id="030-fixed">Fixed</h3>
+    <ul>
+<li><code>tests/guard.test.sh</code> skips its CPU-time limits for many <code>-c</code> words and pairs inside <code>tests/check.test.sh</code>'s
+copies, as it already did for 10000 quoted words; the shards share the CPUs, and <code>check</code> on <code>development</code>
+failed after #141. The top-level run still measures them.</li>
     </ul>
     <h2 id="029---2026-11-09">[0.2.9] - 2026-11-09</h2>
     <h3 id="029-added">Added</h3>

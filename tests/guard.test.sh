@@ -466,8 +466,10 @@ check pass "$(fa $r 'git fetch --filter blob:none git@host:a/b.git main')"
 check pass "$(fa $r 'git fetch -j 4 git@host:a/b.git main')"
 check ask "$(fa $r 'git fetch --depth 1 origin main:main')" "read-only"
 # SEC-06: many -c words stay linear. cpu INPUT: the guard's own CPU time stays under 1 s; CPU time, not the wall
-# clock, so a loaded machine does not fail it.
-cpu() { printf '%s' "$1" | python3 -c 'import resource, subprocess, sys
+# clock, so a loaded machine does not fail it. Inside tests/check.test.sh's copies (CHECK_TEST_COPY) the shards
+# share the CPUs and inflate even CPU time, so cpu skips there; the top-level run measures.
+cpu() { if [ -n "${CHECK_TEST_COPY:-}" ]; then echo "SKIP CPU time: inside tests/check.test.sh"; return 0; fi
+  printf '%s' "$1" | python3 -c 'import resource, subprocess, sys
 subprocess.run([sys.executable, sys.argv[1]], stdin=sys.stdin, stdout=subprocess.DEVNULL)
 r = resource.getrusage(resource.RUSAGE_CHILDREN); sys.exit(r.ru_utime + r.ru_stime > 1)' "$guard"; }
 c=$(python3 -c "print(' '.join(['-c']*2000))")
