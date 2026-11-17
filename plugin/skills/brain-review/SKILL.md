@@ -55,7 +55,7 @@ Example:
    "Use --mount=type=cache for pnpm store in Dockerfiles."
    → INFRA/ no duplicate
 Expired (brain-search no longer answers from these):
-3. _inbox/preview-proxy-idea.md — knowledge, expired 2026-09-14
+3. _inbox/preview-proxy-idea.md - knowledge, expired 2026-09-14
    "Route preview traffic through one shared proxy."
    → INFRA/ no duplicate
 Approve which ones? (e.g. "promote 1 and 2", "promote 1 to TOOLS/", "merge 1 into DEV/release-process.md", "reject 2", "supersede DEV/release-process.md by 1", "archive the expired ones")

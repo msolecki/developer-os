@@ -169,6 +169,7 @@ has "the lane runs under acceptEdits" "--permission-mode acceptEdits " "$args"
 has "the fast check is allowed" "Bash(sh check.sh:*) " "$args"
 has "the lane's extra tool is allowed" "Bash(node checks/a.mjs:*) " "$args"
 has "the manifest is denied" "Edit(package.json) Write(package.json) Edit(Makefile) " "$args"
+case "$args" in *"git diff"*) bad "the lane may run git diff, whose --output writes outside the worktree" ;; *) ok "the lane may not run git diff" ;; esac
 hasnt "a dropped deny path is not denied" "Edit(.claude/**)" "$args"
 hasnt "no permission bypass" "skip-permissions" "$args"
 argsb=$(tr '\n' ' ' < "$STUB/args-b")
@@ -311,6 +312,18 @@ sed 's/"fast_check": "sh check.sh", "allow"/"fast_check": "sh check.sh:*) Bash(c
 err=$(l launch "$R" 2>&1)
 expect "a fast_check that closes its own rule is refused" 1 $?
 has "the refusal names fast_check" "a: fast_check" "$err"
+
+mkrepo gitallow
+sed 's#"allow": \["Bash(node checks/a.mjs:\*)"\]#"allow": ["Bash(git diff:*)"]#' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+err=$(l launch "$R" 2>&1)
+expect "an allow entry that runs git is refused" 1 $?
+has "the refusal names the git allow entry" "a: allow names a git command" "$err"
+mkrepo gitcheck
+sed 's/"fast_check": "sh check.sh", "allow"/"fast_check": "sh check.sh \&\& git diff --output=x", "allow"/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+err=$(l launch "$R" 2>&1)
+expect "a fast_check that runs git is refused" 1 $?
+has "the refusal names the git fast_check" "a: fast_check runs git" "$err"
+[ ! -e "$R/pids.txt" ] && ok "nothing starts with git in a lane's commands" || bad "pids.txt written with git in a lane's commands"
 
 # --- status: the cost of a session whose latest result is a zero-cost crash, and a PID another process reused
 mkrepo zerocost

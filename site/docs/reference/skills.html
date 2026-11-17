@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@7d057aa7759b">
+<meta name="dos-source" content="docs/reference/skills.md@df6a840bc178">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -408,7 +408,9 @@ a test, lint rule or project instruction (it names or proposes that instead). Th
 search, redaction of secrets and client personal data, and a unique ASCII note name. Every claim about
 code is re-read in the current tree and cited as repository path plus defining symbol; merge state is
 a PR number, not a SHA. The note gets <code>expires:</code> (30 days after <code>created</code>) and, for the paths it
-cites, <code>refs: ["&lt;project slug&gt;:&lt;path&gt;"]</code> with <code>verified:</code> today.</p>
+cites, <code>refs: ["&lt;project slug&gt;:&lt;path&gt;"]</code> with <code>verified:</code> today. When a note already covers the topic,
+it shows a dated paragraph for that note and asks A (append), B (new inbox note) or C (nothing); it
+appends only on A, whoever started the capture.</p>
     <h3 id="brain-review">brain-review</h3>
     <p><a href="../../skills/brain-review.html">Source</a>. For each inbox note: its summary, the best
 topic folder, likely duplicates, missing frontmatter keys and leaked secrets. Before a move it

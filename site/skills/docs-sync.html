@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/docs-sync/SKILL.md@01b04d0245e9">
+<meta name="dos-source" content="plugin/skills/docs-sync/SKILL.md@d067774fa31e">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -53,7 +53,7 @@
       <div class="fact"><dt>Writes</dt><dd>Approved doc edits</dd></div>
       <div class="fact"><dt>Asks before</dt><dd>Any write: a numbered list, answered A, B or C</dd></div>
     </dl>
-    <p>In a large repository it delegates the docs-versus-code comparison to the <a href="../agents.html#scout">scout</a> agent, never to a general-purpose agent.</p>
+    <p>In a large repository it delegates the drift probes (collecting the commands, paths, versions and names the docs cite, and whether each exists in the code) to the <a href="../agents.html#scout"><code>developer-os:scout</code></a> agent, never to a general-purpose agent; the drift verdict stays with the skill.</p>
 
     <h2 id="when-it-runs">When it runs</h2>
     <p>When the docs may be stale, after a large change, or when setting up docs in a project:</p>

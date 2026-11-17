@@ -43,7 +43,7 @@ Every ask is appended to `${CLAUDE_PLUGIN_DATA}/guard/asks.jsonl` (log()): time,
 never the command or the path. The ask is printed first; a log that cannot be written changes nothing.
 
 Inside the read-only agents (code-reviewer, database-reviewer, dependency-upgrader, infra-reviewer,
-performance-engineer, security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
+performance-engineer, scout, security-auditor; `agent_type` is `developer-os:<name>`) a Bash call also asks when it writes: a
 file-changing binary (unless every path it writes is in a temp directory; `patch` always) or `sed -i` in command
 position, a git command in command position that changes state or writes an output file, `gh pr checkout`, a formatter or test run that rewrites files
 (`--write`, `--fix`, `--update-snapshots`, `-u` next to a test runner), or a redirect to anything but
@@ -87,7 +87,7 @@ REASONS = {
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
 COMMIT = "Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."
-READ_ONLY = {"code-reviewer", "database-reviewer", "dependency-upgrader", "infra-reviewer", "performance-engineer",
+READ_ONLY = {"code-reviewer", "database-reviewer", "dependency-upgrader", "infra-reviewer", "performance-engineer", "scout",
              "security-auditor"}
 GIT_WRITE = {"add", "am", "apply", "checkout", "cherry-pick", "clean", "clone", "commit", "gc", "init", "merge",
              "mv", "prune", "pull", "push", "rebase", "reset", "restore", "revert", "rm", "sparse-checkout",
@@ -346,9 +346,12 @@ def classes(words):
         values = CLI_VALUE.get(name, ())
         ops = [x for k, x in enumerate(rest) if not x.startswith("-") and (k == 0 or rest[k - 1] not in values)]
         flags = {x.split("=")[0] for x in rest if x.startswith("-")}
-        # `--dry-run=false` is no dry run.
-        dry = any(x.split("=")[0] in ("--dry-run", "--dryrun") and x.split("=")[-1].lower() not in ("false", "0", "no")
-                  for x in rest)
+        # `--dry-run=false` and `--dry-run false` (npm reads the next word as the value) are no dry run.
+        off = ("false", "0", "no")
+        dry = any(x.split("=")[0] in ("--dry-run", "--dryrun")
+                  and (x.split("=")[-1].lower() not in off if "=" in x
+                       else not (k + 1 < len(rest) and rest[k + 1].lower() in off))
+                  for k, x in enumerate(rest))
         if name in DRY_RUN and dry:
             continue
         for cmd, sub, reason, rule in CLASSES:

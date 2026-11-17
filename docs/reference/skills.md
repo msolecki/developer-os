@@ -407,7 +407,9 @@ a test, lint rule or project instruction (it names or proposes that instead). Th
 search, redaction of secrets and client personal data, and a unique ASCII note name. Every claim about
 code is re-read in the current tree and cited as repository path plus defining symbol; merge state is
 a PR number, not a SHA. The note gets `expires:` (30 days after `created`) and, for the paths it
-cites, `refs: ["<project slug>:<path>"]` with `verified:` today.
+cites, `refs: ["<project slug>:<path>"]` with `verified:` today. When a note already covers the topic,
+it shows a dated paragraph for that note and asks A (append), B (new inbox note) or C (nothing); it
+appends only on A, whoever started the capture.
 
 ### brain-review
 

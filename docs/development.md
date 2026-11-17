@@ -78,7 +78,7 @@ and, on a pull request, runs `gitleaks git` over the PR's commits, so a secret a
 removed inside one PR still fails. The same step fails a PR that changes `.gitleaks.toml` or
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
 only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
-`.github/dependabot.yml` proposes weekly updates of the SHA-pinned actions, each release at least 7 days old.
+`.github/dependabot.yml` proposes weekly updates of the SHA-pinned actions, each release at least 7 days old, as pull requests to `development`.
 Dependabot does not read the agnix, gitleaks, ripgrep and claude-code versions in the run steps: bump them by hand, and
 the claude-code one together with `claude_code` in `.agnix.toml` (the Tool versions stage).
 

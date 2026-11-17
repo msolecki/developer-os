@@ -75,7 +75,7 @@ Needs your decision: test runner - package.json has both jest and vitest
 2. [docs] drift - AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
 3. [instructions] AGENTS.md: replace line 22 "Use pnpm." with "Use pnpm (pnpm-lock.yaml)."
 4. [conventions] CONV-01 · P2 · Empty catch in src/webhooks/deliver.ts:40
-5. [conventions] create docs/reference/conventions.md — 6 observed rules (naming: src/cart/total.ts:3; tests: src/cart/total.test.ts:1; …)
+5. [conventions] create docs/reference/conventions.md - 6 observed rules (naming: src/cart/total.ts:3; tests: src/cart/total.test.ts:1; …)
 ...
 Apply which? A: all (recommended)  B: list numbers  C: none
 ```

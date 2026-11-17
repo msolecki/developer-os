@@ -47,7 +47,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Inbox notes expire 30 days after `created` (brain-capture writes `expires:`; a note without the key uses
   `created` + 30 days). brain-search skips expired inbox notes and reports only their count; brain-review
   shows them as one group that "archive the expired ones" names; brain-garden lists them. Active notes
-  never expire, and nothing is archived without the user's answer (D4).
+  never expire, and nothing is archived without the user's answer (D4). This applies to the notes already
+  in your inbox: after the update, every inbox note created more than 30 days ago stops being answered
+  from at once; review them with brain-review, which offers them as one Expired group.
 - brain-review pages an inbox above 20 notes: 20 per page grouped by proposed folder, each line with
   `recommend: promote | merge into <note> | reject` and a reason, and range answers such as
   `1-12 promote, 13 reject, 14-20 skip` that cover only the page shown.
@@ -136,6 +138,20 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   implement-backlog and parallel-lanes carries the shell and edit rules (one operation per call, no
   `$(…)` or heredoc scripts, no `git checkout --`, Read before Edit, a refused command is final).
 - pr-cycle's description names resolving a PR's conflicts as a trigger.
+- parallel-lanes: a lane no longer gets `git diff`, and `lanes.json` is refused when a `fast_check` or
+  `allow` entry runs git: `git diff --output=<file>` let a lane overwrite the main checkout's
+  `.git/config` or a shell rc file.
+- Guard: `--dry-run false` (also `0`, `no`) after npm, pnpm or yarn is no dry run and asks; scout is one of
+  the read-only agents, so a writing Bash call in it asks.
+- scout has no WebFetch (it reads the private vault), and the four skills that use it name it
+  `developer-os:scout`; docs-sync delegates only the drift probes to it and keeps the verdict.
+- brain-capture: when a note already covers the topic, it shows a dated paragraph for that note and
+  appends it only on the user's A answer, instead of writing a duplicate inbox note.
+- audit-to-backlog: a `Check` for a test the fix adds is guarded (`test -f … && grep -q … && <test>`), so it
+  exits 1 until the test exists; implement-backlog's triage reads that as red, not broken (#146).
+- `docs/reference/hooks.md`: why hooks silently do not run in a sandbox that cannot write the plugin data
+  directory, how to give them one, and how to check a headless run (#145).
+- Dependabot opens its pull requests against `development`.
 
 ## [0.2.9] - 2026-11-09
 

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@e4a8d16467f1">
+<meta name="dos-source" content="CHANGELOG.md@8a2c8d97be78">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -90,7 +90,9 @@ number is refused.</li>
 <li>Inbox notes expire 30 days after <code>created</code> (brain-capture writes <code>expires:</code>; a note without the key uses
 <code>created</code> + 30 days). brain-search skips expired inbox notes and reports only their count; brain-review
 shows them as one group that "archive the expired ones" names; brain-garden lists them. Active notes
-never expire, and nothing is archived without the user's answer (D4).</li>
+never expire, and nothing is archived without the user's answer (D4). This applies to the notes already
+in your inbox: after the update, every inbox note created more than 30 days ago stops being answered
+from at once; review them with brain-review, which offers them as one Expired group.</li>
 <li>brain-review pages an inbox above 20 notes: 20 per page grouped by proposed folder, each line with
 <code>recommend: promote | merge into &lt;note&gt; | reject</code> and a reason, and range answers such as
 <code>1-12 promote, 13 reject, 14-20 skip</code> that cover only the page shown.</li>
@@ -179,6 +181,20 @@ a numbered decisions file whose conflicts only add entries, checking every base 
 implement-backlog and parallel-lanes carries the shell and edit rules (one operation per call, no
 <code>$(…)</code> or heredoc scripts, no <code>git checkout --</code>, Read before Edit, a refused command is final).</li>
       <li>pr-cycle's description names resolving a PR's conflicts as a trigger.</li>
+<li>parallel-lanes: a lane no longer gets <code>git diff</code>, and <code>lanes.json</code> is refused when a <code>fast_check</code> or
+<code>allow</code> entry runs git: <code>git diff --output=&lt;file&gt;</code> let a lane overwrite the main checkout's
+<code>.git/config</code> or a shell rc file.</li>
+<li>Guard: <code>--dry-run false</code> (also <code>0</code>, <code>no</code>) after npm, pnpm or yarn is no dry run and asks; scout is one of
+the read-only agents, so a writing Bash call in it asks.</li>
+<li>scout has no WebFetch (it reads the private vault), and the four skills that use it name it
+<code>developer-os:scout</code>; docs-sync delegates only the drift probes to it and keeps the verdict.</li>
+<li>brain-capture: when a note already covers the topic, it shows a dated paragraph for that note and
+appends it only on the user's A answer, instead of writing a duplicate inbox note.</li>
+<li>audit-to-backlog: a <code>Check</code> for a test the fix adds is guarded (<code>test -f … &amp;&amp; grep -q … &amp;&amp; &lt;test&gt;</code>), so it
+exits 1 until the test exists; implement-backlog's triage reads that as red, not broken (#146).</li>
+<li><code>docs/reference/hooks.md</code>: why hooks silently do not run in a sandbox that cannot write the plugin data
+directory, how to give them one, and how to check a headless run (#145).</li>
+<li>Dependabot opens its pull requests against <code>development</code>.</li>
     </ul>
     <h2 id="029---2026-11-09">[0.2.9] - 2026-11-09</h2>
     <h3 id="029-added">Added</h3>

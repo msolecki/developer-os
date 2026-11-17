@@ -4,6 +4,8 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    # main moves only by a release fast-forward from development (D20), so bumps go to development.
+    target-branch: development
     schedule:
       interval: weekly
     # A release is at least a week old before it is proposed, so a compromised one has time to be pulled.

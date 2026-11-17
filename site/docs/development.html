@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@69f26b13cd25">
+<meta name="dos-source" content="docs/development.md@d892564ffb4f">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -109,7 +109,7 @@
     removed inside one PR still fails. The same step fails a PR that changes <code>.gitleaks.toml</code> or
     <code>.gitleaksignore</code> or adds a <code>gitleaks&#58;allow</code> marker; the workflow file itself comes from the PR, so
     only a branch ruleset that requires review of <code>.github/</code> stops a PR that edits the step away.
-    <code>.github/dependabot.yml</code> proposes weekly updates of the SHA-pinned actions, each release at least 7 days old.
+    <code>.github/dependabot.yml</code> proposes weekly updates of the SHA-pinned actions, each release at least 7 days old, as pull requests to <code>development</code>.
     Dependabot does not read the agnix, gitleaks, ripgrep and claude-code versions in the run steps: bump them by hand, and
     the claude-code one together with <code>claude_code</code> in <code>.agnix.toml</code> (the Tool versions stage).</p>
     <h2 id="the-site">The site</h2>

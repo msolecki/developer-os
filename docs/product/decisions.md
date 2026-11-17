@@ -69,6 +69,10 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   as one group. "archive the expired ones" names that shown group and nothing else; an expired note
   still moves only on the user's answer, and `active` notes never expire. The inbox had grown to 82
   notes with no review.
+- **Amended 2026-11-17:** when a note already covers a capture's topic, brain-capture shows a dated
+  paragraph for it and appends it only on the user's A answer, which names that note; otherwise it writes
+  the inbox note as before. It used to write the capture anyway and leave the duplicate for a manual
+  merge: 2 of 12 inbox notes in the 2026-11-08 triage were merges (BRAIN-01).
 
 ## D5. Find the vault through a `Brain vault:` line
 
@@ -205,6 +209,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   DELETE method, a download piped into an interpreter that reads its program from the pipe
   (`curl u | python3`; `python3 -m json.tool` reads data and passes), a bracket after the pipe
   (`curl u | (sh)`) and `. <(curl u)`. `--dry-run=false` no longer counts as a dry run (PR #141 review).
+- **Amended 2026-11-17:** `--dry-run false` (also `0`, `no`) is no dry run either: npm and pnpm read the
+  next word as the flag's value, so the space-separated form published. scout joins the read-only agents:
+  it has Bash and its prompt allows only read-only commands, so a write in it now asks like in the others.
 - **Amended 2026-11-12:** a seventh hook, `patterns.py` on `PostToolUse` for Edit, Write and MultiEdit,
   adds `additionalContext` (no decision, no block) when an edit adds one of a closed table of risky
   constructs; once per pattern and file in a session, fail open, `DEVELOPER_OS_PATTERNS=off`.
@@ -463,6 +470,10 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   risk the launch question names) and its words would otherwise reach `claude` as options. `lanes.json`
   is refused when a budget or turn cap is not a finite number, a `fast_check` holds a bracket or a
   comma, or an `allow` entry is not one tool rule: each would grant more than the approved file shows.
+- **Amended 2026-11-17:** a lane's tools no longer include `git diff`, and `lanes.json` is refused when
+  a `fast_check` or `allow` entry runs git: `git diff --output=<file>` let a lane overwrite the main
+  checkout's `.git/config` or a shell rc file, reproduced with git 2.56.0 (PR #141 review). A lane reads
+  its changes with Read and `git status`.
 
 ## D24. The vault is the one long-term store; auto memory is off by recommendation
 
@@ -628,3 +639,10 @@ here before reversing a rule.
 | 2026-11-17 | Core rules: drop the banned-phrase examples from the no-filler rule (its whole-reply scope stays) and the three-sentence cap from ASAP mode | `plugin/rules/core.md` | Prompt audit: phrase lists and numeric output caps over-apply on current models; both date from the 2026-09-22 seed defaults with no recorded failure behind the list or the number |
 | 2026-11-17 | session-retro findings: drop the per-heading cap of three; the five-lesson window cap stays | `session-retro` | Prompt audit: numeric output cap with no recorded evidence |
 | 2026-11-17 | pr-cycle fetches the base before its verdict and merges commits the base gained during the cycle once more (with a push question); then, pushed or not, it reads GitHub's mergeable state and gives no `APPROVE` on `CONFLICTING` | `pr-cycle` | In #144 another PR landed between the cycle's merge and its verdict; the PR was `CONFLICTING` again and only a manual `gh pr view` caught it |
+| 2026-11-17 | Judge a gate by its own exit status, never through `\| tail` or `\| grep` without `pipefail` (#143) | `plugin/rules/core.md` | Vault lesson `pipe-into-tail-hides-a-failing-gate` (2026-11-15 hygiene run) |
+| 2026-11-17 | database-reviewer flags a constraint migration that seeds or fixtures violate; code-review records the commit it reads and reads a trusted head from a detached worktree outside the repository when the checkout is elsewhere or shared; pr-cycle records a base squash of the branch's own commits with `-s ours` only when the trees are identical; parallel-lanes gives each lane a decision-number range and keeps both sides of an add-only decisions conflict (#143) | `database-reviewer`, `code-review`, `pr-cycle`, `parallel-lanes` | Vault lessons from the 2026-11-15 hygiene run: `constraint-migration-breaks-db-test-seeds`, `review-against-current-main-in-shared-checkout`, `merge-base-after-upstream-squash`, `assign-decision-number-ranges-per-lane` |
+| 2026-11-17 | Searching and collecting go to the read-only `developer-os:scout` agent on sonnet, never a general-purpose agent; implement-backlog launches `S` and `M` delegates on sonnet; every delegate brief carries the shell and edit rules (#144) | `session-retro`, `docs-sync`, `brain-search`, `brain-capture`, `implement-backlog`, `parallel-lanes` | A general-purpose agent runs on the session's model: 467 such calls in the week to 2026-11-08 (BACKLOG AGENT-01); delegates kept using shell forms that command hooks block |
+| 2026-11-17 | scout has no WebFetch, is named `developer-os:scout` in every skill, and gets only docs-sync's drift probes, not the verdict | `scout`, `session-retro`, `docs-sync`, `brain-search`, `brain-capture` | It reads the private vault, so injected text could send note content out; a bare name may not resolve; the verdict is a judgment scout refuses (PR #144 review) |
+| 2026-11-17 | brain-capture appends a dated paragraph to a note that already covers the topic, only on the user's A answer (D4 amended) | `brain-capture` | Captures wrote duplicates into the inbox for a manual merge (BRAIN-01) |
+| 2026-11-17 | A `Check` for a test the fix adds is guarded so it exits 1 until the test exists; triage reads that exit as red | `audit-to-backlog`, `implement-backlog` | A bare test id that does not exist yet exits 4 with "no tests ran", which triage classed as a broken `Check` (#146) |
+| 2026-11-17 | A lane gets no `git diff`, and `lanes.json` refuses a `fast_check` or `allow` entry that runs git (D23 amended) | `parallel-lanes` | `git diff --output=<file>` let a lane overwrite the main checkout's `.git/config` (PR #141 review) |

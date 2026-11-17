@@ -17,8 +17,11 @@ import sys
 import time
 
 USAGE = "usage: lanes.py launch|status|conflicts <run-dir> | resume <run-dir> <lane>"
+# No `git diff`: its `--output=<file>` writes anywhere, such as the main checkout's .git/config or a shell rc file.
 TOOLS = ["Read", "Edit", "Write", "Glob", "Grep",
-         "Bash(git status:*)", "Bash(git diff:*)", "Bash(git add:*)", "Bash(git commit:*)"]
+         "Bash(git status:*)", "Bash(git add:*)", "Bash(git commit:*)"]
+# The lane's own git commands are the ones above; any other, through fast_check or allow, could take an output path.
+GIT_RULE = re.compile(r"(^|[\s(;&|`])git(\s|:|\)|;|&|\||$)")
 # What the allowed fast check and `git commit` run; a lane must not rewrite it and then run it unprompted.
 DENY = ["Makefile", ".husky/**", ".githooks/**", ".claude/**"]
 # Never dropped: a lane that rewrites its worktree's .git file points git at a config of its own, and git runs
@@ -93,9 +96,13 @@ def validate(cfg):
         # Claude Code splits tool rules on commas and spaces: a bracket or comma would close this rule and open another.
         if not (isinstance(check, str) and check.strip() and not re.search(r"[\n(),]", check)):
             errors.append("%s: fast_check is not a one-line command without ( ) or ," % name)
+        elif GIT_RULE.search(check):
+            errors.append("%s: fast_check runs git; a lane gets only git status, add and commit" % name)
         allow = lane.get("allow", [])
         if not (strings(allow) and all(re.fullmatch(r"[A-Za-z_]+(\([^(),\n]+\))?", x) for x in allow)):
             errors.append("%s: allow is not a list of single tool rules such as Bash(node check.mjs:*)" % name)
+        elif any(GIT_RULE.search(x) for x in allow):
+            errors.append("%s: allow names a git command; a lane gets only git status, add and commit" % name)
         drop = lane.get("drop_deny", [])
         known = DENY + (cfg["manifests"] if strings(cfg.get("manifests")) else [])
         if not (strings(drop) and all(p in known for p in drop)):

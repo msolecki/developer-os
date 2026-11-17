@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@4116a60e5611">
+<meta name="dos-source" content="docs/product/decisions.md@a5fe09b4ed4b">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -84,6 +84,10 @@ days without the key); brain-search stops answering from it and brain-review sho
 as one group. "archive the expired ones" names that shown group and nothing else; an expired note
 still moves only on the user's answer, and <code>active</code> notes never expire. The inbox had grown to 82
 notes with no review.</li>
+<li><strong>Amended 2026-11-17:</strong> when a note already covers a capture's topic, brain-capture shows a dated
+paragraph for it and appends it only on the user's A answer, which names that note; otherwise it writes
+the inbox note as before. It used to write the capture anyway and leave the duplicate for a manual
+merge: 2 of 12 inbox notes in the 2026-11-08 triage were merges (BRAIN-01).</li>
 </ul>
 <h2 id="d5-find-the-vault-through-a-brain-vault-line">D5. Find the vault through a <code>Brain vault:</code> line</h2>
 <ul>
@@ -135,6 +139,9 @@ starts <code>batch-delete-</code>, <code>npm unpublish</code> and <code>deprecat
 DELETE method, a download piped into an interpreter that reads its program from the pipe
 (<code>curl u | python3</code>; <code>python3 -m json.tool</code> reads data and passes), a bracket after the pipe
 (<code>curl u | (sh)</code>) and <code>. &lt;(curl u)</code>. <code>--dry-run=false</code> no longer counts as a dry run (PR #141 review).</li>
+<li><strong>Amended 2026-11-17:</strong> <code>--dry-run false</code> (also <code>0</code>, <code>no</code>) is no dry run either: npm and pnpm read the
+next word as the flag's value, so the space-separated form published. scout joins the read-only agents:
+it has Bash and its prompt allows only read-only commands, so a write in it now asks like in the others.</li>
 <li><strong>Amended 2026-11-12:</strong> a seventh hook, <code>patterns.py</code> on <code>PostToolUse</code> for Edit, Write and MultiEdit,
 adds <code>additionalContext</code> (no decision, no block) when an edit adds one of a closed table of risky
 constructs; once per pattern and file in a session, fail open, <code>DEVELOPER_OS_PATTERNS=off</code>.</li>
@@ -287,6 +294,10 @@ since a lane can write that file through an allowed git output path (<code>git d
 risk the launch question names) and its words would otherwise reach <code>claude</code> as options. <code>lanes.json</code>
 is refused when a budget or turn cap is not a finite number, a <code>fast_check</code> holds a bracket or a
 comma, or an <code>allow</code> entry is not one tool rule: each would grant more than the approved file shows.</li>
+<li><strong>Amended 2026-11-17:</strong> a lane's tools no longer include <code>git diff</code>, and <code>lanes.json</code> is refused when
+a <code>fast_check</code> or <code>allow</code> entry runs git: <code>git diff --output=&lt;file&gt;</code> let a lane overwrite the main
+checkout's <code>.git/config</code> or a shell rc file, reproduced with git 2.56.0 (PR #141 review). A lane reads
+its changes with Read and <code>git status</code>.</li>
 
 </ul>
 <h2 id="d24-the-vault-is-the-one-long-term-store-auto-memory-is-off-by-recommendation">D24. The vault is the one long-term store; auto memory is off by recommendation</h2>
@@ -396,6 +407,13 @@ comma, or an <code>allow</code> entry is not one tool rule: each would grant mor
 <tr><td>2026-11-17</td><td>Core rules: drop the banned-phrase examples from the no-filler rule (its whole-reply scope stays) and the three-sentence cap from ASAP mode</td><td><code>plugin/rules/core.md</code></td><td>Prompt audit: phrase lists and numeric output caps over-apply on current models; both date from the 2026-09-22 seed defaults with no recorded failure behind the list or the number</td></tr>
 <tr><td>2026-11-17</td><td>session-retro findings: drop the per-heading cap of three; the five-lesson window cap stays</td><td><code>session-retro</code></td><td>Prompt audit: numeric output cap with no recorded evidence</td></tr>
 <tr><td>2026-11-17</td><td>pr-cycle fetches the base before its verdict and merges commits the base gained during the cycle once more (with a push question); then, pushed or not, it reads GitHub's mergeable state and gives no <code>APPROVE</code> on <code>CONFLICTING</code></td><td><code>pr-cycle</code></td><td>In #144 another PR landed between the cycle's merge and its verdict; the PR was <code>CONFLICTING</code> again and only a manual <code>gh pr view</code> caught it</td></tr>
+<tr><td>2026-11-17</td><td>Judge a gate by its own exit status, never through <code>| tail</code> or <code>| grep</code> without <code>pipefail</code> (#143)</td><td><code>plugin/rules/core.md</code></td><td>Vault lesson <code>pipe-into-tail-hides-a-failing-gate</code> (2026-11-15 hygiene run)</td></tr>
+<tr><td>2026-11-17</td><td>database-reviewer flags a constraint migration that seeds or fixtures violate; code-review records the commit it reads and reads a trusted head from a detached worktree outside the repository when the checkout is elsewhere or shared; pr-cycle records a base squash of the branch's own commits with <code>-s ours</code> only when the trees are identical; parallel-lanes gives each lane a decision-number range and keeps both sides of an add-only decisions conflict (#143)</td><td><code>database-reviewer</code>, <code>code-review</code>, <code>pr-cycle</code>, <code>parallel-lanes</code></td><td>Vault lessons from the 2026-11-15 hygiene run: <code>constraint-migration-breaks-db-test-seeds</code>, <code>review-against-current-main-in-shared-checkout</code>, <code>merge-base-after-upstream-squash</code>, <code>assign-decision-number-ranges-per-lane</code></td></tr>
+<tr><td>2026-11-17</td><td>Searching and collecting go to the read-only <code>developer-os:scout</code> agent on sonnet, never a general-purpose agent; implement-backlog launches <code>S</code> and <code>M</code> delegates on sonnet; every delegate brief carries the shell and edit rules (#144)</td><td><code>session-retro</code>, <code>docs-sync</code>, <code>brain-search</code>, <code>brain-capture</code>, <code>implement-backlog</code>, <code>parallel-lanes</code></td><td>A general-purpose agent runs on the session's model: 467 such calls in the week to 2026-11-08 (BACKLOG AGENT-01); delegates kept using shell forms that command hooks block</td></tr>
+<tr><td>2026-11-17</td><td>scout has no WebFetch, is named <code>developer-os:scout</code> in every skill, and gets only docs-sync's drift probes, not the verdict</td><td><code>scout</code>, <code>session-retro</code>, <code>docs-sync</code>, <code>brain-search</code>, <code>brain-capture</code></td><td>It reads the private vault, so injected text could send note content out; a bare name may not resolve; the verdict is a judgment scout refuses (PR #144 review)</td></tr>
+<tr><td>2026-11-17</td><td>brain-capture appends a dated paragraph to a note that already covers the topic, only on the user's A answer (D4 amended)</td><td><code>brain-capture</code></td><td>Captures wrote duplicates into the inbox for a manual merge (BRAIN-01)</td></tr>
+<tr><td>2026-11-17</td><td>A <code>Check</code> for a test the fix adds is guarded so it exits 1 until the test exists; triage reads that exit as red</td><td><code>audit-to-backlog</code>, <code>implement-backlog</code></td><td>A bare test id that does not exist yet exits 4 with &quot;no tests ran&quot;, which triage classed as a broken <code>Check</code> (#146)</td></tr>
+<tr><td>2026-11-17</td><td>A lane gets no <code>git diff</code>, and <code>lanes.json</code> refuses a <code>fast_check</code> or <code>allow</code> entry that runs git (D23 amended)</td><td><code>parallel-lanes</code></td><td><code>git diff --output=&lt;file&gt;</code> let a lane overwrite the main checkout's <code>.git/config</code> (PR #141 review)</td></tr>
 </tbody>
 </table>
 </div>
