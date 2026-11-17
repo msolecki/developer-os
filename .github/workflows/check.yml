@@ -58,7 +58,7 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
       # Saved as soon as the downloads are verified, so a later failing step still leaves the cache for the next run.
       - if: steps.tools-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/dos-tools
           key: ${{ steps.tools-cache.outputs.cache-primary-key }}
