@@ -48,7 +48,7 @@ In Done, write each check that ran as `<command>: <result> at <short SHA>`, the 
 
 ## 4. Findings
 
-At most 3 items per heading; omit empty headings.
+List only the items worth acting on under each heading; omit empty headings.
 
 Label every candidate `persistent` (true in the next task) or `this-task` (a temporary path, a limit of this task, a one-off workaround). Only `persistent` items go to the vault or instruction files; a `this-task` item goes at most to the plan.
 
