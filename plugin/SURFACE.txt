@@ -6,6 +6,7 @@ agent infra-reviewer
 agent performance-engineer
 agent qa-expert
 agent research-analyst
+agent scout
 agent security-auditor
 agent verifier
 hook PostToolUse

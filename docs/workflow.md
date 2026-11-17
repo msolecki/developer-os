@@ -172,7 +172,7 @@ notes are older than 7 days (at most once a week) or brain-garden has not run fo
 once a month), a one-line notice suggests the skill. After an install or update, the same hook shows the
 version and a link to the [changelog](https://msolecki.github.io/developer-os/docs/changelog.html).
 Turn the notices off with `DEVELOPER_OS_NOTICES=off`; details in
-[hooks.md](reference/hooks.md#sessionstart-on-startup--noticespy).
+[hooks.md](reference/hooks.md#sessionstart-on-startup---noticespy).
 
 ### 1. Start a task: search first
 
@@ -252,7 +252,7 @@ Links resolve by note name, case-insensitively. A link to an archived note (in `
 note's `sources:` frontmatter and in a compiled note's `## Links` section are provenance and get no
 such info line, but a source that exists nowhere is still reported as `no such note`.
 
-The report opens with `Vault health — N notes, orphans X (Y%), inbox Z, date`. Every proposed link
+The report opens with `Vault health - N notes, orphans X (Y%), inbox Z, date`. Every proposed link
 is tagged FOUND (both notes state the connection) or GUESSED (inferred); GUESSED links are applied
 only one by one. With your consent, brain-garden appends one line per run to
 `_reports/garden-log.md`: `YYYY-MM-DD notes N, orphans X (Y%), inbox Z`.

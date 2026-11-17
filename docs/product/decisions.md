@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-12
+last-verified: 2026-11-17
 ---
 
 # Decisions
@@ -336,7 +336,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   from the plan files only; the state file's own `Plan:` line prints inside the state section.
 - **Amended 2026-10-16:** the state-file path is fixed at `docs/plans/.devos-state.md` even when a
   project overrides its planning location; skills and core rules name that path. A project that moves
-  its plans still git-ignores `docs/plans/` (or that file) so the card shows it — the one extra
+  its plans still git-ignores `docs/plans/` (or that file) so the card shows it - the one extra
   `.gitignore` entry D16 rejected `.claude/devos-state.md` for.
 - **Amended 2026-10-16:** the card comes from its own hook, `state-card.py`, matched to `compact` and
   `resume`; the core rules print from a separate `cat` hook (D2), so the card is no longer guaranteed
@@ -545,6 +545,26 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   a docs-sync run on every PR in CI (paid, and evals stay out of CI per D13).
 - **Revisit when:** the word comparison needs a per-page exception, or skill pages drift despite review.
 
+## D29. One CI job, its slow test sharded, its tools cached
+
+- **Date:** 2026-11-16
+- **Decision:** `scripts/check.sh` runs `tests/check.test.sh` in CI as one shard per CPU, side by side, each in its own
+  copy of the repository; every case still runs on every push. Inside those copies `tests/guard.test.sh` skips its
+  CPU-time limit, since shards side by side share the CPUs; the top-level run still measures it. The YAML stage parses all files in one process. CI keeps
+  one job and one `check` status, and its timeout drops from 45 to 25 minutes. The agnix, gitleaks and ripgrep
+  tarballs live in an `actions/cache` entry keyed by the workflow file; each is still checked against its pinned
+  SHA-256 on every run (D18), and ripgrep comes from its release instead of `apt-get`. A cache key is never
+  overwritten, so a corrupt entry is fixed by changing the workflow file. A download retries transient errors for up
+  to 5 minutes, each try at most 60 s, and the setup step times out after 15 minutes. npm's cache is not kept, since
+  nothing would check it.
+- **Why:** a run took 6.6 minutes, nearly all of it the check-script test running the whole check 71 times in
+  series. Five of the last 60 pull-request runs failed on a 504 from GitHub's release host while downloading agnix or
+  gitleaks, one with retries five seconds apart; the other failures were real defects in the pull requests.
+- **Alternatives rejected:** a matrix job per shard (each pays the checkout and tool setup, and the status splits);
+  dropping or moving cases out of the pull-request run; retrying every curl error, which also retries a 404 or 403
+  until the window ends, so a connection reset mid-download is not retried and the cache covers it instead.
+- **Revisit when:** the shards take more than a few minutes, or a cache miss downloads on most runs.
+
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change
@@ -573,7 +593,7 @@ here before reversing a rule.
 | 2026-10-30 | An item whose code no longer matches it stops and gets a proposed `Amended` line instead of being pushed past | `implement-backlog` | Plan-and-forget: an approved plan goes stale when the code moves (harness-engineering-101, appendix C) |
 | 2026-11-06 | session-retro proposes a vault lesson only when it cost a retry, correction or re-derivation and `brain-search` finds no existing note; otherwise it proposes updating that note | `session-retro` | The vault inbox grew from 1 to 82 notes in two weeks (61 brain-capture calls, 0 brain-review), which kept brain-garden in its inbox gate |
 | 2026-11-07 | A reviewer's finding is a hypothesis checked against the code and the canonical helper; run the area's tests before applying a reviewer's fix; update the governing decision record when changing test gates; a new or changed gate counts only after it was seen to fail; a plan is deleted only after its steps landed in committed code; lanes stage explicit paths, re-run `git status` before the first edit, never `git stash`, run the repository-wide gate after integrating and never resume an interrupted lane (#113) | `plugin/rules/core.md` | Nine lessons from the vault that govern every kind of work; the cap rose to 8900 bytes to take them (D10 amended) |
-| 2026-11-07 | Every agent with Bash runs only read-only git (`diff`, `log`, `show`, `status`, `blame`, `grep`, `ls-files`) and reads another revision with `git show` or `git diff` (#117) | `code-reviewer`, `database-reviewer`, `infra-reviewer`, `security-auditor`, `performance-engineer`, `qa-expert`, `docs-writer`, `dependency-upgrader` | An infra-reviewer detached the orchestrator's HEAD mid-integration; the guard's ask had been approved (#110) |
+| 2026-11-07 | Every agent with Bash runs only read-only git (`diff`, `log`, `show`, `status`, `blame`, `grep`, `ls-files`) and reads another revision with `git show` or `git diff` (#117) | `code-reviewer`, `database-reviewer`, `infra-reviewer`, `security-auditor`, `performance-engineer`, `qa-expert`, `docs-writer`, `dependency-upgrader`, `scout` | An infra-reviewer detached the orchestrator's HEAD mid-integration; the guard's ask had been approved (#110) |
 | 2026-11-07 | code-review and code-reviewer rate a domain formula, field type or value format against the project's canonical definition; up to five P2 correctness findings go to the verifier (#118) | `code-review`, `code-reviewer`, `verifier` | Two false P2 findings, unverified, drove fix-pr work that was dropped (#111; D8 amended) |
 | 2026-11-07 | implement-backlog triages every batch item read-only before the claim and reports a failing one as `stale:`; audit-to-backlog drops a finding the done file or an open PR already covers (#120) | `implement-backlog`, `audit-to-backlog` | Batches claimed and dispatched items that were already fixed, moved or in flight (#115) |
 | 2026-11-07 | Each lane has a runnable `Check` the lane cannot edit; integrate re-runs it and the fast check and sends a red, `Manual` or changed-prompt lane to Needs you (#121) | `parallel-lanes` | A lane reported `DONE` with a green fast check while its own criterion was unmet (#116) |
@@ -605,3 +625,6 @@ here before reversing a rule.
 | 2026-11-12 | Undo a test mutation by hand; never revert it with `git checkout`, `git restore` or `git stash` | `testing-conventions` | The same gap, stated where tests are written (#140) |
 | 2026-11-12 | Two sessions sharing a checkout announce a commit, a branch switch or an edit of a shared file and wait before a commit or switch; when the message cannot be delivered, an edit proceeds after a `git status` check before and after and a note to the user, and a commit or switch stops and asks | `plugin/rules/core.md` | The announce rule had no path for a peer that `SendMessage` could not reach (#139) |
 | 2026-11-12 | The paging sentence names the lower-case `recommend:`, a reason in brackets on every line, the current page only and the literal question "Approve which ones?" | `brain-review` | The first eval run of brain-review-pages scored 0.70: the model capitalised the keyword, left most lines without a reason, summarised page two and paraphrased the question; 1.00 over three runs after the change |
+| 2026-11-17 | Core rules: drop the banned-phrase examples from the no-filler rule (its whole-reply scope stays) and the three-sentence cap from ASAP mode | `plugin/rules/core.md` | Prompt audit: phrase lists and numeric output caps over-apply on current models; both date from the 2026-09-22 seed defaults with no recorded failure behind the list or the number |
+| 2026-11-17 | session-retro findings: drop the per-heading cap of three; the five-lesson window cap stays | `session-retro` | Prompt audit: numeric output cap with no recorded evidence |
+| 2026-11-17 | pr-cycle fetches the base before its verdict and merges commits the base gained during the cycle once more (with a push question); then, pushed or not, it reads GitHub's mergeable state and gives no `APPROVE` on `CONFLICTING` | `pr-cycle` | In #144 another PR landed between the cycle's merge and its verdict; the PR was `CONFLICTING` again and only a manual `gh pr view` caught it |

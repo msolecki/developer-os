@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@c20696282dbe">
+<meta name="dos-source" content="CHANGELOG.md@e4a8d16467f1">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -47,7 +47,7 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
-<h3 id="added">Added</h3>
+    <h3 id="unreleased-added">Added</h3>
 <ul>
 <li>Guard: asks before cloud deletes (<code>aws … delete-*</code>/<code>terminate-*</code>, <code>aws s3 rm --recursive</code>, <code>aws s3 rb</code>,
 <code>gcloud … delete</code>, <code>az … delete</code>), database drops (<code>psql</code>/<code>mysql</code>/<code>sqlite3</code> with <code>DROP</code> or <code>TRUNCATE</code>,
@@ -120,6 +120,10 @@ on a planted defect and on clean input; four <code>core.md</code> rules (<code>c
 notes get relative dates.</li>
 <li><code>docs/workflow.md</code>: how to keep skill descriptions from being cut (<code>skillListingBudgetFraction</code>,
 <code>skillOverrides</code> for your own skills) and how to see the listing's cost (<code>/doctor</code>, <code>/skill-doctor</code>).</li>
+      <li><code>scout</code> agent (sonnet, read-only commands only): finds and collects facts for the caller. session-retro, docs-sync,
+brain-search and brain-capture delegate searching and collecting to it instead of a general-purpose
+agent, which runs on the session's model. It runs only read-only git and <code>gh</code>; the <code>scout-no-edit</code> eval
+checks that it hands an edit back to the caller.</li>
 </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
@@ -151,6 +155,30 @@ SIL Open Font License text); no page loads anything from Google Fonts.</li>
 fit without sideways scrolling; an "Open full size" button shows each in a full-viewport dialog.</li>
 <li>Site: <code>404.html</code> answers an unknown address with links to the home page, the documentation index and the
 skills index, and a field that opens the skills index filtered (<code>skills/index.html?q=&lt;text&gt;</code>).</li>
+<li>pr-cycle fetches the base before its verdict; when the base gained commits during the cycle it merges,
+reviews and tests them once more and asks before pushing; then, pushed or not, it reads GitHub's mergeable state.</li>
+<li>The Counts stage also reads scope-table rows (<code>Agents</code>, <code>Brain skills</code>, <code>Output styles</code>, <code>Hooks</code>) and
+totals in words before "developer-os"; it caught a stale agent total in the agents page's description.</li>
+<li><code>tests/check.test.sh</code> commits in its copy with signing off, so a user-level <code>commit.gpgsign</code> with no
+working signer no longer fails 59 of its tests.</li>
+<li>CI runs <code>tests/check.test.sh</code> as one shard per CPU side by side and the YAML stage in one process; a run
+took 6.6 minutes, nearly all of it that test (D29).</li>
+<li>CI keeps the pinned agnix, gitleaks and ripgrep tarballs in <code>actions/cache</code>, checks each
+tarball's SHA-256 on every run, retries downloads with backoff, and takes ripgrep from its release
+instead of <code>apt-get</code>; GitHub's release host had failed five pull-request runs with a 504.</li>
+<li>Core rules: judge a gate by its own exit status, never through <code>| tail</code> or <code>| grep</code> without <code>pipefail</code>.</li>
+<li>database-reviewer flags a migration that adds or narrows a constraint while seeds or fixtures hold rows
+it rejects.</li>
+<li>code-review records the commit it reads and, when the checkout is elsewhere or shared, reads a trusted
+head from a detached worktree outside the repository, removed after the review.</li>
+<li>pr-cycle records a base squash of commits the branch already has with <code>git merge -s ours</code> before
+merging the base, only when the trees are identical, reports that commit and undoes it on abort.</li>
+<li>parallel-lanes passes each lane its own decision-number range and, at integration, keeps both sides of
+a numbered decisions file whose conflicts only add entries, checking every base number survived.</li>
+      <li>implement-backlog launches <code>S</code> and <code>M</code> delegates on sonnet, and every delegate brief in
+implement-backlog and parallel-lanes carries the shell and edit rules (one operation per call, no
+<code>$(…)</code> or heredoc scripts, no <code>git checkout --</code>, Read before Edit, a refused command is final).</li>
+      <li>pr-cycle's description names resolving a PR's conflicts as a trigger.</li>
     </ul>
     <h2 id="029---2026-11-09">[0.2.9] - 2026-11-09</h2>
     <h3 id="029-added">Added</h3>

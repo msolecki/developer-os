@@ -1,6 +1,6 @@
 ---
 name: brain-project-refresh
-description: Bring the current repository's project hub note in the user's Obsidian vault up to date — drifted claims, moved paths, missing links — shown as a diff and applied only after approval. Use when the user asks to refresh or update the project note, for example "refresh the project note", "update the brain for this repo", "is the project hub up to date".
+description: Bring the current repository's project hub note in the user's Obsidian vault up to date - drifted claims, moved paths, missing links - shown as a diff and applied only after approval. Use when the user asks to refresh or update the project note, for example "refresh the project note", "update the brain for this repo", "is the project hub up to date".
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -55,7 +55,7 @@ Propose nothing without evidence; a claim you cannot check stays as it is and is
 Show the full diff of the hub as it would be written, then:
 
 ```
-Project refresh — PROJECTS/my-app.md against my-app at 3f9c2d1
+Project refresh - PROJECTS/my-app.md against my-app at 3f9c2d1
 Drifted: 1   Moved: 1   Missing links: 3   Dead links: 0   Summary: 1   Changed refs: 1   Unchecked: 2
 
 1. [drifted] line 14 says "deployed to Heroku"; docs/runbooks/deploy.md:3 deploys to Fly.io → link the runbook

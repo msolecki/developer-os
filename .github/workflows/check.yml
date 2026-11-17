@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 
-# A new push cancels the older run of the same ref; tests/check.test.sh makes a run long.
+# A new push cancels the older run of the same ref.
 concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
@@ -16,36 +16,59 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-      # tests/skill-usage.test.sh needs ripgrep and fails without it in CI.
-      - run: sudo apt-get -o Acquire::Retries=3 update -qq && sudo apt-get -o Acquire::Retries=3 install -y -qq ripgrep
-      # Static lint of skills, hooks and plugin manifests, run by scripts/check.sh; settings and suppressions in .agnix.toml.
-      # The binary is pinned by its own hash, not by a checksum file from the same release.
-      - name: Set up agnix
+      # The release tarballs, keyed by this file, so a version bump starts a new cache.
+      # A hit only skips the download: every tarball is checked against its pinned SHA-256 below on every run.
+      # A key is never overwritten, so a corrupt entry is downloaded again on every run until this file changes.
+      - id: tools-cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/dos-tools
+          key: check-tools-${{ runner.os }}-${{ hashFiles('.github/workflows/check.yml') }}
+      # agnix: static lint of skills, hooks and plugin manifests, run by scripts/check.sh; settings and suppressions in .agnix.toml.
+      # ripgrep: tests/skill-usage.test.sh fails without it in CI. Each binary is pinned by its own hash, not by a
+      # checksum file from the same release. curl retries transient errors (408, 429, 5xx, refused connections) with
+      # exponential backoff: GitHub's release host has answered 504 for minutes at a time. A try lasts at most 60 s and
+      # no try starts after 240 s, so one tarball takes at most about 5 minutes; the step's own timeout caps all three.
+      - name: Set up agnix, gitleaks and ripgrep
+        timeout-minutes: 15
         run: |
-          curl -sSfL --retry 5 --retry-all-errors --retry-delay 5 -o agnix.tar.gz https://github.com/agent-sh/agnix/releases/download/v0.61.0/agnix-x86_64-unknown-linux-gnu.tar.gz
-          echo "cfc8f4c5a51d023bbc8742fb84f420b12d3d49b621c8ccfb7382c5f73944ad09  agnix.tar.gz" | sha256sum -c -
-          tar -xzf agnix.tar.gz agnix
-          sudo mv agnix /usr/local/bin/
-          rm agnix.tar.gz
+          cache=~/.cache/dos-tools bin="$RUNNER_TEMP/dos-tools"
+          mkdir -p "$cache" "$bin"
+          # fetch NAME URL SHA256 MEMBER STRIP: downloads the tarball unless the cached one matches SHA256, then extracts MEMBER.
+          fetch() {
+            f="$cache/$1.tar.gz"
+            if ! echo "$3  $f" | sha256sum -c --status - 2>/dev/null; then
+              curl -sSfL --retry 10 --retry-connrefused --retry-max-time 240 --connect-timeout 20 --max-time 60 -o "$f" "$2"
+              echo "$3  $f" | sha256sum -c - || { rm -f "$f"; exit 1; }
+            fi
+            tar -xzf "$f" -C "$bin" --strip-components="$5" "$4"
+          }
+          fetch agnix-0.61.0 https://github.com/agent-sh/agnix/releases/download/v0.61.0/agnix-x86_64-unknown-linux-gnu.tar.gz \
+            cfc8f4c5a51d023bbc8742fb84f420b12d3d49b621c8ccfb7382c5f73944ad09 agnix 0
+          fetch gitleaks-8.30.1 https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb gitleaks 0
+          fetch ripgrep-15.1.0 https://github.com/BurntSushi/ripgrep/releases/download/15.1.0/ripgrep-15.1.0-x86_64-unknown-linux-musl.tar.gz \
+            1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599 ripgrep-15.1.0-x86_64-unknown-linux-musl/rg 1
+          echo "$bin" >> "$GITHUB_PATH"
+      # Saved as soon as the downloads are verified, so a later failing step still leaves the cache for the next run.
+      - if: steps.tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/dos-tools
+          key: ${{ steps.tools-cache.outputs.cache-primary-key }}
       # --ignore-scripts skips every dependency's lifecycle script; only Claude Code's own postinstall,
-      # which links its native binary, runs, by name.
-      - run: |
-          npm install -g --ignore-scripts @anthropic-ai/claude-code@2.1.322
+      # which links its native binary, runs, by name. npm's cache is not kept: nothing here would check it.
+      - name: Install Claude Code
+        run: |
+          npm install -g --ignore-scripts --fetch-retries=5 @anthropic-ai/claude-code@2.1.322
           node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
           claude --version
-      - name: Install gitleaks
-        run: |
-          curl -sSfL --retry 5 --retry-all-errors --retry-delay 5 -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
-          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
-          tar -xzf gitleaks.tar.gz gitleaks
-          sudo mv gitleaks /usr/local/bin/
-          rm gitleaks.tar.gz
       - name: gitleaks over the pull request's commits
         if: github.event_name == 'pull_request'
         env:
@@ -61,4 +84,5 @@ jobs:
             echo "this pull request adds a gitleaks:allow marker; a maintainer reviews it by hand" >&2; exit 1
           fi
           gitleaks git --no-banner --redact --log-opts="$BASE..$HEAD" .
+      # tests/check.test.sh, inside it, runs one shard per CPU side by side.
       - run: scripts/check.sh

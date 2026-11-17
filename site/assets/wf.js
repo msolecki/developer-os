@@ -162,9 +162,9 @@
       ['you', '> What did we decide about webhook retries?'],
       ['dim', '  brain-search webhook retries'],
       ['out', 'Process each webhook once per event id; retries reuse the stored result.'],
-      ['dim', '  — DEV/process-webhooks-once-per-event-id.md (active, updated 2026-10-02)'],
+      ['dim', '  - DEV/process-webhooks-once-per-event-id.md (active, updated 2026-10-02)'],
       ['out', 'The retry budget is three attempts with backoff.'],
-      ['dim', '  — _inbox/retry-budget.md (inbox, unreviewed)']
+      ['dim', '  - _inbox/retry-budget.md (inbox, unreviewed)']
     ] },
     { ch: 'Asks before risk', lines: [
       ['cmd', '$ pnpm add p-retry'],

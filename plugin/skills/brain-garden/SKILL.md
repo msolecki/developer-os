@@ -125,7 +125,7 @@ The header comes from the `totals:` line, with today's date. Tag every proposed 
 - **GUESSED**: you inferred it. Use GUESSED whenever you are unsure.
 
 ```
-Vault health — 42 notes, orphans 3 (7%), inbox 5, 2026-10-15
+Vault health - 42 notes, orphans 3 (7%), inbox 5, 2026-10-15
 Stale (updated > 180 days):
   TOOLS/old-linter-setup.md (2025-11-02) → re-verify or set status: archived
 Inbox older than 7 days:

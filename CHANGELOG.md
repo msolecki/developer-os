@@ -77,6 +77,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   notes get relative dates.
 - `docs/workflow.md`: how to keep skill descriptions from being cut (`skillListingBudgetFraction`,
   `skillOverrides` for your own skills) and how to see the listing's cost (`/doctor`, `/skill-doctor`).
+- `scout` agent (sonnet, read-only commands only): finds and collects facts for the caller. session-retro, docs-sync,
+  brain-search and brain-capture delegate searching and collecting to it instead of a general-purpose
+  agent, which runs on the session's model. It runs only read-only git and `gh`; the `scout-no-edit` eval
+  checks that it hands an edit back to the caller.
 
 ### Changed
 
@@ -108,6 +112,30 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   fit without sideways scrolling; an "Open full size" button shows each in a full-viewport dialog.
 - Site: `404.html` answers an unknown address with links to the home page, the documentation index and the
   skills index, and a field that opens the skills index filtered (`skills/index.html?q=<text>`).
+- pr-cycle fetches the base before its verdict; when the base gained commits during the cycle it merges,
+  reviews and tests them once more and asks before pushing; then, pushed or not, it reads GitHub's mergeable state.
+- The Counts stage also reads scope-table rows (`Agents`, `Brain skills`, `Output styles`, `Hooks`) and
+  totals in words before "developer-os"; it caught a stale agent total in the agents page's description.
+- `tests/check.test.sh` commits in its copy with signing off, so a user-level `commit.gpgsign` with no
+  working signer no longer fails 59 of its tests.
+- CI runs `tests/check.test.sh` as one shard per CPU side by side and the YAML stage in one process; a run
+  took 6.6 minutes, nearly all of it that test (D29).
+- CI keeps the pinned agnix, gitleaks and ripgrep tarballs in `actions/cache`, checks each
+  tarball's SHA-256 on every run, retries downloads with backoff, and takes ripgrep from its release
+  instead of `apt-get`; GitHub's release host had failed five pull-request runs with a 504.
+- Core rules: judge a gate by its own exit status, never through `| tail` or `| grep` without `pipefail`.
+- database-reviewer flags a migration that adds or narrows a constraint while seeds or fixtures hold rows
+  it rejects.
+- code-review records the commit it reads and, when the checkout is elsewhere or shared, reads a trusted
+  head from a detached worktree outside the repository, removed after the review.
+- pr-cycle records a base squash of commits the branch already has with `git merge -s ours` before
+  merging the base, only when the trees are identical, reports that commit and undoes it on abort.
+- parallel-lanes passes each lane its own decision-number range and, at integration, keeps both sides of
+  a numbered decisions file whose conflicts only add entries, checking every base number survived.
+- implement-backlog launches `S` and `M` delegates on sonnet, and every delegate brief in
+  implement-backlog and parallel-lanes carries the shell and edit rules (one operation per call, no
+  `$(…)` or heredoc scripts, no `git checkout --`, Read before Edit, a refused command is final).
+- pr-cycle's description names resolving a PR's conflicts as a trigger.
 
 ## [0.2.9] - 2026-11-09
 

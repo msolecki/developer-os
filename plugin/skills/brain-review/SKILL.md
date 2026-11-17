@@ -1,6 +1,6 @@
 ---
 name: brain-review
-description: Review the inbox of the user's Obsidian knowledge vault — summarize captured notes, then promote, merge, reject or supersede only the notes the user names. Use when the user asks to review or triage the brain/vault inbox or captured notes, for example "review the brain inbox", "what is in the inbox", "sort the inbox notes".
+description: Review the inbox of the user's Obsidian knowledge vault - summarize captured notes, then promote, merge, reject or supersede only the notes the user names. Use when the user asks to review or triage the brain/vault inbox or captured notes, for example "review the brain inbox", "what is in the inbox", "sort the inbox notes".
 license: MIT
 compatibility: "Claude Code"
 ---
@@ -48,10 +48,10 @@ List the expired notes last, as one group under the heading `Expired`, numbered 
 Example:
 
 ```
-1. _inbox/release-notes-in-changelog.md — decision
+1. _inbox/release-notes-in-changelog.md - decision
    "Release notes live in CHANGELOG.md at the repository root."
    → DEV/   possible duplicate: DEV/release-process.md
-2. _inbox/docker-cache-flag.md — knowledge
+2. _inbox/docker-cache-flag.md - knowledge
    "Use --mount=type=cache for pnpm store in Dockerfiles."
    → INFRA/ no duplicate
 Expired (brain-search no longer answers from these):

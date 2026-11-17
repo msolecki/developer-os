@@ -149,7 +149,7 @@ without it the core rules still load and the other hooks do not run.
 - **Built-in overlaps:** `/code-review`, `/security-review`, `/recap`, `/insights`, `/goal`,
   `/skill-doctor`, `/doctor` and `/init` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
 - **Agents:** code-reviewer, database-reviewer, dependency-upgrader, docs-writer, infra-reviewer,
-  performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
+  performance-engineer, qa-expert, research-analyst, scout, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
 - **Seven hooks on five events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up

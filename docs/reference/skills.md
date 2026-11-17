@@ -343,8 +343,8 @@ fact instead of inventing it.
 
 [Source](../../plugin/skills/session-retro/SKILL.md). Checks `git status`, unpushed commits,
 branches not merged into `origin/HEAD`, your open PRs and still-running background work; proposes
-removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
-most three under each heading, lessons (an addition to a note that already covers the topic is
+removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes,
+only where worth acting on, lessons (an addition to a note that already covers the topic is
 proposed as a diff to it), rule candidates (with the commit they would reverse), check candidates (for a
 command or path to ask about first, one entry for the project's `.claude/developer-os-guard.json`), plan
 and docs updates (open items of a finished plan become `PLAN-` backlog items, P2 by default, with a

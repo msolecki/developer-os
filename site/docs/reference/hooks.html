@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@3049fa175bf9">
+<meta name="dos-source" content="docs/reference/hooks.md@2d96d932af3a">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -53,7 +53,7 @@ Without <code>python3</code> the core rules still load; the state card, notices,
 non-blocking hook error and the session goes on as if they were absent. Why Python and not <code>sh</code>:
 <a href="../product/decisions.html#d2-no-runtime-small-hook-scripts-without-dependencies">decisions D2</a>.
 Tests: <code>tests/state-card.test.sh</code>, <code>tests/notices.test.sh</code>, <code>tests/guard.test.sh</code>, <code>tests/patterns.test.sh</code>, <code>tests/repeat-failure.test.sh</code>, <code>tests/capture-nudge.test.sh</code>.</p>
-    <h2 id="sessionstart--core-rules-and-state-card">SessionStart — core rules and state card</h2>
+    <h2 id="sessionstart--core-rules-and-state-card">SessionStart - core rules and state card</h2>
     <p>The core rules and the state card are separate <code>SessionStart</code> entries that run independently on compact, resume and fork, so the card is not guaranteed to follow the rules.</p>
     <div class="table-wrap">
       <table>
@@ -98,7 +98,7 @@ Worktrees:
     even when a project moves its plans; <code>Newest plan</code> reads only <code>docs/plans/</code> too.</p>
     <p><strong>Failure:</strong> every error exits 0; malformed input, another <code>source</code>, a <code>cwd</code> that does not exist or a directory
     outside git print nothing, so the session has the rules alone.</p>
-    <h2 id="sessionstart-on-startup--noticespy">SessionStart on startup — <code>notices.py</code></h2>
+    <h2 id="sessionstart-on-startup--noticespy">SessionStart on startup - <code>notices.py</code></h2>
     <p>Claude Code has no install or update hook, so this hook stands in for one, and for a schedule: it
     reminds, it runs nothing. Matcher <code>startup</code>, so it never runs beside the state card (<code>compact|resume|fork</code>);
     its output is a few hundred bytes.</p>
@@ -138,7 +138,7 @@ Worktrees:
     another user, the hook prints nothing, because without markers every notice would repeat each session.</p>
     <p><strong>Failure:</strong> every error exits 0 with no output. <code>DEVELOPER_OS_NOTICES=off</code> and <code>sdk-*</code> entrypoints
     (<code>claude -p</code>, the SDK) print nothing.</p>
-    <h2 id="pretooluse-on-bash-edit-write-and-multiedit--guardpy">PreToolUse on Bash, Edit, Write and MultiEdit — <code>guard.py</code></h2>
+    <h2 id="pretooluse-on-bash-edit-write-and-multiedit--guardpy">PreToolUse on Bash, Edit, Write and MultiEdit - <code>guard.py</code></h2>
     <p><strong>Matcher:</strong> <code>Bash|Edit|Write|MultiEdit</code>.</p>
     <p><strong>Input:</strong> the hook JSON on stdin; <code>tool_input.command</code> for Bash, <code>tool_name</code> and <code>tool_input.file_path</code> for Edit, Write and MultiEdit, <code>old_string</code>/<code>new_string</code> for Edit, <code>edits</code> for MultiEdit and <code>content</code> for Write (for a test file, also the first MiB of the file on disk); <code>agent_type</code>, present when a subagent makes the call; <code>cwd</code>, the session's working directory when the hook runs (Claude Code's hooks reference lists it among the fields every event receives; it follows a <code>cd</code> and is the worktree root after the session enters a worktree), used for the worktree boundary and the project rules. Without <code>cwd</code> those two checks are skipped.</p>
     <p><strong>Decision:</strong> prints one line and exits 0:</p>
@@ -272,11 +272,11 @@ command too large to scan asks, because a hook that times out would let Claude C
     confirmation: quoting, an alias, a variable built at run time or a script can get past it. The hard
     boundary is Claude Code's permission rules and its sandbox (<code>sandbox.enabled</code>, or <code>/sandbox</code>), which
     restrict writes and network for every command whatever its text.</p>
-<h2 id="posttooluse--patternspy">PostToolUse — <code>patterns.py</code></h2>
+<h2 id="posttooluse--patternspy">PostToolUse - <code>patterns.py</code></h2>
 <p>Matcher <code>Edit|Write|MultiEdit</code>, timeout 10. It scans only the text the edit adds (<code>new_string</code>, <code>content</code>, each MultiEdit <code>new_string</code>) against a closed table keyed by file extension: <code>eval(</code> and <code>exec(</code> (Python, JavaScript, TypeScript), <code>pickle.load</code>, <code>yaml.load(</code> without a safe loader, <code>verify=False</code>, <code>shell=True</code> (Python), <code>.innerHTML =</code> (JavaScript, TypeScript, HTML, Vue, Svelte), <code>dangerouslySetInnerHTML</code> (JavaScript, TypeScript), <code>${{ github.event.</code> on a non-<code>key:</code> or <code>run:</code> line of a file under <code>.github/workflows/</code>, and <code>curl … | sh</code> (shell files). A construct the replaced text already held as often is not new; test paths (guard's definition), Markdown and vendored directories (<code>node_modules</code>, <code>vendor</code>, <code>third_party</code>, <code>bower_components</code>, <code>site-packages</code>, <code>.venv</code>, <code>venv</code>) are skipped, with the path taken relative to <code>cwd</code>.</p>
 <p>Output is <code>hookSpecificOutput.additionalContext</code> only, one line per pattern naming the file, the construct and the safer form, at most 3 lines, once per pattern and file in a session; never a decision, never a block. Markers live in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/patterns/&lt;session_id&gt;</code> (mode 700 directory, entries removed after 8 days).</p>
 <p>It reads no project file, at most 4 MiB of hook input and 256 KiB of added text. Every error exits 0 with no output. <code>DEVELOPER_OS_PATTERNS=off</code> disables it.</p>
-    <h2 id="posttoolusefailure--repeat-failurepy">PostToolUseFailure — <code>repeat-failure.py</code></h2>
+    <h2 id="posttoolusefailure--repeat-failurepy">PostToolUseFailure - <code>repeat-failure.py</code></h2>
     <p><strong>Matcher:</strong> none: every tool. Claude Code fires the event when a tool call fails, for Bash when the
     command exits non-zero; a call rejected before it runs (permission denial, invalid input) or cancelled
     does not fire it.</p>
@@ -295,7 +295,7 @@ command too large to scan asks, because a hook that times out would let Claude C
     <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/repeat-failure/</code>, created with mode 700 and
     removed after 8 days; the hook fails open when that directory or its parent is a symlink or owned by
     another user. It stores hashes only, never commands or errors.</p>
-    <h2 id="stop--capture-nudgepy">Stop — <code>capture-nudge.py</code></h2>
+    <h2 id="stop--capture-nudgepy">Stop - <code>capture-nudge.py</code></h2>
     <p><strong>Input:</strong> the hook JSON on stdin; uses <code>stop_hook_active</code>, <code>agent_id</code>, <code>session_id</code>,
     <code>transcript_path</code>, <code>background_tasks</code>.</p>
     <p><strong>Exits 0 silently when any of these holds:</strong></p>

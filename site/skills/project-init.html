@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/project-init/SKILL.md@14efe337390f">
+<meta name="dos-source" content="plugin/skills/project-init/SKILL.md@e8740d60fa48">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -76,15 +76,15 @@
     <h2 id="example-output">Example output</h2>
     <div class="terminal">
       <div class="terminal-bar"><i></i><i></i><i></i><span>project-init</span></div>
-    <pre><code>Project init — &lt;repo&gt; at &lt;short sha&gt;
+    <pre><code>Project init - &lt;repo&gt; at &lt;short sha&gt;
 Stack: TypeScript, Next.js 15, Vitest, GitHub Actions, Postgres (Prisma)
 Applies: project-baseline, docs-sync, instruction-review, typescript, nextjs, testing, error-handling, defensive-coding
 Not applicable: monitoring-conventions (no infrastructure code)   Not run: deploy-checklist (run it before the next release)
 Baseline: missing 4   Docs: missing 3, drift 5   Instructions: 2 proposals   Conventions: 6 findings
-Needs your decision: test runner — package.json has both jest and vitest
+Needs your decision: test runner - package.json has both jest and vitest
 
 1. [baseline] BASE-01 · P2 · Secret scanning in CI
-2. [docs] drift — AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
+2. [docs] drift - AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
 3. [instructions] AGENTS.md: replace line 22 "Use pnpm." with "Use pnpm (pnpm-lock.yaml)."
 4. [conventions] CONV-01 · P2 · Empty catch in src/webhooks/deliver.ts:40
 

@@ -1,11 +1,27 @@
 #!/bin/sh
 # Tests for scripts/check.sh: each case breaks a copy of the repository and expects the stage's message.
 # Run from the repository root: sh tests/check.test.sh
+# CHECK_TEST_SHARD=K/N runs only every Nth case, from the Kth on (scripts/check.sh runs N shards side by side);
+# a skipped case still resets the copy, so its setup cannot leak into the next case.
+shard=${CHECK_TEST_SHARD:-1/1}
+k=${shard%%/*} n=${shard#*/}
+case $shard in
+  */*/* | *[!0-9/]* | 0[0-9]*/* | */0[0-9]*) echo "check: CHECK_TEST_SHARD=$shard is not K/N" >&2; exit 1 ;;
+  [0-9]*/[0-9]*) ;;
+  *) echo "check: CHECK_TEST_SHARD=$shard is not K/N" >&2; exit 1 ;;
+esac
+if [ "$k" -lt 1 ] || [ "$k" -gt "$n" ]; then echo "check: CHECK_TEST_SHARD=$shard is not K/N with 1 <= K <= N" >&2; exit 1; fi
+i=0 ran=0
+# Tells tests/guard.test.sh in each copy to skip its CPU-time limit: shards side by side share the CPUs, and the
+# top-level check already measured the same code.
+export CHECK_TEST_COPY=1
+mine() { i=$((i + 1)); [ $(((i - 1) % n + 1)) -eq "$k" ] || return 1; ran=$((ran + 1)); }
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
 failed=0
 r="$tmp/r"
-g() { git -C "$r" -c user.name=t -c user.email=t@example.com -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+# Signing off: a user-level commit.gpgsign would make every commit in the copy depend on a working signer.
+g() { git -C "$r" -c user.name=t -c user.email=t@example.com -c core.hooksPath=/dev/null -c core.fsmonitor=false -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }
 
 # One committed copy of the working tree, without this test (check.sh would run it again); reset before each case.
 mkdir "$r"
@@ -16,9 +32,11 @@ reset() { g checkout -q . && g clean -fdq; }
 
 # run NAME WANT [TEXT]: runs check.sh in the copy; WANT is fail or pass, TEXT must appear in its output.
 run() {
-  out=$(cd "$r" && PATH="${runpath:-$PATH}" bash scripts/check.sh 2>&1) && got=pass || got=fail
-  case $out in *"${3:-}"*) ;; *) got="$got without '${3:-}'" ;; esac
-  if [ "$got" = "$2" ]; then echo "ok   $1"; else echo "FAIL $1: expected $2, got $got" >&2; printf '%s\n' "$out" | tail -5 >&2; failed=1; fi
+  if mine; then
+    out=$(cd "$r" && PATH="${runpath:-$PATH}" bash scripts/check.sh 2>&1) && got=pass || got=fail
+    case $out in *"${3:-}"*) ;; *) got="$got without '${3:-}'" ;; esac
+    if [ "$got" = "$2" ]; then echo "ok   $1"; else echo "FAIL $1: expected $2, got $got" >&2; printf '%s\n' "$out" | tail -5 >&2; failed=1; fi
+  fi
   reset
 }
 # edit FILE SED: rewrites FILE in the copy through sed.
@@ -37,9 +55,11 @@ edit plugin/skills/backlog-run/SKILL.md 's/^name: implement-backlog$/name: backl
 edit plugin/SURFACE.txt 's/^skill implement-backlog$/skill backlog-run/'
 LC_ALL=C sort "$r/plugin/SURFACE.txt" > "$tmp/x" && mv "$tmp/x" "$r/plugin/SURFACE.txt"
 g add -A && g commit -qm rename
-out=$(cd "$r" && GITHUB_BASE_REF=development bash scripts/check.sh 2>&1) && got=pass || got=fail
-case $out in *"implement-backlog was removed from plugin/SURFACE.txt"*) ;; *) got="$got without the stale name" ;; esac
-if [ "$got" = fail ]; then echo "ok   a committed rename fails in a pull request"; else echo "FAIL a committed rename fails in a pull request: got $got" >&2; failed=1; fi
+if mine; then
+  out=$(cd "$r" && GITHUB_BASE_REF=development bash scripts/check.sh 2>&1) && got=pass || got=fail
+  case $out in *"implement-backlog was removed from plugin/SURFACE.txt"*) ;; *) got="$got without the stale name" ;; esac
+  if [ "$got" = fail ]; then echo "ok   a committed rename fails in a pull request"; else echo "FAIL a committed rename fails in a pull request: got $got" >&2; failed=1; fi
+fi
 g reset -q --hard origin/development && g update-ref -d refs/remotes/origin/development
 
 edit plugin/skills/brain-garden/SKILL.md '/^Use a vault path the user/s/ once / twice /'
@@ -101,10 +121,12 @@ rm "$tmp/bin/agnix"
 runpath=
 
 # In CI a missing agnix fails, never skips. AGNIX names a binary that does not exist: dropping agnix's directory
-# from PATH would also drop the other tools CI installs there (/usr/local/bin) and fail an earlier stage.
-out=$(cd "$r" && CI=1 AGNIX="$tmp/no-agnix" bash scripts/check.sh 2>&1) && got=pass || got=fail
-case $out in *"agnix not found; CI must set it up"*) ;; *) got="$got without the agnix message" ;; esac
-if [ "$got" = fail ]; then echo "ok   agnix missing in CI fails"; else echo "FAIL agnix missing in CI fails: got $got" >&2; failed=1; fi
+# from PATH would also drop the other tools CI installs in the same directory and fail an earlier stage.
+if mine; then
+  out=$(cd "$r" && CI=1 AGNIX="$tmp/no-agnix" bash scripts/check.sh 2>&1) && got=pass || got=fail
+  case $out in *"agnix not found; CI must set it up"*) ;; *) got="$got without the agnix message" ;; esac
+  if [ "$got" = fail ]; then echo "ok   agnix missing in CI fails"; else echo "FAIL agnix missing in CI fails: got $got" >&2; failed=1; fi
+fi
 reset
 
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'
@@ -211,6 +233,18 @@ run "a page naming another page's source" fail "site: site/docs/glossary.html: n
 edit site/index.html 's|<h2>What ships in the plugin.</h2>|<h2>The 99 skills.</h2>|'
 run "a wrong count on the site" fail "says 99 skills"
 
+edit docs/product/overview.md 's/^| Agents | [0-9]* |/| Agents | 99 |/'
+run "a wrong count in a scope-table row" fail "says 99 agents"
+
+edit site/docs/product/overview.html 's|<td>Agents</td><td>[0-9]*</td>|<td>Agents</td><td>99</td>|'
+run "a wrong count in a scope-table row on the site" fail "says 99 agents"
+
+edit site/agents.html 's/content="The developer-os subagents:/content="The nine developer-os subagents:/'
+run "a wrong total in words before developer-os" fail "says 9 agents"
+
+edit site/agents.html 's/content="The developer-os subagents:/content="The twenty-eight developer-os subagents:/'
+run "the tail of a compound number word is no total" pass
+
 edit site/index.html 's|<li><span>Agents, output styles</span><span>[0-9]*, |<li><span>Agents, output styles</span><span>99, |'
 run "a wrong count in a landing-page fact row" fail "says 99 agents"
 
@@ -291,11 +325,12 @@ run "a git-ignored doc under docs/superpowers/ has no site page" pass
 rm -r "$r/docs/superpowers"
 
 # The token is built at run time: a literal one here would fail the real check's own gitleaks scan.
-printf 'token = "gh%s_%s"\n' p "$(LC_ALL=C tr -dc A-Za-z0-9 < /dev/urandom | head -c 36)" > "$r/leak.txt"
+printf 'token = "gh%s_%s"\n' p "$(LC_ALL=C tr -dc A-Za-z0-9 < /dev/urandom 2>/dev/null | head -c 36)" > "$r/leak.txt"
 run "a secret in an untracked file" fail "leaks found"
 
 jq '.plugins[0].version = "9.9.9"' "$r/.claude-plugin/marketplace.json" > "$tmp/x" && mv "$tmp/x" "$r/.claude-plugin/marketplace.json"
 run "marketplace and plugin versions differ" fail 'Entry declares version "9.9.9"'
 
-[ "$failed" -eq 0 ] && echo "check: all passed"
+if [ "$ran" -eq 0 ]; then echo "check: shard $shard ran no case" >&2; exit 1; fi
+[ "$failed" -eq 0 ] && echo "check: all passed ($ran cases, shard $shard)"
 exit "$failed"

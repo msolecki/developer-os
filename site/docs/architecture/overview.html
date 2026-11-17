@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@55fd8f83b446">
+<meta name="dos-source" content="docs/architecture/overview.md@82c6aac8b8a3">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -61,7 +61,7 @@ plugin/                           the installed payload
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/&lt;name&gt;/SKILL.md          33 skills
-  agents/&lt;name&gt;.md                10 agents
+  agents/&lt;name&gt;.md                11 agents
   output-styles/&lt;name&gt;.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
@@ -80,13 +80,13 @@ site/                             public documentation site, published by .githu
       <table>
         <thead><tr><th scope="col">Part</th><th scope="col">When it loads</th><th scope="col">Size today</th><th scope="col">Limit</th></tr></thead>
         <tbody>
-          <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>About 8.7 KB</td><td>8900 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
+          <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>About 8.9 KB</td><td>8900 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
           <tr><td>State card</td><td>After a compaction, resume or fork inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
           <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing; a skill with <code>disable-model-invocation: true</code> lists no description</td><td>About 11,200 characters for 33 skills</td><td>80–1024 each, 12000 total of the listed ones (<code>scripts/check.sh</code>); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10)</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
           <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.8–17.5 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
-          <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–5.3 KB per file</td><td>—</td></tr>
-          <tr><td>An output style</td><td>When selected; replaces the default style but keeps coding instructions</td><td>0.7–2.2 KB</td><td>—</td></tr>
+          <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–5.3 KB per file</td><td>-</td></tr>
+          <tr><td>An output style</td><td>When selected; replaces the default style but keeps coding instructions</td><td>0.7–2.2 KB</td><td>-</td></tr>
         </tbody>
       </table>
     </div>
@@ -276,7 +276,8 @@ project-baseline, docs-sync and instruction-review up to their reports, loads ea
 sends blocking findings to the verifier as audit-to-backlog does. audit-to-backlog also
 dispatches database-reviewer (data) and infra-reviewer (infra); code-review adds them for migration,
 schema, query, IaC or CI diffs; docs-sync may hand approved items to docs-writer; project-baseline asks
-dependency-upgrader for the three dependencies furthest behind. The backlog contract shared by audit-to-backlog, project-baseline and
+dependency-upgrader for the three dependencies furthest behind; session-retro, docs-sync, brain-search and
+brain-capture hand any searching or collecting they delegate to scout. The backlog contract shared by audit-to-backlog, project-baseline and
     implement-backlog is the <code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code> line, defaulting to <code>TODO.md</code> and
     <code>TODO-done.md</code> (<a href="../reference/configuration.html">reference/configuration.md</a>).</p>
     <h2 id="5-data-flows">5. Data flows</h2>
@@ -284,17 +285,17 @@ dependency-upgrader for the three dependencies furthest behind. The backlog cont
       <table>
         <thead><tr><th scope="col">Flow</th><th scope="col">Reads</th><th scope="col">Writes</th><th scope="col">Leaves the machine?</th></tr></thead>
         <tbody>
-          <tr><td>Session start</td><td><code>rules/core.md</code>; after compaction, resume or fork, <code>git</code> state and <code>docs/plans/.devos-state.md</code> of the repository root</td><td>—</td><td>As context to the model provider</td></tr>
-          <tr><td>Task state</td><td>—</td><td><code>docs/plans/.devos-state.md</code> (implement-backlog, pr-cycle, audit-to-backlog, parallel-lanes)</td><td>No</td></tr>
-          <tr><td>Brain search</td><td>Vault Markdown (<code>rg</code>), skipping <code>_archive/</code>, <code>templates/</code>, <code>_views/</code></td><td>—</td><td>Notes read go to the model provider</td></tr>
+          <tr><td>Session start</td><td><code>rules/core.md</code>; after compaction, resume or fork, <code>git</code> state and <code>docs/plans/.devos-state.md</code> of the repository root</td><td>-</td><td>As context to the model provider</td></tr>
+          <tr><td>Task state</td><td>-</td><td><code>docs/plans/.devos-state.md</code> (implement-backlog, pr-cycle, audit-to-backlog, parallel-lanes)</td><td>No</td></tr>
+          <tr><td>Brain search</td><td>Vault Markdown (<code>rg</code>), skipping <code>_archive/</code>, <code>templates/</code>, <code>_views/</code></td><td>-</td><td>Notes read go to the model provider</td></tr>
           <tr><td>Capture / compile</td><td>Session context; vault for duplicates</td><td>One file in <code>_inbox/</code></td><td>Only as context</td></tr>
           <tr><td>Review / garden</td><td>Vault</td><td>Named moves and edits; <code>_reports/garden-log.md</code></td><td>Only as context</td></tr>
           <tr><td>Notices hook</td><td><code>plugin.json</code>, the user-level <code>CLAUDE.md</code>, <code>_inbox/*.md</code> (first 2 KB), <code>_reports/garden-log.md</code> (last 4 KB)</td><td>Markers in the plugin data directory</td><td>Counts and dates only, to the user and as context</td></tr>
           <tr><td>Setup</td><td><code>vault-template/</code>, <code>~/.claude/CLAUDE.md</code>, <code>~/.claude/settings.json</code></td><td>Vault files; the two config edits</td><td>No</td></tr>
-          <tr><td>Skill usage</td><td><code>~/.claude/projects/**/*.jsonl</code> (counts only, <code>--no-filename</code>)</td><td>—</td><td>Counts only, as context</td></tr>
+          <tr><td>Skill usage</td><td><code>~/.claude/projects/**/*.jsonl</code> (counts only, <code>--no-filename</code>)</td><td>-</td><td>Counts only, as context</td></tr>
           <tr><td>Session retro</td><td><code>git</code>, <code>gh pr list</code> (read-only)</td><td>Approved items only</td><td><code>gh</code> queries GitHub</td></tr>
           <tr><td>PR skills</td><td><code>git</code>, <code>gh</code></td><td>Commits, pushes, PR body, thread replies after approval</td><td>Yes, to GitHub, after approval</td></tr>
-          <tr><td>Verifier</td><td>The claim and the repository path</td><td>—</td><td>No</td></tr>
+          <tr><td>Verifier</td><td>The claim and the repository path</td><td>-</td><td>No</td></tr>
           <tr><td>Routines (optional, user-built)</td><td>The vault repository in Anthropic's cloud</td><td><code>_inbox/</code> notes, an issue comment</td><td>Yes; see <a href="../workflow.html#away-from-the-desk-optional">workflow.md</a></td></tr>
         </tbody>
       </table>
@@ -308,7 +309,7 @@ dependency-upgrader for the three dependencies furthest behind. The backlog cont
         <tbody>
           <tr><td>Vault notes</td><td>Text a past session or a phone capture wrote</td><td>Skills treat notes as data and never run commands or open URLs from them; phone captures arrive in <code>_inbox/</code></td></tr>
           <tr><td>PR review comments, issues, CI logs, code comments</td><td>Anyone who can comment, file an issue or push code</td><td>fix-pr, pr-cycle, bug-triage and code-review treat them as data and flag text that tries to instruct the agent; fix-pr flags non-collaborators; four <code>injection-*</code> evals check it</td></tr>
-          <tr><td>Code, diffs, fixtures, fetched pages</td><td>The reviewed repository or the web</td><td>Every agent prompt states they are data; research-analyst never fetches a URL built from local file contents</td></tr>
+          <tr><td>Code, diffs, fixtures, fetched pages</td><td>The reviewed repository or the web</td><td>Every agent prompt states they are data; research-analyst and scout never fetch a URL built from local file contents</td></tr>
           <tr><td>External repositories</td><td><code>.claude/settings.json</code>, hooks, <code>.mcp.json</code> of a client or OSS repo</td><td>Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread</td></tr>
           <tr><td>Subagent output</td><td>A delegate's edits</td><td>Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare <code>git status</code> and <code>git diff</code></td></tr>
           <tr><td>Plugin updates</td><td>A new commit's hooks and rules</td><td><code>SECURITY.md</code>: review the diff from the installed commit before updating; auto-update is off by default</td></tr>

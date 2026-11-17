@@ -1,6 +1,6 @@
 ---
 name: security-auditor
-description: Audit a codebase or diff for exploitable security defects — authn/authz, injection, secret exposure, unsafe deserialization, SSRF, and insecure defaults — without editing anything. Use when the work needs a security pass.
+description: Audit a codebase or diff for exploitable security defects - authn/authz, injection, secret exposure, unsafe deserialization, SSRF, and insecure defaults - without editing anything. Use when the work needs a security pass.
 tools: Read, Grep, Glob, Bash
 model: opus
 maxTurns: 100

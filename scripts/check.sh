@@ -132,10 +132,15 @@ if git grep --untracked -nE '/Users/|/home/|~/www|\.claude2' -- plugin site >&2;
   fail paths plugin "local path (/Users/, /home/, ~/www or .claude2) above"
 fi
 
-files '*.base' 'evals/*.yaml' | while IFS= read -r -d '' f; do
-  ruby -e 'require "date"; require "yaml"; YAML.safe_load($stdin.read, permitted_classes: [Date], aliases: true)' < "$f" \
-    || fail yaml "$f" "invalid YAML"
-done
+# One ruby for every file: a process per file cost about 3 s of every check run.
+files '*.base' 'evals/*.yaml' | ruby -e '
+  require "date"; require "yaml"
+  $stdin.read.split("\0").each do |f|
+    YAML.safe_load(File.read(f), permitted_classes: [Date], aliases: true)
+  rescue Psych::Exception => e
+    warn e.message
+    abort "yaml: #{f}: invalid YAML"
+  end'
 
 # Every eval case directory has a case.yaml whose name is the folder, a prompt.md, the scaffold_script it names,
 # graders/*.md of a known type with at least one deterministic (non-llm) grader and one positive grader, and its own row in evals/README.md.
@@ -237,7 +242,8 @@ git diff "$base" -- plugin/SURFACE.txt |
   end'
 
 # Counts written as digits in the README and docs ("28 skills", "13 eval cases") must match the disk;
-# "3 cases of" and "2 hooks of" are prose, not counts. The landing page's fact rows count too.
+# "3 cases of" and "2 hooks of" are prose, not counts. The landing page's fact rows, scope-table rows and
+# totals in words before "developer-os" count too.
 skills=$(surface | grep -c '^skill '); brain=$(surface | grep -c '^skill brain-'); agents=$(surface | grep -c '^agent ')
 styles=$(surface | grep -c '^output-style '); hooks=$(jq '[.hooks[][].hooks[]] | length' plugin/hooks/hooks.json)
 cases=$(find evals -mindepth 2 -maxdepth 2 -name case.yaml | wc -l | tr -d ' ')
@@ -247,6 +253,16 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
       break if f == "CHANGELOG.md" && l.start_with?("## [") && !l.start_with?("## [Unreleased]")
       break if f == "site/docs/changelog.html" && l =~ /<h2[^>]*>\[/ && l !~ /\[Unreleased\]/
       l.scan(/\b[0-9]+ (?:skills|agents|output styles|hooks|eval cases|cases)\b(?! of\b)/) { |m| puts "#{f}:#{i}:#{m}" }
+      # A total in words names the plugin ("The ten developer-os subagents"); other number words are prose. Only
+      # zero to twenty are read; the tail of a compound ("twenty-eight") is not a total of its own.
+      words = %w[zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty]
+      l.scan(/(?<![\w-])(#{words.join("|")}) developer-os (skills|agents|subagents|output styles|hooks)\b/i) do |w, k|
+        puts "#{f}:#{i}:#{words.index(w.downcase)} #{k.downcase.sub("subagents", "agents")}"
+      end
+      # A scope table states counts as rows: "| Agents | 11 |" in Markdown, <td>Agents</td><td>11</td> on its page.
+      l.scan(/^\| (Brain skills|Agents|Output styles|Hooks) \| ([0-9]+)\b|<td>(Brain skills|Agents|Output styles|Hooks)<\/td><td>([0-9]+)\b/) do |a, n, b, m|
+        puts "#{f}:#{i}:#{n || m} #{(a || b).downcase}"
+      end
       # The landing page states counts as fact rows: <li><span>Label</span><span>N</span></li>.
       if f == "site/index.html"
         l.scan(%r{<li><span>([^<]+)</span><span>([0-9]+)(?:, ([0-9]+))?</span></li>}) do |label, n, m|
@@ -405,12 +421,32 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
   sitemap.tally.each { |u, n| errs << "site: site/sitemap.xml: #{u} is listed #{n} times" if n > 1 }
   abort errs.uniq.join("\n") unless errs.empty?'
 
-# tests/check.test.sh runs the whole check once per case (minutes), so it runs only in CI or with CI=1.
 for t in tests/*.test.sh; do
-  [ -e "$t" ] || continue
-  [ "$t" != tests/check.test.sh ] || [ -n "${CI:-}" ] || continue
+  [ -e "$t" ] && [ "$t" != tests/check.test.sh ] || continue
   sh "$t" || fail tests "$t" "exited non-zero"
 done
+# tests/check.test.sh runs the whole check once per case (minutes), so it runs only in CI or with CI=1, split into
+# one shard per CPU (CHECK_TEST_SHARDS overrides), each in its own copy of the repository, run side by side.
+if [ -e tests/check.test.sh ] && [ -n "${CI:-}" ]; then
+  n=${CHECK_TEST_SHARDS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
+  [[ $n =~ ^[1-9][0-9]*$ ]] || fail tests tests/check.test.sh "CHECK_TEST_SHARDS=$n is not a positive number"
+  # No more shards than case lines (a loop line runs several cases), so no shard is left empty.
+  cases=$(grep -cE '^[[:space:]]*(run |if mine;)' tests/check.test.sh) || true
+  [ "${cases:-0}" -ge 1 ] && [ "$n" -gt "$cases" ] && n=$cases
+  logs=$(mktemp -d)
+  pids=()
+  for ((i = 1; i <= n; i++)); do
+    CHECK_TEST_SHARD="$i/$n" sh tests/check.test.sh > "$logs/$i" 2>&1 &
+    pids+=($!)
+  done
+  bad=0
+  for ((i = 1; i <= n; i++)); do
+    wait "${pids[i - 1]}" || bad=1
+    cat "$logs/$i"
+  done
+  rm -rf "$logs"
+  [ "$bad" -eq 0 ] || fail tests tests/check.test.sh "exited non-zero"
+fi
 
 # --strict fails on unknown or misspelled manifest keys and on any warning: a missing version, or a marketplace
 # entry whose version differs from plugin.json.

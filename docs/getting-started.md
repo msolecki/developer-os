@@ -49,7 +49,7 @@ unreviewed, because it is in `_inbox/` and nobody has checked it. Example:
 
 ```
 Payment webhooks are processed once per event ID.
-  — _inbox/process-webhooks-once-per-event-id.md (inbox, unreviewed)
+  - _inbox/process-webhooks-once-per-event-id.md (inbox, unreviewed)
 ```
 
 ## Review

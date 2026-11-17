@@ -4,7 +4,7 @@ owner: Mateusz Solecki
 last-verified: 2026-11-08
 ---
 
-# developer-os — documentation index
+# developer-os - documentation index
 
 developer-os is a Markdown-only Claude Code plugin. These documents describe the plugin as it is in
 this repository.
