@@ -20,7 +20,8 @@ tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
 failed=0
 r="$tmp/r"
-g() { git -C "$r" -c user.name=t -c user.email=t@example.com -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+# Signing off: a user-level commit.gpgsign would make every commit in the copy depend on a working signer.
+g() { git -C "$r" -c user.name=t -c user.email=t@example.com -c core.hooksPath=/dev/null -c core.fsmonitor=false -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }
 
 # One committed copy of the working tree, without this test (check.sh would run it again); reset before each case.
 mkdir "$r"
@@ -231,6 +232,18 @@ run "a page naming another page's source" fail "site: site/docs/glossary.html: n
 
 edit site/index.html 's|<h2>What ships in the plugin.</h2>|<h2>The 99 skills.</h2>|'
 run "a wrong count on the site" fail "says 99 skills"
+
+edit docs/product/overview.md 's/^| Agents | [0-9]* |/| Agents | 99 |/'
+run "a wrong count in a scope-table row" fail "says 99 agents"
+
+edit site/docs/product/overview.html 's|<td>Agents</td><td>[0-9]*</td>|<td>Agents</td><td>99</td>|'
+run "a wrong count in a scope-table row on the site" fail "says 99 agents"
+
+edit site/agents.html 's/content="The developer-os subagents:/content="The nine developer-os subagents:/'
+run "a wrong total in words before developer-os" fail "says 9 agents"
+
+edit site/agents.html 's/content="The developer-os subagents:/content="The twenty-eight developer-os subagents:/'
+run "the tail of a compound number word is no total" pass
 
 edit site/index.html 's|<li><span>Agents, output styles</span><span>[0-9]*, |<li><span>Agents, output styles</span><span>99, |'
 run "a wrong count in a landing-page fact row" fail "says 99 agents"

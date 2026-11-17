@@ -242,7 +242,8 @@ git diff "$base" -- plugin/SURFACE.txt |
   end'
 
 # Counts written as digits in the README and docs ("28 skills", "13 eval cases") must match the disk;
-# "3 cases of" and "2 hooks of" are prose, not counts. The landing page's fact rows count too.
+# "3 cases of" and "2 hooks of" are prose, not counts. The landing page's fact rows, scope-table rows and
+# totals in words before "developer-os" count too.
 skills=$(surface | grep -c '^skill '); brain=$(surface | grep -c '^skill brain-'); agents=$(surface | grep -c '^agent ')
 styles=$(surface | grep -c '^output-style '); hooks=$(jq '[.hooks[][].hooks[]] | length' plugin/hooks/hooks.json)
 cases=$(find evals -mindepth 2 -maxdepth 2 -name case.yaml | wc -l | tr -d ' ')
@@ -252,6 +253,16 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
       break if f == "CHANGELOG.md" && l.start_with?("## [") && !l.start_with?("## [Unreleased]")
       break if f == "site/docs/changelog.html" && l =~ /<h2[^>]*>\[/ && l !~ /\[Unreleased\]/
       l.scan(/\b[0-9]+ (?:skills|agents|output styles|hooks|eval cases|cases)\b(?! of\b)/) { |m| puts "#{f}:#{i}:#{m}" }
+      # A total in words names the plugin ("The ten developer-os subagents"); other number words are prose. Only
+      # zero to twenty are read; the tail of a compound ("twenty-eight") is not a total of its own.
+      words = %w[zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty]
+      l.scan(/(?<![\w-])(#{words.join("|")}) developer-os (skills|agents|subagents|output styles|hooks)\b/i) do |w, k|
+        puts "#{f}:#{i}:#{words.index(w.downcase)} #{k.downcase.sub("subagents", "agents")}"
+      end
+      # A scope table states counts as rows: "| Agents | 11 |" in Markdown, <td>Agents</td><td>11</td> on its page.
+      l.scan(/^\| (Brain skills|Agents|Output styles|Hooks) \| ([0-9]+)\b|<td>(Brain skills|Agents|Output styles|Hooks)<\/td><td>([0-9]+)\b/) do |a, n, b, m|
+        puts "#{f}:#{i}:#{n || m} #{(a || b).downcase}"
+      end
       # The landing page states counts as fact rows: <li><span>Label</span><span>N</span></li>.
       if f == "site/index.html"
         l.scan(%r{<li><span>([^<]+)</span><span>([0-9]+)(?:, ([0-9]+))?</span></li>}) do |label, n, m|

@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-16
+last-verified: 2026-11-17
 ---
 
 # Development guide
@@ -47,7 +47,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
 | Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff (in a pull request, since the merge base with `origin/$GITHUB_BASE_REF`) still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
-| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md` or `site/docs/changelog.html` (both are read only up to the first released section), `CONTRIBUTING.md`, `SECURITY.md` or a page under `site/` ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk; the landing page names no release, or one other than `plugin.json`'s `version` |
+| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md` or `site/docs/changelog.html` (both are read only up to the first released section), `CONTRIBUTING.md`, `SECURITY.md` or a page under `site/` ("N skills", "N eval cases"; not "N cases of"), a fact row on the landing page (brain skills, skills, agents and output styles, hooks), a scope-table row (a Brain skills, Agents, Output styles or Hooks cell followed by its count, in Markdown or HTML) or a total in words before "developer-os" ("the N developer-os subagents", N a word from zero to twenty) differs from the disk; the landing page names no release, or one other than `plugin.json`'s `version` |
 | Core-rules size | `plugin/rules/core.md` exceeds 8900 bytes, or `CAP` in `state-card.py` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
