@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "9.9.2",
+  "startedAt": "2030-02-01T10:00:00.000Z",
+  "durationSeconds": 60,
+  "costUsd": 0.6,
+  "partial": false,
+  "suite": {
+    "root": "/work/demo",
+    "ablation": "none",
+    "modelOverride": "agent-model-a",
+    "judgeModel": "judge-model-a",
+    "caseFilter": "",
+    "threshold": 0.8,
+    "concurrency": 3,
+    "plugins": [{ "name": "developer-os", "version": "9.1.0", "path": "/work/demo/plugin" }]
+  },
+  "cases": [
+    {
+      "name": "alpha",
+      "dir": "evals/alpha",
+      "source": "mixed",
+      "promptMarkdown": "Do alpha.",
+      "runsPerCase": 1,
+      "timeoutSeconds": 400,
+      "maxTurns": 25,
+      "graders": [],
+      "arms": {
+        "with": [{ "score": 1, "passed": true, "turns": 5, "costUsd": 0.1, "judgeCostUsd": 0, "durationSeconds": 20, "startedAt": "2030-02-01T10:00:01.000Z", "error": null, "tracePath": "/tmp/t/1.jsonl", "skippedPaidGraders": false, "graders": [] }]
+      },
+      "aggregates": { "score": 1, "passRate": 1 }
+    },
+    {
+      "name": "beta",
+      "dir": "evals/beta",
+      "source": "mixed",
+      "promptMarkdown": "Do beta.",
+      "runsPerCase": 1,
+      "timeoutSeconds": 400,
+      "maxTurns": 25,
+      "graders": [],
+      "arms": {
+        "with": [{ "score": 0.5, "passed": false, "turns": 5, "costUsd": 0.1, "judgeCostUsd": 0, "durationSeconds": 20, "startedAt": "2030-02-01T10:00:02.000Z", "error": null, "tracePath": "/tmp/t/2.jsonl", "skippedPaidGraders": false, "graders": [] }]
+      },
+      "aggregates": { "score": 0.5, "passRate": 0 }
+    },
+    {
+      "name": "gamma",
+      "dir": "evals/gamma",
+      "source": "mixed",
+      "promptMarkdown": "Do gamma.",
+      "runsPerCase": 1,
+      "timeoutSeconds": 400,
+      "maxTurns": 25,
+      "graders": [],
+      "arms": {
+        "with": [{ "score": 0.3, "passed": false, "turns": 5, "costUsd": 0.1, "judgeCostUsd": 0, "durationSeconds": 20, "startedAt": "2030-02-01T10:00:03.000Z", "error": null, "tracePath": "/tmp/t/3.jsonl", "skippedPaidGraders": false, "graders": [] }]
+      },
+      "aggregates": { "score": 0.3, "passRate": 0 }
+    },
+    {
+      "name": "delta",
+      "dir": "evals/delta",
+      "source": "mixed",
+      "promptMarkdown": "Do delta.",
+      "runsPerCase": 1,
+      "timeoutSeconds": 400,
+      "maxTurns": 25,
+      "graders": [],
+      "arms": {
+        "with": [{ "score": 1, "passed": true, "turns": 5, "costUsd": 0.1, "judgeCostUsd": 0, "durationSeconds": 20, "startedAt": "2030-02-01T10:00:04.000Z", "error": null, "tracePath": "/tmp/t/4.jsonl", "skippedPaidGraders": false, "graders": [] }]
+      },
+      "aggregates": { "score": 1, "passRate": 1 }
+    }
+  ],
+  "aggregates": { "casesTotal": 4, "casesPassed": 2, "overallScore": 0.7, "overallPassRate": 0.5 }
+}

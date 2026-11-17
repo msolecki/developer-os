@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-08
+last-verified: 2026-11-17
 ---
 
 # Architecture overview
@@ -17,19 +17,21 @@ plugin/                           the installed payload
   .claude-plugin/plugin.json      name, version, description, license, keywords
   rules/core.md                   core rules, printed by a SessionStart cat hook
   SURFACE.txt                     public names, checked against the disk
-  hooks/hooks.json                6 hooks, 10-second timeouts
+  hooks/hooks.json                7 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
   hooks/guard.py                  PreToolUse guard for Bash, Edit, Write and MultiEdit
+  hooks/patterns.py               PostToolUse: a note when an edit adds a risky construct
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/<name>/SKILL.md          32 skills
-  agents/<name>.md                10 agents
+  skills/<name>/SKILL.md          33 skills
+  agents/<name>.md                11 agents
   output-styles/<name>.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
 evals/                            claude plugin eval cases (not installed)
-tests/*.test.sh                   script tests: hooks, check.sh, skill-usage block
+eval-history/                     eval scores per release; scripts/eval-summary.py creates it on its first run
+tests/*.test.sh                   script tests: hooks, skill scripts, check.sh, skill-usage block
 .agnix.toml                       agnix lint settings for CI
 scripts/check.sh                  the repository suite, also run by CI
 docs/                             this documentation; docs/plans/ is git-ignored
@@ -45,13 +47,13 @@ What occupies the context of a session, and when:
 
 | Part | When it loads | Size today | Limit |
 |---|---|---|---|
-| `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | About 8.1 KB | 8900 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
+| `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | About 8.9 KB | 8900 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
-| Skill names and descriptions | Every session, by Claude Code's skill listing; a skill with `disable-model-invocation: true` lists no description | About 11,000 characters for 32 skills | 80–1024 each, 12000 total of the listed ones (`scripts/check.sh`); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10) |
+| Skill names and descriptions | Every session, by Claude Code's skill listing; a skill with `disable-model-invocation: true` lists no description | About 11,200 characters for 33 skills | 80–1024 each, 12000 total of the listed ones (`scripts/check.sh`); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10) |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
-| A skill's body | When the model or the user invokes it | 0.8–14.2 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
-| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–4.7 KB per file | — |
-| An output style | When selected; replaces the default style but keeps coding instructions | 0.6–2.0 KB | — |
+| A skill's body | When the model or the user invokes it | 0.8–17.5 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
+| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–5.3 KB per file | - |
+| An output style | When selected; replaces the default style but keeps coding instructions | 0.7–2.2 KB | - |
 
 The fixed cost per session is the core rules plus the listings. Everything else is paid only on
 use, which is why conventions live in skills and not in the core rules.
@@ -65,6 +67,7 @@ sequenceDiagram
   participant SS as SessionStart: state-card.py
   participant NO as SessionStart: notices.py
   participant G as PreToolUse: guard.py
+  participant P as PostToolUse: patterns.py
   participant F as PostToolUseFailure: repeat-failure.py
   participant N as Stop: capture-nudge.py
   CC->>R: session starts / resumes / compacts
@@ -75,6 +78,8 @@ sequenceDiagram
   NO-->>CC: nothing or systemMessage (user) + additionalContext (agent)
   CC->>G: every Bash, Edit, Write and MultiEdit call, JSON on stdin
   G-->>CC: nothing (allow normal flow), {"permissionDecision":"ask", reason} or additionalContext (fast-check reminder) on git commit
+  CC->>P: after every Edit, Write and MultiEdit call, JSON on stdin
+  P-->>CC: nothing, or additionalContext naming a risky construct the edit added
   CC->>F: a tool call failed, JSON on stdin
   F-->>CC: nothing, or additionalContext "stop retrying" at the third identical failure
   CC->>N: agent finishes a turn, JSON on stdin
@@ -96,6 +101,9 @@ sequenceDiagram
   (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops, or when an Edit, MultiEdit or Write adds a skip or focus marker to a test file (a Write against the file on disk; vendored `node_modules/`, `vendor/` and `.venv/` paths are not test files). A Bash call from one of the
   read-only review agents, named by `agent_type`, also asks when it writes. A `git commit` that hits no category gets an
   `additionalContext` reminder to run the fast check, with no decision.
+- `patterns.py`, after an Edit, Write or MultiEdit, scans only the text the edit adds against a closed
+  table of risky constructs keyed by file extension and adds a note as `additionalContext`, once per
+  pattern and file in a session; it never decides or blocks.
 - `capture-nudge.py` reads `session_id` and `transcript_path` from the input, counts the
   `tool_use` blocks of the transcript's assistant lines, defers while a background task
   launched in the session has no `<task-notification>` and a fresh output file under a `tasks/`
@@ -106,7 +114,7 @@ sequenceDiagram
   keeps the counts per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/repeat-failure/`,
   and at the third failure of the same hash, each within 10 minutes of the last, adds a "stop retrying" reminder. It stores no command text.
 
-The five scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
+The six scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
 
 ## 4. Skill composition
 
@@ -148,7 +156,8 @@ project-baseline, docs-sync and instruction-review up to their reports, loads ea
 sends blocking findings to the verifier as audit-to-backlog does. audit-to-backlog also
 dispatches database-reviewer (data) and infra-reviewer (infra); code-review adds them for migration,
 schema, query, IaC or CI diffs; docs-sync may hand approved items to docs-writer; project-baseline asks
-dependency-upgrader for the three dependencies furthest behind. The backlog contract shared by audit-to-backlog, project-baseline and
+dependency-upgrader for the three dependencies furthest behind; session-retro, docs-sync, brain-search and
+brain-capture hand any searching or collecting they delegate to scout. The backlog contract shared by audit-to-backlog, project-baseline and
 implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to `TODO.md` and
 `TODO-done.md` ([reference/configuration.md](../reference/configuration.md)).
 
@@ -156,17 +165,17 @@ implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to
 
 | Flow | Reads | Writes | Leaves the machine? |
 |---|---|---|---|
-| Session start | `rules/core.md`; after compaction, resume or fork, `git` state and `docs/plans/.devos-state.md` of the repository root | — | As context to the model provider |
-| Task state | — | `docs/plans/.devos-state.md` (implement-backlog, pr-cycle, audit-to-backlog, parallel-lanes) | No |
-| Brain search | Vault Markdown (`rg`), skipping `_archive/`, `templates/`, `_views/` | — | Notes read go to the model provider |
+| Session start | `rules/core.md`; after compaction, resume or fork, `git` state and `docs/plans/.devos-state.md` of the repository root | - | As context to the model provider |
+| Task state | - | `docs/plans/.devos-state.md` (implement-backlog, pr-cycle, audit-to-backlog, parallel-lanes) | No |
+| Brain search | Vault Markdown (`rg`), skipping `_archive/`, `templates/`, `_views/` | - | Notes read go to the model provider |
 | Capture / compile | Session context; vault for duplicates | One file in `_inbox/` | Only as context |
 | Review / garden | Vault | Named moves and edits; `_reports/garden-log.md` | Only as context |
 | Notices hook | `plugin.json`, the user-level `CLAUDE.md`, `_inbox/*.md` (first 2 KB), `_reports/garden-log.md` (last 4 KB) | Markers in the plugin data directory | Counts and dates only, to the user and as context |
 | Setup | `vault-template/`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` | Vault files; the two config edits | No |
-| Skill usage | `~/.claude/projects/**/*.jsonl` (counts only, `--no-filename`) | — | Counts only, as context |
+| Skill usage | `~/.claude/projects/**/*.jsonl` (counts only, `--no-filename`) | - | Counts only, as context |
 | Session retro | `git`, `gh pr list` (read-only) | Approved items only | `gh` queries GitHub |
 | PR skills | `git`, `gh` | Commits, pushes, PR body, thread replies after approval | Yes, to GitHub, after approval |
-| Verifier | The claim and the repository path | — | No |
+| Verifier | The claim and the repository path | - | No |
 | Routines (optional, user-built) | The vault repository in Anthropic's cloud | `_inbox/` notes, an issue comment | Yes; see [workflow.md](../workflow.md#away-from-the-desk-optional) |
 
 The plugin makes no network call itself. What the agent reads becomes model context; an agent with
@@ -178,7 +187,7 @@ web tools could send it further, which the plugin cannot prevent ([SECURITY.md](
 |---|---|---|
 | Vault notes | Text a past session or a phone capture wrote | Skills treat notes as data and never run commands or open URLs from them; phone captures arrive in `_inbox/` |
 | PR review comments, issues, CI logs, code comments | Anyone who can comment, file an issue or push code | fix-pr, pr-cycle, bug-triage and code-review treat them as data and flag text that tries to instruct the agent; fix-pr flags non-collaborators; four `injection-*` evals check it |
-| Code, diffs, fixtures, fetched pages | The reviewed repository or the web | Every agent prompt states they are data; research-analyst never fetches a URL built from local file contents |
+| Code, diffs, fixtures, fetched pages | The reviewed repository or the web | Every agent prompt states they are data; research-analyst and scout never fetch a URL built from local file contents |
 | External repositories | `.claude/settings.json`, hooks, `.mcp.json` of a client or OSS repo | Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread |
 | Subagent output | A delegate's edits | Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare `git status` and `git diff` |
 | Plugin updates | A new commit's hooks and rules | `SECURITY.md`: review the diff from the installed commit before updating; auto-update is off by default |

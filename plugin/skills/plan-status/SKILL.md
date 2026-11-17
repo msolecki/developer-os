@@ -35,9 +35,9 @@ Collect the questions the plan leaves open (an open-questions section, `Q`/`D` i
 ```
 Plan: docs/plans/2026-10-14-search-index.md (rule: checkboxes)
 Done 3 · Open 2 · Blocked 1
-Blocked: "Deploy to staging" — waits on database credentials
-Backlog: TODO.md — P0 0 · P1 2 · P2 4 · P3 1; done 9 · ready 4 · waiting 2 · claimed 0 · orphaned 1
-Orphaned: SEC-04 — Owner .worktrees/sec-04 (2026-10-02)
+Blocked: "Deploy to staging" - waits on database credentials
+Backlog: TODO.md - P0 0 · P1 2 · P2 4 · P3 1; done 9 · ready 4 · waiting 2 · claimed 0 · orphaned 1
+Orphaned: SEC-04 - Owner .worktrees/sec-04 (2026-10-02)
 Next: "Add the reindex command"
 
 1. Index storage? A) SQLite (recommended: no new service) B) Postgres C) in memory

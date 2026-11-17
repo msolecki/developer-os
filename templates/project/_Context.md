@@ -1,4 +1,4 @@
-# <Project name> — context
+# <Project name> - context
 
 <!-- A project navigation INDEX. It tells the agent what to read first and what to ignore
      before touching code. Keep it at 25 lines or fewer: it is a signpost, not

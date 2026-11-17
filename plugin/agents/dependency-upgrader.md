@@ -1,6 +1,6 @@
 ---
 name: dependency-upgrader
-description: Plan the upgrade of one dependency to a target version — breaking changes from its changelog and migration guide, every affected usage in the repository, ordered migration steps and the checks that prove them — without installing or editing anything. Use before bumping a library or framework version.
+description: Plan the upgrade of one dependency to a target version - breaking changes from its changelog and migration guide, every affected usage in the repository, ordered migration steps and the checks that prove them - without installing or editing anything. Use before bumping a library or framework version.
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 model: sonnet
 maxTurns: 100

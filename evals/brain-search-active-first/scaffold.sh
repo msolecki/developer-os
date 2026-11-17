@@ -9,8 +9,8 @@ cat > "$d/vault/_inbox/webhook-event-id-retention.md" <<'EOF'
 ---
 type: decision
 status: inbox
-created: 2026-10-12
-updated: 2026-10-12
+created: __RECENT__
+updated: __RECENT__
 project: sample-shop
 tags: [webhooks, idempotency, deduplication]
 summary: "Deduplicate webhook events on the event ID and keep the stored IDs for 30 days."
@@ -32,3 +32,8 @@ The provider stops retrying an event after 3 days, so older IDs can never match 
 
 - [[webhook-event-id-dedupe]]
 EOF
+# A fixed date would pass the 30-day inbox expiry and the note would never be ranked: keep it 10 days old.
+recent=$(date -v-10d +%F 2>/dev/null || date -d '10 days ago' +%F)
+f="$d/vault/_inbox/webhook-event-id-retention.md"
+sed "s/__RECENT__/$recent/" "$f" > "$f.tmp"
+mv "$f.tmp" "$f"

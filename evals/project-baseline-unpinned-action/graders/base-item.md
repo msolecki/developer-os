@@ -1,0 +1,4 @@
+---
+type: regex
+---
+BASE-\d+

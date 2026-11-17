@@ -18,10 +18,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/docs-sync/SKILL.md@5df19ff8917c">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="plugin/skills/docs-sync/SKILL.md@d067774fa31e">
+<link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
@@ -55,6 +53,7 @@
       <div class="fact"><dt>Writes</dt><dd>Approved doc edits</dd></div>
       <div class="fact"><dt>Asks before</dt><dd>Any write: a numbered list, answered A, B or C</dd></div>
     </dl>
+    <p>In a large repository it delegates the drift probes (collecting the commands, paths, versions and names the docs cite, and whether each exists in the code) to the <a href="../agents.html#scout"><code>developer-os:scout</code></a> agent, never to a general-purpose agent; the drift verdict stays with the skill.</p>
 
     <h2 id="when-it-runs">When it runs</h2>
     <p>When the docs may be stale, after a large change, or when setting up docs in a project:</p>
@@ -78,10 +77,10 @@
     <h2 id="example-output">Example output</h2>
     <div class="terminal">
       <div class="terminal-bar"><i></i><i></i><i></i><span>docs-sync</span></div>
-<pre><code>Docs sync — &lt;repo&gt; at &lt;short sha&gt;
+<pre><code>Docs sync - &lt;repo&gt; at &lt;short sha&gt;
 Missing: 3   Drift: 5   CURRENT-STATE: 41 commits behind   Mistake candidates: 2
 
-1. [missing] docs/pitfalls.md — two entries: the disabled lint rule in eslint.config.js:12, the retry cap
+1. [missing] docs/pitfalls.md - two entries: the disabled lint rule in eslint.config.js:12, the retry cap
 2. [drift] AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
 ...
 Apply which? A: all (recommended)  B: list numbers  C: none</code></pre>

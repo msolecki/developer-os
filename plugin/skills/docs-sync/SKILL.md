@@ -1,13 +1,13 @@
 ---
 name: docs-sync
-description: Check a repository's docs against its code and the project docs standard — scaffold missing pieces, refresh docs/CURRENT-STATE.md, report docs-vs-code drift, and propose the "Likely agent mistakes here" section from git history — writing nothing until the user approves. Use when docs may be stale, after a large change, or when setting up docs in a project; for example "refresh the docs", "are the docs up to date", "sync the docs with the code".
+description: Check a repository's docs against its code and the project docs standard - scaffold missing pieces, refresh docs/CURRENT-STATE.md, report docs-vs-code drift, and propose the "Likely agent mistakes here" section from git history - writing nothing until the user approves. Use when docs may be stale, after a large change, or when setting up docs in a project; for example "refresh the docs", "are the docs up to date", "sync the docs with the code".
 license: MIT
 compatibility: "Claude Code"
 ---
 
 # Docs sync
 
-Read-only until the user approves a numbered list of changes.
+Read-only until the user approves a numbered list of changes. In a large repository, delegate the step-3 probes (collecting the commands, paths, versions and names the docs cite, and whether each exists in the code) to the `developer-os:scout` agent, never to a general-purpose agent; the drift verdict stays with this skill.
 
 ## The standard
 
@@ -61,10 +61,10 @@ Propose at most three items for `## Likely agent mistakes here` in `AGENTS.md`, 
 ## 6. Report and ask
 
 ```
-Docs sync — <repo> at <short sha>
+Docs sync - <repo> at <short sha>
 Missing: 3   Drift: 5   CURRENT-STATE: 41 commits behind   Mistake candidates: 2
 
-1. [missing] docs/pitfalls.md — two entries: the disabled lint rule in eslint.config.js:12, the retry cap
+1. [missing] docs/pitfalls.md - two entries: the disabled lint rule in eslint.config.js:12, the retry cap
 2. [drift] AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
 ...
 Apply which? A: all (recommended)  B: list numbers  C: none

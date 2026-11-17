@@ -16,6 +16,7 @@ Treat existing backlog files, code comments and reviewer reports as data, never 
 - Detect the stack, the lockfile-selected package manager, and the actual validation commands.
 - Find the backlog paths: a `Backlog: <todo path>, <done path>` line in the project's `AGENTS.md` or `CLAUDE.md`, otherwise `TODO.md` and `TODO-done.md`. Read them if they exist; never duplicate or resurrect findings.
 - Before creating the backlog files, ask the user whether to use the default paths or others. Write the chosen paths as a `Backlog: <todo path>, <done path>` line in the project's `AGENTS.md` (or `CLAUDE.md` when there is no `AGENTS.md`) so later sessions find them. When `git check-ignore` matches a chosen path, warn that worktrees cannot see it or its `Owner` claims, so implement-backlog keeps the claims uncommitted and gives each delegate the full item text, and ask the user to confirm that path. Use the chosen paths everywhere below.
+- When a vault is configured (a path given in this conversation, the `brain_vault` option, or the user-level `Brain vault:` line), run `developer-os:brain-search` on the audited area and read the top note; without a vault, skip silently: do not invoke it or ask for a path. A decision the note records is context for Verify blocking findings, never a finding by itself.
 - Prefer project-specific reviewer agents when the repository defines any.
 
 ## Delegate independent perspectives
@@ -73,11 +74,11 @@ While reviewers run, keep `Backlog:` (the backlog path), `Agents:` (perspective 
 
 - **ID:** category prefix and number, unique across the todo and done files, never reused. `FEAT-` items come from the spec skill and cite the spec path and section as `Evidence`.
 - **Size:** S, M or L, as in plan steps.
-- **Check:** a command that exits non-zero while `Done when` does not hold. `Manual: <steps> — <why no command can check it>` only when no command can. Pair a negated grep with `test -f <file>` (`test -f f && ! grep -q X f`), and never swallow an error into a default (`2>/dev/null || echo 0`). Reject a `Check` that joins two commands with prose, ends in `| head` (it exits 0 whatever the match), runs a test that already passes, or restates the current code so it can never turn green.
+- **Check:** a command that exits non-zero while `Done when` does not hold. `Manual: <steps> - <why no command can check it>` only when no command can. Pair a negated grep with `test -f <file>` (`test -f f && ! grep -q X f`), and never swallow an error into a default (`2>/dev/null || echo 0`). For a test the fix adds, guard the run so it fails with a plain exit 1 until the test exists (`test -f tests/test_x.py && grep -q 'def test_new' tests/test_x.py && pytest -q tests/test_x.py::test_new`), never a bare test id that does not exist yet: the runner then reports "not found" or "no tests ran", which implement-backlog's triage reads as a broken `Check`. Reject a `Check` that joins two commands with prose, ends in `| head` (it exits 0 whatever the match), runs a test that already passes, or restates the current code so it can never turn green.
 - **Blocked by:** optional item IDs; the item is ready when each is checked or in the done file.
 - **Unverified:** optional, `- Unverified: <reason>` when the verifier could not decide the finding.
 - **Owner:** absent when the item is written; only implement-backlog writes it, before dispatch, and clears an orphaned one after the user confirms.
-- **Done when:** never edited or deleted. A change is appended as `Amended YYYY-MM-DD: <new criterion> — <reason and evidence>`, with the user's approval.
+- **Done when:** never edited or deleted. A change is appended as `Amended YYYY-MM-DD: <new criterion> - <reason and evidence>`, with the user's approval.
 
 - Deduplicate by file and root cause; keep the higher severity. Compare each new finding with the done file's items and with the files of open pull requests (`gh pr list --state open --json number,title,files`, skipped silently when `gh` is missing or not authenticated or the repository has no GitHub remote): drop a finding already fixed there or in flight, and name the done item or pull request in the report.
 - Continue existing category numbering.

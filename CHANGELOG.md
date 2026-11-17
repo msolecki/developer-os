@@ -4,6 +4,199 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-17
+
+### Added
+
+- Guard: asks before cloud deletes (`aws … delete-*`/`terminate-*`, `aws s3 rm --recursive`, `aws s3 rb`,
+  `gcloud … delete`, `az … delete`), database drops (`psql`/`mysql`/`sqlite3` with `DROP` or `TRUNCATE`,
+  `redis-cli FLUSHALL`/`FLUSHDB`), `docker system prune` and `docker volume rm`/`prune`, publish and merge
+  commands (`npm`/`pnpm`/`yarn publish`, `cargo publish`, `twine upload`, `gem push`, `gh repo delete`,
+  `gh release create`/`delete`, `gh pr merge`) and a downloaded script piped into a shell (`curl … | sh`).
+  Each reason names the safer form; a mention in `grep` or `echo` passes. More protected files: `~/.kube`,
+  `~/.config/gh`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.docker/config.json`.
+- Guard: a session in a linked git worktree is asked before an Edit, Write or MultiEdit into the main
+  checkout or a sibling worktree; the main checkout is never asked.
+- Guard: a project can add its own questions in `.claude/developer-os-guard.json` (literal command prefixes
+  and path globs, at most 50 entries); it can never remove one, the reason is a fixed string, and editing
+  the file asks. session-retro can propose an entry for it.
+- Guard: every ask is logged to `${CLAUDE_PLUGIN_DATA}/guard/asks.jsonl` with the time, reason, rule and
+  tool, never the command; `DEVELOPER_OS_GUARD_LOG=off` disables it.
+- Guard: a Bash command too large to scan inside the hook timeout asks (`slow`) instead of running
+  unchecked: the bound is the command's size (command-position words times words in one view above
+  1,500,000), with a 4-second backstop.
+- Guard: more forms of those classes ask: `gsutil rb` and `gsutil rm -r`, `gcloud storage rm -r`,
+  `aws s3 sync --delete`, `aws … batch-delete-*`, `npm unpublish`, `npm deprecate`, `python -m twine upload`,
+  `gh api -X DELETE`, a download piped into an interpreter that reads its program from the pipe
+  (`curl … | python3`; `python3 -m json.tool` passes), `curl … | (sh)` and `. <(curl …)`; `--dry-run=false`
+  is no dry run.
+- A `PostToolUse` hook, `patterns.py`, tells the agent once per pattern and file when an edit adds a known
+  risky construct (`eval(`, `exec(`, `pickle.load`, `yaml.load(` without a safe loader, `verify=False`,
+  `shell=True`, `.innerHTML =`, `dangerouslySetInnerHTML`, `${{ github.event.` in a workflow `run:` line,
+  `curl … | sh`) and names the safer form. Context only, never a decision; test paths, Markdown and vendored
+  directories are skipped. `DEVELOPER_OS_PATTERNS=off` turns it off (D6).
+- A `setup-check` skill reports what the machine lacks (python3 3.8+, rg, jq, gh and its login, git 2.38+,
+  the vault path, `autoMemoryEnabled`, the Claude Code CLI) with the fix for each gap. Read-only.
+- parallel-lanes: every lane runs under `--max-budget-usd` with a budget the user names per lane (no
+  default; launch refuses a lane without one) and `--output-format json`; Status has a Cost column, quotes
+  the lane's result text and marks a lane cut off by its budget. Integrate previews merge conflicts between
+  `DONE` lanes (`lanes.py conflicts`, git 2.38+), and the merge plan carries a `Conflicts:` line.
+- parallel-lanes: a lane can never edit `.git` or a file under it; `lanes.py` runs git with
+  `core.fsmonitor` and hooks off, and Status and Resume refuse a lane whose worktree `.git` file changed.
+  A `pids.txt` line counts only with a lane name, a numeric PID and a UUID session id; `fast_check` takes no
+  brackets or commas, each `allow` entry is one tool rule, and a budget or turn cap that is not a finite
+  number is refused.
+- Inbox notes expire 30 days after `created` (brain-capture writes `expires:`; a note without the key uses
+  `created` + 30 days). brain-search skips expired inbox notes and reports only their count; brain-review
+  shows them as one group that "archive the expired ones" names; brain-garden lists them. Active notes
+  never expire, and nothing is archived without the user's answer (D4). This applies to the notes already
+  in your inbox: after the update, every inbox note created more than 30 days ago stops being answered
+  from at once; review them with brain-review, which offers them as one Expired group.
+- brain-review pages an inbox above 20 notes: 20 per page grouped by proposed folder, each line with
+  `recommend: promote | merge into <note> | reject` and a reason, and range answers such as
+  `1-12 promote, 13 reject, 14-20 skip` that cover only the page shown.
+- Notes can carry `refs: ["<project slug>:<repo-relative path>"]` and `verified: <date>`, written by
+  brain-capture. In the repository with that slug, brain-search appends
+  `(verify: <path> changed since <date>)` to a claim whose file has a later commit; brain-project-refresh
+  reports it as a changed ref; brain-garden checks the keys' shape.
+- `spec`, `bug-triage`, `audit-to-backlog` and `implement-backlog` run `brain-search` on the topic when a
+  vault is configured and read the top note; without a vault they skip silently. In `implement-backlog`, an
+  `active` note that contradicts an item's `Problem` fails triage point 4; an inbox note is context only.
+- `spec` shows a `Research map` (files, data flow, existing tests; at most 15 lines) before its first
+  question, writes unknowns as `[NEEDS CLARIFICATION: …]` and lists them under Open questions, and writes
+  acceptance criteria as `WHEN <event> THEN <observable result>`.
+- `project-init` step 4, Discover the project's conventions: proposes `docs/reference/conventions.md` from
+  the linter, formatter and test config, the test layout and three modules, each rule with its `file:line`;
+  the audit gains Python, Go and PHP probes. New template `templates/project/docs/reference/conventions.md`.
+- `project-baseline` rows: CI actions pinned to a commit SHA, a workflow audit step, a lockfile
+  vulnerability scan, and `enableAllProjectMcpServers` not `true`.
+- `scripts/eval-summary.py` keeps eval scores between releases in `eval-history/<version>.json`, and
+  `--diff <old> <new>` exits 1 and names each case whose with-plugin score fell by more than 0.1 or that is
+  missing from the new summary; it refuses to compare runs of different agent or judge models.
+- Evals: eighteen new cases: the security-auditor, database-reviewer and infra-reviewer agents
+  on a planted defect and on clean input; four `core.md` rules (`core-asks-before-install`,
+  `core-evidence-before-fixed`, `core-no-skipped-test`, `core-status-block`); `brain-search-expired-inbox`,
+  `brain-review-pages`, `brain-search-stale-ref`, `spec-reads-vault`, `spec-research-map`,
+  `error-handling-python`, `project-init-python` and `project-baseline-unpinned-action`. The fixture inbox
+  notes get relative dates.
+- `docs/workflow.md`: how to keep skill descriptions from being cut (`skillListingBudgetFraction`,
+  `skillOverrides` for your own skills) and how to see the listing's cost (`/doctor`, `/skill-doctor`).
+- `scout` agent (sonnet, read-only commands only): finds and collects facts for the caller. session-retro, docs-sync,
+  brain-search and brain-capture delegate searching and collecting to it instead of a general-purpose
+  agent, which runs on the session's model. It runs only read-only git and `gh`; the `scout-no-edit` eval
+  checks that it hands an edit back to the caller.
+
+### Changed
+
+- Evals: the eighteen new cases were measured once per arm on 2026-11-12 (the scores are in `evals/README.md`); brain-review's paging sentence now names the lower-case `recommend:`, a reason on every line, one page only and the literal question, and two Python error-handling graders accept the function name in place of a line number.
+- Core rules: an interrupted lane is resumed only through parallel-lanes' Resume mode; the rule no longer
+  forbids what that mode does (D23).
+- parallel-lanes: `lanes.py` beside the skill replaces the `launch.sh` and `resume.sh` listings and the
+  Status block; the skill writes `lanes.json` and shows it with one command for approval.
+- `error-handling-conventions` and `testing-conventions` state their rules for any language; TypeScript,
+  Python, Go and PHP examples and probes are in `references/<lang>.md` beside each skill. The
+  error-handling description says "in server and library code".
+- `project-baseline` rows name the practice first and tools as examples; the Agent sandbox row also requires
+  `sandbox.allowUnsandboxedCommands: false` and denies `~/.kube`, `~/.npmrc` and `~/.config/gh`; the
+  decisions list no longer names npm, pnpm, Jest or Vitest. `project-init` Audit is now step 5 and Report
+  step 6.
+- Core rules: a test or gate is seen red by mutating with an edit and undoing that edit, not with git, which
+  discards other work (#140; `testing-conventions` says the same in a bullet of its own). Two sessions that
+  share a checkout announce a commit, a branch switch or an edit of a shared file to each other; when the
+  message cannot be delivered, an edit goes ahead after a `git status` check before and after and a note to
+  the user, and a commit or switch stops and asks (#139).
+- CI pins `actions/checkout` v7.0.1, agnix v0.61.0 and Claude Code 2.1.322.
+- Site: the landing page is four sections (the hero, one session in a terminal, what ships, and the install
+  steps with the questions asked before an install). The three layers, the approval table, the core rules,
+  the daily loop, the fit lists and the links into the docs moved to `workflow.html`, which the landing page
+  links as "How it works".
+- Site: IBM Plex Sans and IBM Plex Mono are served from `site/assets/fonts/` (Latin subset, woff2, with the
+  SIL Open Font License text); no page loads anything from Google Fonts.
+- Site: the two architecture diagrams widen across the on-page contents on a viewport of 1181px or more and
+  fit without sideways scrolling; an "Open full size" button shows each in a full-viewport dialog.
+- Site: `404.html` answers an unknown address with links to the home page, the documentation index and the
+  skills index, and a field that opens the skills index filtered (`skills/index.html?q=<text>`).
+- pr-cycle fetches the base before its verdict; when the base gained commits during the cycle it merges,
+  reviews and tests them once more and asks before pushing; then, pushed or not, it reads GitHub's mergeable state.
+- The Counts stage also reads scope-table rows (`Agents`, `Brain skills`, `Output styles`, `Hooks`) and
+  totals in words before "developer-os"; it caught a stale agent total in the agents page's description.
+- `tests/check.test.sh` commits in its copy with signing off, so a user-level `commit.gpgsign` with no
+  working signer no longer fails 59 of its tests.
+- CI runs `tests/check.test.sh` as one shard per CPU side by side and the YAML stage in one process; a run
+  took 6.6 minutes, nearly all of it that test (D29).
+- CI keeps the pinned agnix, gitleaks and ripgrep tarballs in `actions/cache`, checks each
+  tarball's SHA-256 on every run, retries downloads with backoff, and takes ripgrep from its release
+  instead of `apt-get`; GitHub's release host had failed five pull-request runs with a 504.
+- Core rules: judge a gate by its own exit status, never through `| tail` or `| grep` without `pipefail`.
+- database-reviewer flags a migration that adds or narrows a constraint while seeds or fixtures hold rows
+  it rejects.
+- code-review records the commit it reads and, when the checkout is elsewhere or shared, reads a trusted
+  head from a detached worktree outside the repository, removed after the review.
+- pr-cycle records a base squash of commits the branch already has with `git merge -s ours` before
+  merging the base, only when the trees are identical, reports that commit and undoes it on abort.
+- parallel-lanes passes each lane its own decision-number range and, at integration, keeps both sides of
+  a numbered decisions file whose conflicts only add entries, checking every base number survived.
+- implement-backlog launches `S` and `M` delegates on sonnet, and every delegate brief in
+  implement-backlog and parallel-lanes carries the shell and edit rules (one operation per call, no
+  `$(…)` or heredoc scripts, no `git checkout --`, Read before Edit, a refused command is final).
+- pr-cycle's description names resolving a PR's conflicts as a trigger.
+- parallel-lanes: a lane no longer gets `git diff`, and `lanes.json` is refused when a `fast_check` or
+  `allow` entry runs git: `git diff --output=<file>` let a lane overwrite the main checkout's
+  `.git/config` or a shell rc file.
+- Guard: `--dry-run false` (also `0`, `no`) after npm, pnpm or yarn is no dry run and asks; scout is one of
+  the read-only agents, so a writing Bash call in it asks.
+- scout has no WebFetch (it reads the private vault), and the four skills that use it name it
+  `developer-os:scout`; docs-sync delegates only the drift probes to it and keeps the verdict.
+- brain-capture: when a note already covers the topic, it shows a dated paragraph for that note and
+  appends it only on the user's A answer, instead of writing a duplicate inbox note.
+- audit-to-backlog: a `Check` for a test the fix adds is guarded (`test -f … && grep -q … && <test>`), so it
+  exits 1 until the test exists; implement-backlog's triage reads that as red, not broken (#146).
+- `docs/reference/hooks.md`: why hooks silently do not run in a sandbox that cannot write the plugin data
+  directory, how to give them one, and how to check a headless run (#145).
+- Dependabot opens its pull requests against `development`.
+
+### Fixed
+
+- `tests/guard.test.sh` skips its CPU-time limits for many `-c` words and pairs inside `tests/check.test.sh`'s
+  copies, as it already did for 10000 quoted words; the shards share the CPUs, and `check` on `development`
+  failed after #141. The top-level run still measures them.
+- parallel-lanes: Status and Resume accept a lane worktree when the orchestrator works in a linked worktree (the
+  lane's `.git` points into the main checkout's `.git/worktrees`) or when git wrote a relative `gitdir:`; before,
+  every such lane was marked changed and Resume refused it.
+- parallel-lanes: `lanes.json` is refused when an `allow` rule or `fast_check` opens any command (bare `Bash`,
+  `Bash(*)`, `env`, `xargs`, `sudo`, `find`, `awk`, a shell, interpreter or package runner without a script, module
+  or package such as `sh -c`, `node -e`, `python3.12 -c` or `npx:*`), or a file rule names an absolute, `~` or `..`
+  path; the git check alone let `Bash(sh:*)` run `sh -c 'git …'`. `python3 -m pytest` and `node --test` stay
+  allowed, and the refusal says to put anything else in a script.
+- parallel-lanes: lanes are also denied `**/.git` and `**/.git/**`, so a lane cannot plant a repository in a
+  subdirectory whose config runs a command on its own `git status`.
+- parallel-lanes: launch refuses a `.worktrees/<lane>` that is a plain directory (the lane would commit on the
+  checkout's branch), builds every lane's arguments before the first start, refuses a control character in
+  `fast_check` or `allow`, and names the lanes started before one that cannot start.
+- parallel-lanes: a lane counts as running only while its PID's command line holds its session id, so a reused PID
+  of another `claude -p` does not; Status strips terminal control sequences from lane output and warns when
+  `hashes.txt` is missing.
+- Guard: a database drop or redis flush run through `docker exec`, `docker compose exec`, `podman exec`,
+  `kubectl exec --` or `ssh` asks, as does a flush piped into `redis-cli`; a `DROP` in another `&&` link of the line
+  no longer does.
+- Guard: a Bash command that writes, moves or removes the project's `.claude/developer-os-guard.json` (`rm`, `sed -i`,
+  a redirect into it, `mv`, `git checkout --`, also `rm .claude/*` or the name in another case) asks, as an Edit of
+  it does; reading or staging it passes.
+- Guard: the worktree boundary and project path rules compare paths without case, as macOS volumes do.
+- Guard: `pnpm exec npm publish`, `npx npm publish` and the like ask; `curl … | ash`, `csh`, `fish`, `mksh` or
+  `$SHELL` and a backquoted download handed to `bash -c` ask; `--help` of an asked command passes, and an `az` or
+  `gcloud` option value such as `-n delete-test` is no operand.
+- patterns: `def exec(`, `function eval(` and a method definition such as `exec(sql) {` no longer fire.
+- brain-capture offers no append to an expired inbox note, which brain-search no longer answers from.
+- brain-review shows the `Expired` group with the first page only; "archive the expired ones" still names it later.
+- testing-conventions references prove a test red by running it before the fix, or undoing the fix with one edit,
+  not by checking out the unfixed commit.
+- `scripts/eval-summary.py` refuses to replace an existing `eval-history/<version>.json` without `--force`, which
+  may stand anywhere among the arguments.
+- CI: `tests/check-shard.test.sh` checks that 4 shards own every case exactly once, and a cancelled or timed-out
+  job still prints each shard's output and stops the shards. `docs/development.md` says that Dependabot security updates still target
+  `main`.
+
 ## [0.2.9] - 2026-11-09
 
 ### Added

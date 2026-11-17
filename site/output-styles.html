@@ -21,10 +21,8 @@
 <meta name="dos-source" content="plugin/output-styles/architect.md@9d1be22d881e">
 <meta name="dos-source" content="plugin/output-styles/debug.md@edde2a261640">
 <meta name="dos-source" content="plugin/output-styles/direct-objective.md@54fad9c6d4b6">
-<meta name="dos-source" content="plugin/output-styles/tdd-enforcer.md@7085f68bc398">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="dos-source" content="plugin/output-styles/tdd-enforcer.md@8afcdc61a91a">
+<link rel="preload" as="font" type="font/woff2" href="assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
@@ -117,7 +115,7 @@
       <li><strong>Refactors</strong>, runs the tests of the changed area and reports the pass count in one line; the full suite stays at the push or PR gate.</li>
       <li><strong>Repeats</strong> for the next requirement.</li>
     </ol>
-    <p>One failing test at a time, so each green run attributes to one change. If you ask to skip the test, it reminds you: "TDD mode — first red, then green.", in your language. An "ASAP" or "quickly" request changes only the response format, never the red-before-green order or the stop after the red run. An autonomous loop you started through a skill such as implement-backlog overrides that stop; it then stops at the loop's batch boundaries.</p>
+    <p>One failing test at a time, so each green run attributes to one change. If you ask to skip the test, it reminds you: "TDD mode - first red, then green.", in your language. An "ASAP" or "quickly" request changes only the response format, never the red-before-green order or the stop after the red run. An autonomous loop you started through a skill such as implement-backlog overrides that stop; it then stops at the loop's batch boundaries.</p>
     <h3 id="tdd-enforcer-output">tdd-enforcer output</h3>
     <div class="terminal">
       <div class="terminal-bar"><i></i><i></i><i></i><span>tdd-enforcer</span></div>

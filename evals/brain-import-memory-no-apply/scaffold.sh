@@ -9,10 +9,10 @@ printf 'Vault project slug: demo\n' > "$d/_Context.md"
 m="$d/claude-config/projects/demo/memory"
 mkdir -p "$m"
 cat > "$m/MEMORY.md" <<'MD'
-- [Webhook dedupe](webhook-dedupe.md) — dedupe provider webhooks by event ID.
-- [git fetch prunes tags](git-fetch-prunes-tags.md) — push a new tag at once.
-- [Reply in Polish](reply-in-polish.md) — the user wants answers in Polish.
-- [Audit run 2026-09-01](audit-run-2026-09-01.md) — batch 3 of 7 done.
+- [Webhook dedupe](webhook-dedupe.md) - dedupe provider webhooks by event ID.
+- [git fetch prunes tags](git-fetch-prunes-tags.md) - push a new tag at once.
+- [Reply in Polish](reply-in-polish.md) - the user wants answers in Polish.
+- [Audit run 2026-09-01](audit-run-2026-09-01.md) - batch 3 of 7 done.
 MD
 cat > "$m/webhook-dedupe.md" <<'MD'
 ---

@@ -11,6 +11,8 @@ Work from the conversation in your context and from read-only commands. Never op
 
 With a window argument (`14d`, a date such as `2026-11-01`, or `all`), also run step 4a.
 
+Delegate any searching or collecting to the `developer-os:scout` agent, never to a general-purpose agent: a general-purpose agent runs on the session's model.
+
 ## 1. State check
 
 Run what applies; outside a git repository, skip the git lines and say so.
@@ -46,7 +48,7 @@ In Done, write each check that ran as `<command>: <result> at <short SHA>`, the 
 
 ## 4. Findings
 
-At most 3 items per heading; omit empty headings.
+List only the items worth acting on under each heading; omit empty headings.
 
 Label every candidate `persistent` (true in the next task) or `this-task` (a temporary path, a limit of this task, a one-off workaround). Only `persistent` items go to the vault or instruction files; a `this-task` item goes at most to the plan.
 
@@ -60,7 +62,7 @@ Route each item by this table:
 
 - **Lessons**: a decision or lesson that outlives the task, with its destination. Propose a vault lesson only when it cost a retry, a correction or a re-derivation in this session; a decision needs no such cost. Propose either only after `brain-search` finds no note that already says it. When a note covers the topic but lacks the new part, propose the addition to that note as a diff instead of a new note.
 - **Rule candidates**: a correction the user made (e.g. "no, use pnpm"), as a minimal diff to the destination file in instruction-review style. Before proposing one, search the destination's history for its key phrase (`git log -p -S '<phrase>' -- <file>`; in the developer-os repository, `plugin/rules` and `plugin/skills`). If the change reverses an earlier commit, show that commit and ask whether to reverse it.
-- **Check candidates**: the same mistake made at least twice that a lint rule, a test, a `check.sh`-style script or a hook can detect. Propose the check, not a rule; prose does not stop a repeated mechanical mistake.
+- **Check candidates**: the same mistake made at least twice that a lint rule, a test, a `check.sh`-style script or a hook can detect. Propose the check, not a rule; prose does not stop a repeated mechanical mistake. When the mistake is a command or a path the agent should ask about first, propose one entry for the project's `.claude/developer-os-guard.json` (a literal command prefix or a path glob; the guard hook then asks) as a diff.
 - **Plan update**: for the active plan (found as `developer-os:plan-status` finds it: top-level files of the planning location, default `docs/plans/`; the `Backlog:` files are not plans). Finished: propose deleting it and `docs/plans/.devos-state.md`, and moving open items to the backlog (the todo path of the project's `Backlog:` line, default `TODO.md`), each as an item in the `developer-os:audit-to-backlog` format with the `PLAN-` prefix and the next free number, P2 unless the user names another, the plan's goal line quoted as `Evidence`, and a `Session N:` line for them. Not finished: the new status line and a Next action ending with `Next session: 3 notes` (what to do first, what to avoid, what is still unverified), and each check that ran in the Done format, so a later commit or edit visibly outdates it.
 - **Docs**: for this session's commits that pr-cycle or implement-backlog did not review, the docs findings `developer-os:code-review` defines (a doc the diff makes false), each as a doc edit; when `docs/CURRENT-STATE.md` `Verified at commit:` or `_Context.md` "State as of" predates them, offer `developer-os:docs-sync`.
 - **developer-os feedback**: a skill, hook or rule of this plugin that misfired. Draft the issue title and body without client or project names, and the command for the user to run: `gh issue create --repo msolecki/developer-os --title "…" --body-file <file>`.

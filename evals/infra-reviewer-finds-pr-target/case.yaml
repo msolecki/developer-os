@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: infra-reviewer-finds-pr-target
+tags: [review]
+plugins: ["../../plugin"]
+context:
+  scaffold_script: scaffold.sh

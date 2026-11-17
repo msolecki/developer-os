@@ -1,6 +1,6 @@
 #!/bin/sh
 # Commits the discount change to src/cart.js in the repository at <dir>.
-# Usage: cart-discount.sh <dir> <bug|clean> — bug puts an off-by-one (`<=`) on line 4.
+# Usage: cart-discount.sh <dir> <bug|clean> - bug puts an off-by-one (`<=`) on line 4.
 set -eu
 cd "$1"
 op='<'
