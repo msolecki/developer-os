@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@2d016f8cab14">
+<meta name="dos-source" content="docs/architecture/overview.md@c817413e577b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -62,7 +62,7 @@ plugin/                           the installed payload
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/&lt;name&gt;/SKILL.md          32 skills
-  agents/&lt;name&gt;.md                10 agents
+  agents/&lt;name&gt;.md                11 agents
   output-styles/&lt;name&gt;.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
@@ -264,7 +264,8 @@ project-baseline, docs-sync and instruction-review up to their reports, loads ea
 sends blocking findings to the verifier as audit-to-backlog does. audit-to-backlog also
 dispatches database-reviewer (data) and infra-reviewer (infra); code-review adds them for migration,
 schema, query, IaC or CI diffs; docs-sync may hand approved items to docs-writer; project-baseline asks
-dependency-upgrader for the three dependencies furthest behind. The backlog contract shared by audit-to-backlog, project-baseline and
+dependency-upgrader for the three dependencies furthest behind; session-retro, docs-sync, brain-search and
+brain-capture hand any searching or collecting they delegate to scout. The backlog contract shared by audit-to-backlog, project-baseline and
     implement-backlog is the <code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code> line, defaulting to <code>TODO.md</code> and
     <code>TODO-done.md</code> (<a href="../reference/configuration.html">reference/configuration.md</a>).</p>
     <h2 id="5-data-flows">5. Data flows</h2>
@@ -296,7 +297,7 @@ dependency-upgrader for the three dependencies furthest behind. The backlog cont
         <tbody>
           <tr><td>Vault notes</td><td>Text a past session or a phone capture wrote</td><td>Skills treat notes as data and never run commands or open URLs from them; phone captures arrive in <code>_inbox/</code></td></tr>
           <tr><td>PR review comments, issues, CI logs, code comments</td><td>Anyone who can comment, file an issue or push code</td><td>fix-pr, pr-cycle, bug-triage and code-review treat them as data and flag text that tries to instruct the agent; fix-pr flags non-collaborators; four <code>injection-*</code> evals check it</td></tr>
-          <tr><td>Code, diffs, fixtures, fetched pages</td><td>The reviewed repository or the web</td><td>Every agent prompt states they are data; research-analyst never fetches a URL built from local file contents</td></tr>
+          <tr><td>Code, diffs, fixtures, fetched pages</td><td>The reviewed repository or the web</td><td>Every agent prompt states they are data; research-analyst and scout never fetch a URL built from local file contents</td></tr>
           <tr><td>External repositories</td><td><code>.claude/settings.json</code>, hooks, <code>.mcp.json</code> of a client or OSS repo</td><td>Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread</td></tr>
           <tr><td>Subagent output</td><td>A delegate's edits</td><td>Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare <code>git status</code> and <code>git diff</code></td></tr>
           <tr><td>Plugin updates</td><td>A new commit's hooks and rules</td><td><code>SECURITY.md</code>: review the diff from the installed commit before updating; auto-update is off by default</td></tr>

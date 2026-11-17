@@ -7,7 +7,7 @@ compatibility: "Claude Code"
 
 # Brain capture
 
-Writes exactly one new file, inside `_inbox/`.
+Writes exactly one new file, inside `_inbox/`. Delegate the duplicate search, when worth delegating, to the `scout` agent, never to a general-purpose agent.
 
 ## 1. Locate the vault
 

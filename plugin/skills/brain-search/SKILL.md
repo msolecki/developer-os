@@ -7,7 +7,7 @@ compatibility: "Claude Code"
 
 # Brain search
 
-Read-only. Answer from the vault, never from general knowledge.
+Read-only. Answer from the vault, never from general knowledge. When a search is worth delegating, delegate it to the `scout` agent, never to a general-purpose agent.
 
 ## 1. Locate the vault
 

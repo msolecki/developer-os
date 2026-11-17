@@ -4,6 +4,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `scout` agent (sonnet, read-only commands only): finds and collects facts for the caller. session-retro, docs-sync,
+  brain-search and brain-capture delegate searching and collecting to it instead of a general-purpose
+  agent, which runs on the session's model. It runs only read-only git and `gh`; the `scout-no-edit` eval
+  checks that it hands an edit back to the caller.
+
 ### Changed
 
 - CI runs `tests/check.test.sh` as one shard per CPU side by side and the YAML stage in one process; a run
@@ -20,6 +27,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   merging the base, only when the trees are identical, reports that commit and undoes it on abort.
 - parallel-lanes passes each lane its own decision-number range and, at integration, keeps both sides of
   a numbered decisions file whose conflicts only add entries, checking every base number survived.
+- implement-backlog launches `S` and `M` delegates on sonnet, and every delegate brief in
+  implement-backlog and parallel-lanes carries the shell and edit rules (one operation per call, no
+  `$(…)` or heredoc scripts, no `git checkout --`, Read before Edit, a refused command is final).
+- pr-cycle's description names resolving a PR's conflicts as a trigger.
 
 ## [0.2.9] - 2026-11-09
 

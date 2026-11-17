@@ -11,6 +11,8 @@ Work from the conversation in your context and from read-only commands. Never op
 
 With a window argument (`14d`, a date such as `2026-11-01`, or `all`), also run step 4a.
 
+Delegate any searching or collecting to the `scout` agent, never to a general-purpose agent: a general-purpose agent runs on the session's model.
+
 ## 1. State check
 
 Run what applies; outside a git repository, skip the git lines and say so.
