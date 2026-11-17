@@ -23,7 +23,11 @@ Ask for the vault's absolute path (expand `~`). Reject a path that holds `'`, `"
 ```bash
 TPL='/abs/path/to/plugin/vault-template'; V='/abs/path/to/vault'
 mkdir -p "$V" && cp -R "$TPL/." "$V/"
+f="$V/_inbox/process-webhooks-once-per-event-id.md"; d=$(date +%F)
+awk -v d="$d" 'NR > 1 && /^---/ { fm = 1 } !fm && /^(created|updated):/ { sub(/:.*/, ": " d) } { print }' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 ```
+
+The second and third lines date the example inbox note today: brain-search skips an inbox note 30 days after its `created`, and the smoke test must find it.
 
 ## 2b. Connect an existing vault
 
