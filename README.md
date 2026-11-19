@@ -67,7 +67,7 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 
 ## What the hooks do
 
-The plugin has 7 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
+The plugin has 8 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
 session context. After a compaction, a resume or a fork inside a git repository, a second `SessionStart` hook,
 [`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
@@ -87,6 +87,13 @@ than 7 days, a brain-review reminder (at most weekly); when brain-garden has not
 garden reminder (at most monthly). Vault upkeep never runs on its own: the hook only reminds. It reads
 the vault path from your user-level `CLAUDE.md` only and prints counts, never note names. Set
 `DEVELOPER_OS_NOTICES=off` to turn it off.
+
+On a new session or after `/clear`, inside a git repository whose root `_Context.md` has a `Vault project slug:`
+line, [`plugin/hooks/brain-index.py`](plugin/hooks/brain-index.py) gives the agent the project's vault notes as
+context: one line per note with `project: <slug>` (the hub `PROJECTS/<slug>.md` first, then the newest), its path
+and summary, at most 25 notes and 3000 bytes, with an instruction to read the note on a topic before touching it.
+Superseded, archived, rejected and expired inbox notes are left out; other inbox notes are marked unreviewed. It
+stores nothing; set `DEVELOPER_OS_BRAIN_INDEX=off` to turn it off.
 
 A `Stop` hook ([`plugin/hooks/capture-nudge.py`](plugin/hooks/capture-nudge.py)) counts tool calls
 in the session transcript and reads only background-task and Monitor ids, output-file paths and
@@ -125,7 +132,7 @@ When it adds a known risky construct (`eval(`, `pickle.load`, `verify=False`, `s
 untrusted `github.event` value in a workflow `run:` line and the like), it tells the agent once per pattern and file,
 as context, with the safer form. It never blocks; set `DEVELOPER_OS_PATTERNS=off` to turn it off.
 
-The six scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
+The seven scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;
 without it the core rules still load and the other hooks do not run.
 
@@ -152,7 +159,7 @@ without it the core rules still load and the other hooks do not run.
   performance-engineer, qa-expert, research-analyst, scout, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
-- **Seven hooks on five events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
+- **Eight hooks on five events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, version and vault-upkeep notices on a new session, and the project's vault notes on a new session or `/clear`), `Stop` suggests a session wrap-up
   once per long session, `PreToolUse` asks before installs, force pushes, hook bypasses, destructive commands and edits of secret or agent-config files, `PostToolUse` notes a risky construct an edit adds, and `PostToolUseFailure`
   tells the agent to stop retrying a call that failed three times (see above).
 - **Evals:** behavior checks for the brain skills, the review, backlog, PR, lanes and session skills, the

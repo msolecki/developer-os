@@ -47,6 +47,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `parallel-lanes/lanes.py` (D23) and `setup-check/check.py`. All are standard library only, inside the
   Imports allowlist. `check.py` opens no connection itself but runs `gh auth status`, which asks GitHub
   whether the login works. `scripts/eval-summary.py` is repository tooling outside the plugin.
+- **Amended 2026-11-19:** a seventh hook script, `brain-index.py`, on `SessionStart` `startup` and `clear` (D30).
 
 ## D3. The vault is read and written with the agent's own file tools
 
@@ -104,7 +105,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Date:** 2026-10-15 · **Commit:** `1c324a89`
 - **Decision:** the guard answers `ask` for its three categories and nothing else; both scripts exit
   silently on input they cannot parse or on any error. Every hook script added since (`state-card.py`,
-  `notices.py`, `repeat-failure.py`) follows the same rule.
+  `notices.py`, `repeat-failure.py`, `patterns.py`, `brain-index.py`) follows the same rule.
 - **Why:** a broken guard must not block a session; an extra confirmation costs one click, while a
   missed install rewrites a lockfile. Per the README, an ask resolves to a denial in `claude -p`, the safe
   default for headless runs.
@@ -575,6 +576,37 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   dropping or moving cases out of the pull-request run; retrying every curl error, which also retries a 404 or 403
   until the window ends, so a connection reset mid-download is not retried and the cache covers it instead.
 - **Revisit when:** the shards take more than a few minutes, or a cache miss downloads on most runs.
+
+## D30. The project's vault notes load at session start
+
+- **Date:** 2026-11-19
+- **Decision:** a `SessionStart` hook on `startup` and `clear`, `brain-index.py`, prints the vault notes of the
+  current project as session context: the project is the `Vault project slug:` line of `_Context.md` at the git
+  root (`^[a-z0-9-]+$` only), the vault comes from the user-level option or `CLAUDE.md` line as in D5 and D22, and
+  each note with `project: <slug>` that is not superseded, archived, rejected or an expired inbox note gets one
+  line, its vault-relative path and summary cut to 140 characters, the hub `PROJECTS/<slug>.md` first, then newest
+  `updated` first, under one instruction: read the note on a topic before touching it and cite it. Inbox notes
+  are marked unreviewed (D4). At most 25 notes and 3000 bytes, then "+N more: use brain-search". It reads the
+  first 4 KB of each note on every run and stores nothing: no index file is built or kept (D3 holds), and it adds
+  no network call or dependency (D2). `DEVELOPER_OS_BRAIN_INDEX=off` turns it off. Unlike D22's notices, which show
+  the user counts only, it names notes, but only to the agent, which may read the vault anyway.
+- **Why:** agents rarely looked the vault up: brain-search ran 40 times in about 900 sessions while brain-capture
+  wrote 144 notes, so lessons were written and not read back, despite the core rule on brain-search before a large
+  task. A list in context at the start costs the agent one Read to reach the right note, with no decision to search.
+- **Budget (D10):** the block costs at most 3000 bytes, about 750 tokens, and only in a session whose repository
+  names a slug that has notes; a session without one pays nothing. It is a separate hook output: Claude Code caps
+  each hook's output at 10,000 characters on its own, "even when several hooks run for the same event"
+  (https://code.claude.com/docs/en/hooks, checked 2026-11-19), so it takes nothing from the core rules' 8900 bytes
+  or the state card's 1024, and it never runs beside the state card (`compact|resume|fork`).
+- **Trust:** the slug is repository content, so a cloned repository could name another of the user's projects and
+  get that project's paths and summaries listed; it cannot point the hook at a directory, since the vault path
+  comes from user-level config only, and the slug pattern admits no path. Note text is printed as data, without
+  control characters.
+- **Alternatives rejected:** a stronger core rule to run brain-search (the existing one fired 40 times in about 900
+  sessions, and `core.md` has no room); a stored index file in the vault (D3: one more thing to rebuild and drift);
+  printing whole notes (unbounded context); extending `notices.py` (it promises the user note-free output, is
+  throttled by markers and runs on `startup` only).
+- **Revisit when:** the 25-note cap hides the notes agents need in a large project, or brain-search use stays flat.
 
 ## Rules history
 
