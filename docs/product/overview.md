@@ -28,7 +28,7 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    conventions skills, eleven agents (nine specialists, a collector and a verifier), four output styles and small hooks, among them a guard on Bash, Edit, Write and MultiEdit.
 
 The plugin is Markdown and JSON plus seven Python 3 hook scripts (standard library only). There is no server, database,
-index, binary or network call in the plugin's hooks. Two skill scripts start other programs: setup-check runs
+stored index, binary or network call in the plugin's hooks. Two skill scripts start other programs: setup-check runs
 `gh auth status`, which asks GitHub whether the login works, and parallel-lanes starts the `claude -p` lanes
 the user approved.
 

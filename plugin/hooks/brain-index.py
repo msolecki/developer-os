@@ -74,7 +74,9 @@ def project_slug(cwd):
         return None
     top = os.fsdecode(r.stdout.rstrip(b"\n"))
     m = re.search(r"^[ \t>*_-]*Vault project slug:[*_]*[ \t]*(.*)$", head(os.path.join(top, "_Context.md"), 65536, links=False), re.M)
-    slug = m.group(1).strip().strip("`*_\"' \t") if m else ""
+    # The template line goes on after the slug: **Vault project slug:** `my-app` (the `project:` value ...)
+    words = m.group(1).split() if m else []
+    slug = words[0].strip("`*_\"'") if words else ""
     return slug if re.fullmatch(r"[a-z0-9-]{1,64}", slug) else None
 
 

@@ -95,12 +95,26 @@ check "off switch is silent" "$out" ""
 ctx 'Vault project slug: demo-app'
 run
 check "plain slug line" "$(has 'DEV/newest.md')" yes
+ctx '**Vault project slug:** `demo-app` (the `project:` value of this project'"'"'s notes in the Brain vault)'
+run
+check "template line with a trailing note" "$(has 'DEV/newest.md')" yes
+ctx '**Vault project slug:** `<project-slug>` (the `project:` value)'
+run
+check "unfilled template line: silent" "$out" ""
+# Notes that carry the invalid slugs, so only the slug check keeps them out.
+note DEV/bad-case.md Demo_App active "$(ago 1)" "Bad case slug."
+note DEV/bad-path.md ../etc active "$(ago 1)" "Path slug."
+note DEV/no-project.md '' active "$(ago 1)" "Empty project."
 ctx 'Vault project slug: Demo_App'
 run
 check "invalid slug: silent" "$out" ""
 ctx '**Vault project slug:** `../etc`'
 run
 check "path-like slug: silent" "$out" ""
+ctx '**Vault project slug:** ``'
+run
+check "empty slug: silent" "$out" ""
+rm -f "$tmp/vault/DEV/bad-case.md" "$tmp/vault/DEV/bad-path.md" "$tmp/vault/DEV/no-project.md"
 ctx 'Purpose: demo.'
 run
 check "no slug line: silent" "$out" ""
