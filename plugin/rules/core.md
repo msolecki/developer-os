@@ -27,18 +27,18 @@
 ## Workflow
 
 - Stop when the fast check passes and you can give the closing status block (see Communication). A session that must end earlier stops at its last green commit, with the rest recorded in the plan.
-- Ask a task's open decisions up front, in one batch of numbered questions with options A/B/C, one marked recommended, answerable in one line ("1A 2B"). Never ask a confirmation the user's or project's rules already settle.
+- Ask a task's open decisions up front, in one batch of numbered questions with options A/B/C, one marked recommended, answerable in one line ("1A 2B"); a decision that surfaces later is asked the same way, never assumed. Never ask a confirmation the user's or project's rules already settle.
 - Before changing over 50 lines of code, write a plan: one per task, in the project's git-ignored planning location (default `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage. The active plan is the most recently updated plan there whose task is not done; specs go to `docs/specs/` or the project's spec location. After a context reset, resume with "continue from <plan path>". When the task is done, check that every step landed in committed code, then delete the plan; move unfinished items to the backlog (`Backlog:` paths, default `TODO.md`). A project may override this in its `AGENTS.md`.
-- Every plan step states What (deliverable), Where (files), How (approach), and **Test** (verification). The system stays deployable after every step. Use S/M/L complexity instead of time estimates.
-- A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
-- An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, expected output format, and what is not started or not verified. Exclude debugging history, rejected approaches, and full conversation dumps.
-- Before a large task, look for earlier decisions: when a vault is configured (the `brain_vault` option or a `Brain vault:` line), search the vault with the `brain-search` skill and read the selected note (otherwise skip this silently), then read the project's active plan. Search raw session transcripts only when the user asks.
+- Every plan step states What (deliverable), Where (files), How (approach), and **Test** (verification). The system stays deployable after every step. Estimate complexity as S/M/L, never time.
+- A fresh subagent without the author's context reviews agent-generated code; reviewer and author are different agents.
+- An agent handoff (a file or a subagent prompt) contains the objective, file paths, constraints, expected output format, and what is not started or not verified. Exclude debugging history, rejected approaches, and full conversation dumps.
+- Before a large task, look for earlier decisions: when a vault is configured (the `brain_vault` option or a `Brain vault:` line), run the `brain-search` skill and read the selected note (otherwise skip silently), then read the project's active plan. Search raw session transcripts only when the user asks.
 - During compaction, preserve the modified-file list, the project's test commands, the current objective, and the user's language. Task state that must survive it lives in `docs/plans/.devos-state.md`, not only in chat.
 - Show only failures from tests and builds, never a full passing log.
 - Judge a gate by its own exit status: never read it through `| tail` or `| grep` without `pipefail`, or redirect to a file and read its summary line.
 - Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence. A new or changed gate or test counts only after you saw it fail: mutate with an edit, watch it go red, undo that edit (not with git, which discards other work).
 - Before saying done, list the background shells and tasks you started and stop those no longer needed.
-- Never promise to report back later ("I'll let you know"): you cannot act between turns. Run the work as a background task that notifies on completion, or give an ETA and what the user should check.
+- Never promise to report back later ("I'll let you know"): you cannot act between turns; run the work as a background task that notifies on completion, or give an ETA and what to check.
 - If the user asks for the same thing three times, say so and propose a skill or hook.
 
 ### Parallel agents - one checkout each

@@ -132,11 +132,18 @@ finds it: the `brain_vault` option in the user-level `settings.json`, else the `
 
 **Notes listed:** every `*.md` under the vault, outside `_archive/`, `templates/`, `_views/`, `_reports/`, dot
 directories and the vault-root `README.md`, at most 5000 files, reading the first 4 KB of each regular file
-(symlinks, FIFOs and devices skipped). A note is listed when its frontmatter has `project: <slug>` (quoted, or
-inside a `[a, b]` list) and its `status` is not `superseded`, `archived` or `rejected`. An inbox note
+(symlinks, FIFOs and devices skipped); a note whose frontmatter does not close within those 4 KB is not listed. A
+note is listed when its frontmatter has `project: <slug>` (quoted, inside a `[a, b]` list, or as a `- <slug>` line
+of a block list under `project:`) and its `status` is not `superseded`, `archived` or `rejected`. An inbox note
 (`status: inbox`) past its `expires:` date, or more than 30 days after `created` without one, is skipped, as in
-brain-search; any other inbox note is marked `(inbox, unreviewed)`. `PROJECTS/<slug>.md`, the hub, is listed
-first whatever its `project:` field says; the rest follow newest `updated` (else `created`) first, then by path.
+brain-search; any other inbox note is marked `(inbox, unreviewed)`. `PROJECTS/<slug>.md`, the hub, is read by its
+path before the scan, so the 5000-file limit never drops it, and is listed first whatever its `project:` field
+says; the rest follow newest `updated` (else `created`) first, then by path.
+
+**Trust:** the slug is repository content. A cloned repository whose `_Context.md` names another of your projects'
+slugs gets that project's note paths and summaries into its sessions; it cannot name a directory, since the vault
+path comes from user-level config only and the slug pattern admits no path. When you work in a repository you do
+not trust, start the session with `DEVELOPER_OS_BRAIN_INDEX=off`.
 
 **Output:** plain stdout, which becomes session context, only when at least one note is listed:
 
@@ -150,7 +157,7 @@ PROJECTS/<slug>.md — <summary>
 
 The summary is the note's `summary:` (else its `title:`), on one line without control characters, cut to 140
 characters with `…`. At most 25 note lines, and the whole block, the `+<n> more` line included, stays within 3000
-bytes. The block costs up to about 750 tokens per session that has a slug with notes; it is a separate hook output,
+bytes; a header that would leave no room (a very long vault path) prints nothing. The block costs up to about 750 tokens per session that has a slug with notes; it is a separate hook output,
 so Claude Code measures it against its own 10,000-character cap, not the core rules' one.
 
 **State:** none. The hook stores nothing between runs.

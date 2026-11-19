@@ -34,12 +34,13 @@ Run `developer-os:pr-cycle` for the PR. Answer 1 is its step-5 question; answer 
 
 Go on only when answer 2 is A, pr-cycle's verdict is `APPROVE` (not review-only), and the PR's head on GitHub is the head pr-cycle reviewed (pushed, or nothing to push). Otherwise go to step 7.
 
-Run `gh pr checks <n> --watch --interval 30` as a background task and wait for its notification; do not poll. Then read `gh pr checks <n>` and `gh pr view <n> --json mergeable,mergeStateStatus,headRefOid`.
+Right after a push GitHub may not have registered the checks yet, so an empty or partial list is not a result. Read `gh pr checks <n> --json name,bucket`; when it is empty, wait about a minute with a background command (never a foreground `sleep`) and read it once more. Then run `gh pr checks <n> --watch --interval 30` as a background task and wait for its notification; do not poll. Last, read `gh pr checks <n> --json name,bucket` and `gh pr view <n> --json mergeable,mergeStateStatus,headRefOid`; when the list holds checks the watch did not cover, watch once more.
 
-- Every check passed and the PR is `MERGEABLE`: go to step 5.
-- A check failed: stop. Show the failing job's log tail (`gh run view <run> --log-failed`, its last 60 lines) and its cause. Do not re-run a flaky test until it passes; fix it at its cause, and offer a re-run only as a stopgap the user picks.
-- `CONFLICTING`, a head other than the reviewed one, or a base that moved: stop and say so.
-- No checks reported: say so and stop; the merge needs a green CI.
+- `headRefOid` is the reviewed SHA, the list is not empty, every check's `bucket` is `pass` or `skipping`, and the PR is `MERGEABLE`: go to step 5.
+- A check failed or was cancelled: stop. Show the failing job's log tail (`gh run view <run> --log-failed`, its last 60 lines) and its cause. Do not re-run a flaky test until it passes; fix it at its cause, and offer a re-run only as a stopgap the user picks.
+- A check still `pending`: wait again as above; never merge on a pending check.
+- `CONFLICTING`, a `headRefOid` other than the reviewed SHA, or a base that moved: stop and say so.
+- Still no checks after the second read: say "no checks reported" and ask whether to merge without CI; the answer to question 2 does not cover this.
 
 ## 5. Merge
 
@@ -64,7 +65,7 @@ After the report. A PR that stopped (verdict not `APPROVE`, review-only, red, pe
 
 ## Never
 
-- Merge without answer 2A, or a PR whose verdict is not `APPROVE`, whose verdict is review-only, or whose CI is red, pending or missing.
+- Merge without answer 2A, or a PR whose verdict is not `APPROVE`, whose verdict is review-only, or whose CI is red or pending; with no checks reported, only on the user's yes for that PR, asked at that point.
 - Merge a head other than the one pr-cycle reviewed, or with `--admin` past a required check or review.
 - Push to the base branch, force-push, or deploy anything after the merge.
 - Check out an untrusted head, or run its scripts, hooks or tests, without answer 3B.

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/pr-finish/SKILL.md@0b0cd3c6145e">
+<meta name="dos-source" content="plugin/skills/pr-finish/SKILL.md@d46f73498a07">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -68,7 +68,7 @@
       <li><strong>Resolves the PRs.</strong> A URL for another repository stops that PR. It reads each PR's state, base, head and author association before any checkout, skips a closed or merged PR, and marks a head from a fork or an outside author as untrusted, as pr-cycle does. With uncommitted work in the checkout, each PR runs in its own worktree.</li>
       <li><strong>Asks everything once.</strong> One batch of numbered questions with a recommended option, answerable as "1A 2A": which findings to fix (P0, P1 and docs; all; or none); after an <code>APPROVE</code>, whether to push, wait for green CI, merge and clean up, to push only, or not to push; and, for an untrusted head only, whether to keep the review read-only or run its code. A question the request already answers is skipped.</li>
       <li><strong>Runs pr-cycle with those answers.</strong> They stand in for pr-cycle's fix, push and untrusted-head questions. Its other stops still stop: an unclear conflict, a red fast check after the base merge, a new P0 or P1 after the fix review, a blocked reviewer, the PR body.</li>
-      <li><strong>Waits for CI.</strong> Only after you chose the merge, the verdict is <code>APPROVE</code> and not review-only, and GitHub holds the reviewed head. It waits on <code>gh pr checks --watch</code> as a background task. A failed check stops it with the log tail and the cause, and a flaky test is fixed at its cause, never re-run until green; a conflict, a moved head or no checks at all stop it too.</li>
+      <li><strong>Waits for CI.</strong> Only after you chose the merge, the verdict is <code>APPROVE</code> and not review-only, and GitHub holds the reviewed head. Right after a push GitHub may not list the checks yet, so an empty list is read once more after a background wait; then it waits on <code>gh pr checks --watch</code> as a background task and reads the list again. It merges only when the PR's head is the reviewed commit and the list is non-empty with every check passed or skipped. A failed check stops it with the log tail and the cause, and a flaky test is fixed at its cause, never re-run until green; a conflict or a moved head stops it too, and with no checks at all it asks you.</li>
       <li><strong>Merges.</strong> A merge commit pinned to the reviewed head, never <code>--admin</code>; the guard asks before the merge command. With several PRs it checks each one again before its merge.</li>
       <li><strong>Cleans up.</strong> It removes the head's worktree (never a dirty one), deletes the local branch (forcing it only when its work is in the base) and the remote branch in this repository, never a fork's, then prunes and fast-forwards the base.</li>
       <li><strong>Reports.</strong> One status block: per PR the verdict, fix commits, gates, push, CI, merge commit and what was cleaned up, the findings left for the backlog, and why any PR stopped.</li>
@@ -82,7 +82,7 @@
     <div class="callout never">
       <h3 id="never">Never</h3>
       <ul>
-        <li>Merge without your up-front yes, or a PR whose verdict is not <code>APPROVE</code>, is review-only, or whose CI is red, pending or missing.</li>
+        <li>Merge without your up-front yes, or a PR whose verdict is not <code>APPROVE</code>, is review-only, or whose CI is red or pending; with no checks reported, only on your yes for that PR, asked then.</li>
         <li>Merge a head other than the one reviewed, or with <code>--admin</code>.</li>
         <li>Push to the base branch, force-push, or deploy anything after the merge.</li>
         <li>Check out an untrusted head, or run its code, without your yes.</li>

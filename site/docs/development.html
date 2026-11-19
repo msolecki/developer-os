@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@cfceebf0789f">
+<meta name="dos-source" content="docs/development.md@5ceaf0695004">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -139,7 +139,7 @@ safe to show, and that the card is cut to its cap; <code>tests/guard.test.sh</co
 <code>tests/repeat-failure.test.sh</code> feeds failed tool calls to <code>repeat-failure.py</code> and expects the reminder only at the third failure of the same call;
 <code>tests/capture-nudge.test.sh</code> builds synthetic transcripts and checks the exit code, the JSON output and the message;
 <code>tests/notices.test.sh</code> runs <code>notices.py</code> with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's <code>CLAUDE.md</code> is ignored, that the <code>brain_vault</code> option in the user-level <code>settings.json</code> wins over the line, an empty one falls back to it and its environment variable is ignored, and that no note name is printed;
-<code>tests/brain-index.test.sh</code> runs <code>brain-index.py</code> with a temporary config directory, vault and git repository and checks the hub-first, newest-first order, the skipped notes (superseded, archived, rejected, expired inbox, under <code>_archive/</code> or <code>templates/</code>, another project's, a symlink, a FIFO), the unreviewed marker, the plain and bold slug lines, silence for an invalid or missing slug, outside git, on <code>resume</code>/<code>compact</code>, without a vault and with its off switch, the vault lookup order, the 140-character summary cut, and the 25-note and 3000-byte caps with the <code>+N more</code> line;
+<code>tests/brain-index.test.sh</code> runs <code>brain-index.py</code> with a temporary config directory, vault and git repository and checks the hub-first, newest-first order, the skipped notes (superseded, archived, rejected, expired inbox, under <code>_archive/</code> or <code>templates/</code>, another project's, a symlink, a FIFO), the unreviewed marker, the plain and bold slug lines, silence for an invalid or missing slug, a symlinked <code>_Context.md</code>, outside git, on <code>resume</code>/<code>compact</code>, without a vault and with its off switch, the vault lookup order and a symlinked user-level <code>CLAUDE.md</code>, a block list under <code>project:</code>, frontmatter past 4 KB left out, the hub kept first past the 5000-file scan limit, the 140-character summary cut, and the 25-note and 3000-byte caps with the <code>+N more</code> line;
 <code>tests/check.test.sh</code> breaks a copy of the repository once per stage it covers and expects that
 stage's message; it runs the whole check once per case (several minutes), so <code>scripts/check.sh</code> runs it
 only when <code>CI</code> is set (GitHub Actions sets it), split into one shard per CPU run side by side, each in its own copy

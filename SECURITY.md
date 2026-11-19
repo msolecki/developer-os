@@ -30,7 +30,9 @@ Never include the content of a vault or a secret. Describe it instead.
   line of the user-level `CLAUDE.md`, the first 2 KB of `_inbox/` notes and the last line of
   `_reports/garden-log.md`, and shows counts and dates, never note names, and on a new session or `/clear`
   `brain-index.py`, which reads the `Vault project slug:` line of the repository's `_Context.md` and the first
-  4 KB of each vault note and gives the agent the paths and summaries of that project's notes; `Stop` runs
+  4 KB of each vault note and gives the agent the paths and summaries of that project's notes (a cloned
+  repository's `_Context.md` can name another of your projects' slugs and so get that project's paths and
+  summaries into its session; set `DEVELOPER_OS_BRAIN_INDEX=off` in a repository you do not trust); `Stop` runs
   `capture-nudge.py`, which counts `tool_use` entries in the session transcript and reads only
   background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; `PreToolUse` runs `guard.py` on Bash, Edit, Write and MultiEdit calls and can only ask for confirmation; `PostToolUseFailure` runs `repeat-failure.py`, which stores per-session hashes of failed calls, never their text, and can only add a reminder; `PostToolUse` runs `patterns.py` on Edit, Write and MultiEdit calls, which reads only the hook input (the text added and replaced, the file path), no file, and can only add a note. The guard also reads a project's `.claude/developer-os-guard.json`, which can only add questions, and runs `git worktree list` for a session in a linked worktree. The guard keeps a local log of its asks (time, reason, rule and tool, never the command).
   The seven scripts are Python 3 with the standard library only, make no network calls and fail open. The plugin ships no binary,

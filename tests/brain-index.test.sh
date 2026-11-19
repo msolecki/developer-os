@@ -139,6 +139,39 @@ rm -f "$tmp/config/settings.json"
 run startup "$tmp/repo" CLAUDE_PLUGIN_OPTION_BRAIN_VAULT="$tmp/vault2"
 check "the option's environment variable is not trusted" "$(has 'DEV/two.md')" no
 
+# A user-level CLAUDE.md that is a symlink (a second config directory linked to the first) is read.
+mkdir -p "$tmp/config2"
+ln -s "$tmp/config/CLAUDE.md" "$tmp/config2/CLAUDE.md"
+run startup "$tmp/repo" CLAUDE_CONFIG_DIR="$tmp/config2"
+check "symlinked user-level CLAUDE.md is read" "$(has 'DEV/newest.md')" yes
+
+# A symlinked _Context.md is repository content pointing elsewhere: ignored.
+mv "$tmp/repo/_Context.md" "$tmp/context-elsewhere.md"
+ln -s "$tmp/context-elsewhere.md" "$tmp/repo/_Context.md"
+run
+check "symlinked _Context.md is ignored" "$out" ""
+rm -f "$tmp/repo/_Context.md"
+mv "$tmp/context-elsewhere.md" "$tmp/repo/_Context.md"
+
+# A block list under project: counts; frontmatter that does not close within the first 4 KB is not read.
+printf -- '---\nstatus: active\nupdated: %s\nsummary: Block list.\nproject:\n  - other-app\n  - demo-app\ntags: [x]\n---\n' "$(ago 1)" > "$tmp/vault/DEV/block.md"
+printf -- '---\nstatus: active\nproject: other-app\nsummary: Block list, other project.\nprojects:\n  - demo-app\n---\n' > "$tmp/vault/DEV/block-other.md"
+pad=$(python3 -c 'print("x" * 4200)')
+printf -- '---\nstatus: active\nproject: demo-app\nsummary: Long frontmatter.\nnotes: "%s"\n---\n' "$pad" > "$tmp/vault/DEV/long-front.md"
+run
+check "a block list under project: counts" "$(has 'DEV/block.md')" yes
+check "a list under another key does not count" "$(has 'DEV/block-other.md')" no
+check "frontmatter past 4 KB is not read" "$(has 'DEV/long-front.md')" no
+rm -f "$tmp/vault/DEV/block.md" "$tmp/vault/DEV/block-other.md" "$tmp/vault/DEV/long-front.md"
+
+# The hub is read by its path, so the 5000-file scan limit cannot drop it.
+mkdir -p "$tmp/vault/AAA"
+i=0
+while [ $i -lt 5001 ]; do : > "$tmp/vault/AAA/n$i.md"; i=$((i + 1)); done
+run
+check "hub still first past the scan limit" "$(printf '%s\n' "$out" | sed -n 3p)" "PROJECTS/demo-app.md — Hub of the demo app."
+rm -rf "$tmp/vault/AAA"
+
 # Summaries: control characters dropped, cut to 140 characters without splitting a character.
 long=$(python3 -c 'print("zażółć " * 40)')
 note DEV/long.md demo-app active "$(ago 0)" "$long"
