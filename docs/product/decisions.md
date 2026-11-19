@@ -47,6 +47,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `parallel-lanes/lanes.py` (D23) and `setup-check/check.py`. All are standard library only, inside the
   Imports allowlist. `check.py` opens no connection itself but runs `gh auth status`, which asks GitHub
   whether the login works. `scripts/eval-summary.py` is repository tooling outside the plugin.
+- **Amended 2026-11-19:** a seventh hook script, `brain-index.py`, on `SessionStart` `startup` and `clear` (D30).
 
 ## D3. The vault is read and written with the agent's own file tools
 
@@ -104,7 +105,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Date:** 2026-10-15 · **Commit:** `1c324a89`
 - **Decision:** the guard answers `ask` for its three categories and nothing else; both scripts exit
   silently on input they cannot parse or on any error. Every hook script added since (`state-card.py`,
-  `notices.py`, `repeat-failure.py`) follows the same rule.
+  `notices.py`, `repeat-failure.py`, `patterns.py`, `brain-index.py`) follows the same rule.
 - **Why:** a broken guard must not block a session; an extra confirmation costs one click, while a
   missed install rewrites a lockfile. Per the README, an ask resolves to a denial in `claude -p`, the safe
   default for headless runs.
@@ -576,6 +577,56 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   until the window ends, so a connection reset mid-download is not retried and the cache covers it instead.
 - **Revisit when:** the shards take more than a few minutes, or a cache miss downloads on most runs.
 
+## D30. The project's vault notes load at session start
+
+- **Date:** 2026-11-19
+- **Decision:** a `SessionStart` hook on `startup` and `clear`, `brain-index.py`, prints the vault notes of the
+  current project as session context: the project is the `Vault project slug:` line of `_Context.md` at the git
+  root (`^[a-z0-9-]+$` only), the vault comes from the user-level option or `CLAUDE.md` line as in D5 and D22, and
+  each note with `project: <slug>` that is not superseded, archived, rejected or an expired inbox note gets one
+  line, its vault-relative path and summary cut to 140 characters, the hub `PROJECTS/<slug>.md` first, then newest
+  `updated` first, under one instruction: read the note on a topic before touching it and cite it. Inbox notes
+  are marked unreviewed (D4). At most 25 notes and 3000 bytes, then "+N more: use brain-search". It reads the
+  first 4 KB of each note on every run and stores nothing: no index file is built or kept (D3 holds), and it adds
+  no network call or dependency (D2). `DEVELOPER_OS_BRAIN_INDEX=off` turns it off. Unlike D22's notices, which show
+  the user counts only, it names notes, but only to the agent, which may read the vault anyway.
+- **Why:** agents rarely looked the vault up: brain-search ran 40 times in about 900 sessions while brain-capture
+  wrote 144 notes, so lessons were written and not read back, despite the core rule on brain-search before a large
+  task. A list in context at the start costs the agent one Read to reach the right note, with no decision to search.
+- **Budget (D10):** the block costs at most 3000 bytes, about 750 tokens, and only in a session whose repository
+  names a slug that has notes; a session without one pays nothing. It is a separate hook output: Claude Code caps
+  each hook's output at 10,000 characters on its own, "even when several hooks run for the same event"
+  (https://code.claude.com/docs/en/hooks, checked 2026-11-19), so it takes nothing from the core rules' 8900 bytes
+  or the state card's 1024, and it never runs beside the state card (`compact|resume|fork`).
+- **Trust:** the slug is repository content, so a cloned repository could name another of the user's projects and
+  get that project's paths and summaries listed; it cannot point the hook at a directory, since the vault path
+  comes from user-level config only, and the slug pattern admits no path. No allowlist of repositories per slug is
+  kept: the escape for an untrusted repository is `DEVELOPER_OS_BRAIN_INDEX=off`, named in `SECURITY.md` and the
+  hooks reference. Note text is printed as data, without control characters.
+- **Alternatives rejected:** a stronger core rule to run brain-search (the existing one fired 40 times in about 900
+  sessions, and `core.md` has no room); a stored index file in the vault (D3: one more thing to rebuild and drift);
+  printing whole notes (unbounded context); extending `notices.py` (it promises the user note-free output, is
+  throttled by markers and runs on `startup` only).
+- **Revisit when:** the 25-note cap hides the notes agents need in a large project, or brain-search use stays flat.
+
+## D31. A skill merges a PR only on a merge chosen up front
+
+- **Date:** 2026-11-19
+- **Decision:** the pr-finish skill runs pr-cycle and then may merge the PR, with a merge commit pinned to
+  the reviewed head, and clean up its worktree and branches. It merges only when the user chose the merge in
+  its one up-front batch of numbered A/B/C questions, pr-cycle's verdict is `APPROVE` and not review-only, and
+  every CI check is green with the PR mergeable; a red, pending or missing check, a conflict or a moved head
+  stops it. It never merges with `--admin`, force-pushes, pushes to the base or deploys, and runs an untrusted
+  head's code only on its own yes. pr-cycle keeps "never merge"; every other skill still never merges a PR, and
+  the guard still asks before `gh pr merge`.
+- **Why:** the owner typed the "review → fix all → merge → clean up" loop by hand in about 100 sessions, with
+  248 merge prompts and 134 clean-up prompts, through a personal skill that called a merge skill outside the
+  plugin. Asking every decision once up front matches how the owner answers ("1A 2B"); the merge stays the
+  user's choice, made before the work starts instead of after each step.
+- **Alternatives rejected:** a merge step inside pr-cycle (it would lose its "the user merges" stop point for
+  everyone who runs it); a separate merge-when-green skill (one more description in the listing budget, D10, for
+  a step that only follows pr-cycle).
+
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change
@@ -646,3 +697,4 @@ here before reversing a rule.
 | 2026-11-17 | brain-capture appends a dated paragraph to a note that already covers the topic, only on the user's A answer (D4 amended) | `brain-capture` | Captures wrote duplicates into the inbox for a manual merge (BRAIN-01) |
 | 2026-11-17 | A `Check` for a test the fix adds is guarded so it exits 1 until the test exists; triage reads that exit as red | `audit-to-backlog`, `implement-backlog` | A bare test id that does not exist yet exits 4 with "no tests ran", which triage classed as a broken `Check` (#146) |
 | 2026-11-17 | A lane gets no `git diff`, and `lanes.json` refuses a `fast_check` or `allow` entry that runs git (D23 amended) | `parallel-lanes` | `git diff --output=<file>` let a lane overwrite the main checkout's `.git/config` (PR #141 review) |
+| 2026-11-19 | Open decisions are asked up front in one batch of numbered A/B/C questions, one option marked recommended, answerable in one line ("1A 2B"); a decision that surfaces later is asked the same way, never assumed; no confirmation the user's or project's rules already settle. To fit the 8900-byte cap, without dropping a rule: the fast-check source, subagent-bypass, subagent-diff, external-repository, worktree, dispatch, per-worktree-resource, language, plan-step estimate, fresh-reviewer, handoff, brain-search and report-back lines are reworded shorter (8892 bytes) | `plugin/rules/core.md` | 914 interactive sessions (2026-10-20 to 11-18): 1814 AskUserQuestion calls; 61–67 % of single-choice answers took the recommended option; the owner asks for all questions at once and answers "1A 2B 3A"; the most common questions were mechanical and already settled by rules (commit/push 235, backlog or plan location 215, Jira key 90, dependency install 79) |

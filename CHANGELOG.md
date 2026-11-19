@@ -4,6 +4,25 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A `SessionStart` hook on a new session and `/clear`, `brain-index.py`, gives the agent the vault notes of the
+  current project (the `Vault project slug:` line of the repository's `_Context.md`): the hub first, then one line
+  per note with its path and summary, newest first, at most 25 notes and 3000 bytes, with an instruction to read the
+  note on a topic before touching it. Superseded, archived, rejected and expired inbox notes are left out; other
+  inbox notes are marked unreviewed. `DEVELOPER_OS_BRAIN_INDEX=off` turns it off (D30).
+- pr-finish skill: takes a PR from review to merge. It asks every decision once, up front, as numbered A/B/C
+  questions, runs pr-cycle with those answers, then waits for green CI, merges with a merge commit pinned to the
+  reviewed head, and removes the head's worktree and branches. It merges only when you chose the merge, the
+  verdict is `APPROVE` and every check is green (D31).
+
+### Changed
+
+- Core rules: open decisions are asked up front in one batch of numbered A/B/C questions, one option marked
+  recommended, answerable in one line ("1A 2B"), and the agent no longer asks a confirmation the user's or the
+  project's rules already settle. Other lines are worded shorter to stay under the 8900-byte cap; no rule is
+  dropped.
+
 ### Fixed
 
 - brain-setup dates the new vault's example inbox note today, so brain-search no longer skips it as

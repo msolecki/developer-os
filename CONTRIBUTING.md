@@ -1,6 +1,6 @@
 # Contributing
 
-The plugin is Markdown and JSON plus six Python 3 hook scripts (standard library only). There is no build step and no runtime.
+The plugin is Markdown and JSON plus seven Python 3 hook scripts (standard library only). There is no build step and no runtime.
 
 ## Check
 

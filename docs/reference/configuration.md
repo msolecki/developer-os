@@ -14,13 +14,14 @@ optional file of guard rules. This page lists every one of them.
 
 | Setting | Where | Read by | Written by |
 |---|---|---|---|
-| Plugin option `brain_vault` (optional, a directory) | `pluginConfigs` in user or managed settings; Claude Code ignores project and local entries (D5) | All brain skills and the notices hook, before the `Brain vault:` line | The user, in the plugin's configuration dialog or `/config` |
-| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` only; a project's `CLAUDE.md`/`AGENTS.md` is never read for it (D5) | All brain skills, unless you or a calling skill name the path; the core rule that runs brain-search before large tasks; the notices hook | brain-setup, after approval |
+| Plugin option `brain_vault` (optional, a directory) | `pluginConfigs` in user or managed settings; Claude Code ignores project and local entries (D5) | All brain skills and the notices and note-index hooks, before the `Brain vault:` line | The user, in the plugin's configuration dialog or `/config` |
+| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` only; a project's `CLAUDE.md`/`AGENTS.md` is never read for it (D5) | All brain skills, unless you or a calling skill name the path; the core rule that runs brain-search before large tasks; the notices and note-index hooks | brain-setup, after approval |
 | Vault in `permissions.additionalDirectories` | `~/.claude/settings.json` | Claude Code, so the vault can be read from any project | brain-setup, after approval |
 | `"autoMemoryEnabled": false` (recommended, D24) | `~/.claude/settings.json`; `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the environment wins over it | Claude Code: no auto-memory files are created or loaded; existing ones stay on disk | brain-setup, after a separate yes; brain-import-memory, as one of its numbered items; the `/memory` toggle writes the same key |
 | Auto-memory folder | `~/.claude/projects/<project>/memory/`, or `autoMemoryDirectory` | brain-import-memory, which never edits or deletes it | Claude Code, while auto memory is on |
 | `"outputStyle": "developer-os:<name>"` | Claude Code settings | Claude Code; a bare name silently falls back to the default style | The user |
 | Rule overrides | `~/.claude/CLAUDE.md` | The model, alongside the core rules | The user |
+| `DEVELOPER_OS_BRAIN_INDEX` | Shell environment | The `SessionStart` note-index hook; `off` disables the list of the project's vault notes ([hooks.md](hooks.md#sessionstart-on-startup-and-clear---brain-indexpy)) | The user |
 | `DEVELOPER_OS_CAPTURE_NUDGE`, `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | Shell environment | The `Stop` hook ([hooks.md](hooks.md#environment-variables)) | The user |
 | `DEVELOPER_OS_GUARD_LOG` | Shell environment | The `PreToolUse` guard; `off` disables the ask log, a local record of which rule asked, without the command ([hooks.md](hooks.md#ask-log---asksjsonl)) | The user |
 | `DEVELOPER_OS_NOTICES` | Shell environment | The `SessionStart` notices hook; `off` disables the version and upkeep notices ([hooks.md](hooks.md#sessionstart-on-startup---noticespy)) | The user |
@@ -39,7 +40,7 @@ stay symlinks.
 | Planning location | Project `AGENTS.md` or `CLAUDE.md` | Core rules, plan-status, spec, session-retro, parallel-lanes | `docs/plans/<YYYY-MM-DD-task>.md`, git-ignored |
 | Specification location | Project `AGENTS.md` or `CLAUDE.md` | spec | spec proposes `docs/specs/` and asks |
 | Fast check and full suite commands | Project `AGENTS.md` or `CLAUDE.md` | Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist, parallel-lanes | Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing |
-| `Vault project slug:` | `_Context.md` | brain-search, brain-capture, brain-project-refresh and brain-import-memory, which read `_Context.md` at the repository root when the line is not in context; docs-sync, which scaffolds the line in `_Context.md` | Empty `project:`; brain-project-refresh asks for the slug once, brain-import-memory proposes notes with an empty `project:` and asks |
+| `Vault project slug:` | `_Context.md` | brain-search, brain-capture, brain-project-refresh and brain-import-memory, which read `_Context.md` at the repository root when the line is not in context; the note-index hook on startup and `/clear`; docs-sync, which scaffolds the line in `_Context.md` | Empty `project:`; brain-project-refresh asks for the slug once, brain-import-memory proposes notes with an empty `project:` and asks |
 | Docs root | `AGENTS.md` | docs-sync | `docs/` |
 | Task state | `docs/plans/.devos-state.md` (fixed, even when the planning location is overridden) | The `SessionStart` hook after compaction, resume and fork | Written by implement-backlog, pr-cycle, audit-to-backlog and parallel-lanes; none |
 | `TODO.md` item format | The backlog todo file | audit-to-backlog, project-baseline, implement-backlog, plan-status, spec (`FEAT-` items), project-init (`CONV-` items), session-retro (open items of a finished plan) | `templates/project/TODO.md` shows it |

@@ -190,6 +190,21 @@ runs brain-search on the audited area first and reads the top note.
   push.
 - **Gates:** the fast check before each fix commit, the full suite once before the push.
 
+### pr-finish
+
+[Source](../../plugin/skills/pr-finish/SKILL.md). Takes a PR from review to merge: pr-cycle, then CI,
+merge and clean-up.
+
+- **Questions:** one up-front batch of numbered A/B/C questions: which findings to fix, whether to
+  merge after an `APPROVE`, and, for an untrusted head, whether to run its code; pr-cycle's own stops
+  (an unclear conflict, a red fast check, a new P0 or P1) still ask.
+- **Merge gate:** only with the merge chosen up front, an `APPROVE` that is not review-only, the
+  reviewed head still on GitHub, and every CI check green and the PR mergeable; it waits on
+  `gh pr checks --watch` in the background and merges with a merge commit pinned to the reviewed head.
+- **Clean-up:** removes the head's worktree (never a dirty one), deletes the local branch (`-D` only
+  when its work is in the base) and the remote branch in this repository, then prunes and
+  fast-forwards the base.
+
 ### fix-pr
 
 [Source](../../plugin/skills/fix-pr/SKILL.md). Works through unresolved review threads (GraphQL

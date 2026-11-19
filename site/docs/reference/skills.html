@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@1b3e7c55cb96">
+<meta name="dos-source" content="docs/reference/skills.md@c2b1428fc9c6">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -219,6 +219,20 @@ unresolved review threads rated P0–P3; fix commits are reviewed again before t
 rounds). A <code>COMMENT</code> from a blocked reviewer is not a review: one retry, then it stops before the
 push.</li>
 <li><strong>Gates:</strong> the fast check before each fix commit, the full suite once before the push.</li>
+    </ul>
+    <h3 id="pr-finish">pr-finish</h3>
+    <p><a href="../../skills/pr-finish.html">Source</a>. Takes a PR from review to merge: pr-cycle, then CI,
+merge and clean-up.</p>
+    <ul>
+<li><strong>Questions:</strong> one up-front batch of numbered A/B/C questions: which findings to fix, whether to
+merge after an <code>APPROVE</code>, and, for an untrusted head, whether to run its code; pr-cycle's own stops
+(an unclear conflict, a red fast check, a new P0 or P1) still ask.</li>
+<li><strong>Merge gate:</strong> only with the merge chosen up front, an <code>APPROVE</code> that is not review-only, the
+reviewed head still on GitHub, and every CI check green and the PR mergeable; it waits on
+<code>gh pr checks --watch</code> in the background and merges with a merge commit pinned to the reviewed head.</li>
+<li><strong>Clean-up:</strong> removes the head's worktree (never a dirty one), deletes the local branch (<code>-D</code> only
+when its work is in the base) and the remote branch in this repository, then prunes and
+fast-forwards the base.</li>
     </ul>
     <h3 id="fix-pr">fix-pr</h3>
     <p><a href="../../skills/fix-pr.html">Source</a>. Works through unresolved review threads (GraphQL
