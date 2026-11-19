@@ -12,6 +12,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   note on a topic before touching it. Superseded, archived, rejected and expired inbox notes are left out; other
   inbox notes are marked unreviewed. `DEVELOPER_OS_BRAIN_INDEX=off` turns it off (D30).
 
+### Changed
+
+- Core rules: open decisions are asked up front in one batch of numbered A/B/C questions, one option marked
+  recommended, answerable in one line ("1A 2B"), and the agent no longer asks a confirmation the user's or the
+  project's rules already settle. Other lines are worded shorter to stay under the 8900-byte cap; no rule is
+  dropped.
+
 ### Fixed
 
 - brain-setup dates the new vault's example inbox note today, so brain-search no longer skips it as

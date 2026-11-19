@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/functional-spec.md@ee2fe7d80048">
+<meta name="dos-source" content="docs/product/functional-spec.md@ec4faa3b610b">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -53,7 +53,7 @@
 <thead><tr><th scope="col">Section</th><th scope="col">What it governs</th></tr></thead>
 <tbody>
 <tr><td>Security and change constraints</td><td>No auth/middleware change unless asked; ask before dependency installs; never delete or skip tests to pass; two validation tiers (fast check before each commit, full suite before push/PR or when a skill's gate requires it); test-config, coverage or CI-gate changes update the governing decision record; verify subagent work with <code>git status</code>/<code>git diff</code> and commit what a subagent left uncommitted; first-session procedure for external repositories</td></tr>
-<tr><td>Workflow</td><td>Stop condition; A/B/C questions for open decisions; a plan for changes over 50 lines (git-ignored, default <code>docs/plans/&lt;YYYY-MM-DD-task&gt;.md</code>, deleted when done); What/Where/How/Test plan steps; reviewer differs from author; handoff contents; brain-search before large tasks when a <code>Brain vault:</code> line exists; compaction preserves files, test commands, objective and language, and task state lives in <code>docs/plans/.devos-state.md</code>; evidence for "works"; one worktree per parallel agent; conventions live in skills</td></tr>
+<tr><td>Workflow</td><td>Stop condition; open decisions asked up front as one batch of numbered A/B/C questions with a recommended option, none a rule already settles; a plan for changes over 50 lines (git-ignored, default <code>docs/plans/&lt;YYYY-MM-DD-task&gt;.md</code>, deleted when done); What/Where/How/Test plan steps; reviewer differs from author; handoff contents; brain-search before large tasks when a <code>Brain vault:</code> line exists; compaction preserves files, test commands, objective and language, and task state lives in <code>docs/plans/.devos-state.md</code>; evidence for "works"; one worktree per parallel agent; conventions live in skills</td></tr>
 <tr><td>Communication</td><td>User's language in conversation, English in the repository; plain language for clients; Problem → Cause → Solution → Test; closing <strong>Done / Not done / Needs you</strong> block; ASAP mode; ask for missing data instead of guessing</td></tr>
 <tr><td>Stack preferences</td><td>Lockfile's package manager; existing stack. Meant to be overridden in the user's own <code>CLAUDE.md</code></td></tr>
 </tbody>
