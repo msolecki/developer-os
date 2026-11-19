@@ -27,7 +27,7 @@ one release, add the marketplace at its tag: `/plugin marketplace add msolecki/d
 - Claude Code on macOS or Linux, with Python 3.8+ on `PATH` for the hooks.
 - ripgrep (`rg`): the brain skills search the vault with it.
 - `jq`: brain-setup edits `settings.json` with it; without it, it shows the key to add by hand.
-- GitHub CLI (`gh`): for fix-pr, pr-cycle and the open-PR check in session-retro.
+- GitHub CLI (`gh`): for fix-pr, pr-cycle, pr-finish and the open-PR check in session-retro.
 - Obsidian 1.9.10 or later for the vault's Bases views. The vault itself is plain Markdown, and the
   engineering skills work without one.
 
@@ -142,7 +142,7 @@ without it the core rules still load and the other hooks do not run.
   brain-compile, brain-project-refresh (bring the repository's project hub note up to date),
   brain-import-memory (move a project's Claude Code auto memory into the vault, item by item). They read and write the vault with the agent's own file tools.
 - **Engineering skills:** code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
-  bug-triage, deploy-checklist, instruction-review (add `--prune` for a periodic cut), plan-status,
+  pr-finish (pr-cycle, then green CI, merge and clean-up, with every decision asked up front), bug-triage, deploy-checklist, instruction-review (add `--prune` for a periodic cut), plan-status,
   client-reply, docs-sync, project-baseline, project-init (adopt developer-os in a repository in one
   pass), parallel-lanes (independent tasks as headless lanes, one worktree each, integrated locally).
 - **Session skills:** session-retro (end-of-session wrap-up: state check, cleanup proposals,

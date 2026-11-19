@@ -25,7 +25,7 @@ plugin/                           the installed payload
   hooks/patterns.py               PostToolUse: a note when an edit adds a risky construct
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/<name>/SKILL.md          33 skills
+  skills/<name>/SKILL.md          34 skills
   agents/<name>.md                11 agents
   output-styles/<name>.md         4 output styles
   vault-template/                 copied by brain-setup
@@ -51,7 +51,7 @@ What occupies the context of a session, and when:
 | `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | About 8.9 KB | 8900 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
 | Project note index | On startup and `/clear`, inside a git repository whose `_Context.md` names a vault project slug that has notes | Up to 3000 bytes | `CAP` and `MAX_NOTES` (25) in `brain-index.py`; a separate hook output, so it has its own 10,000-character cap (D30) |
-| Skill names and descriptions | Every session, by Claude Code's skill listing; a skill with `disable-model-invocation: true` lists no description | About 11,200 characters for 33 skills | 80–1024 each, 12000 total of the listed ones (`scripts/check.sh`); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10) |
+| Skill names and descriptions | Every session, by Claude Code's skill listing; a skill with `disable-model-invocation: true` lists no description | About 11,650 characters for 34 skills | 80–1024 each, 12000 total of the listed ones (`scripts/check.sh`); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10) |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
 | A skill's body | When the model or the user invokes it | 0.8–17.5 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
 | An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–5.3 KB per file | - |
@@ -132,6 +132,7 @@ Skills call each other by name and dispatch agents. The dependencies that exist 
 
 ```mermaid
 flowchart LR
+  pr-finish --> pr-cycle
   pr-cycle --> code-review
   pr-cycle --> fix-pr
   fix-pr --> code-review

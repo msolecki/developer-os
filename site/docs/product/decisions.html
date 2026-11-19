@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@9ece524d6aaf">
+<meta name="dos-source" content="docs/product/decisions.md@fec9350f2110">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -356,6 +356,13 @@ its changes with Read and <code>git status</code>.</li>
 <li><strong>Trust:</strong> the slug is repository content, so a cloned repository could name another of the user's projects and get that project's paths and summaries listed; it cannot point the hook at a directory, since the vault path comes from user-level config only, and the slug pattern admits no path. Note text is printed as data, without control characters.</li>
 <li><strong>Alternatives rejected:</strong> a stronger core rule to run brain-search (the existing one fired 40 times in about 900 sessions, and <code>core.md</code> has no room); a stored index file in the vault (D3: one more thing to rebuild and drift); printing whole notes (unbounded context); extending <code>notices.py</code> (it promises the user note-free output, is throttled by markers and runs on <code>startup</code> only).</li>
 <li><strong>Revisit when:</strong> the 25-note cap hides the notes agents need in a large project, or brain-search use stays flat.</li>
+</ul>
+<h2 id="d31-a-skill-merges-a-pr-only-on-a-merge-chosen-up-front">D31. A skill merges a PR only on a merge chosen up front</h2>
+<ul>
+<li><strong>Date:</strong> 2026-11-19</li>
+<li><strong>Decision:</strong> the pr-finish skill runs pr-cycle and then may merge the PR, with a merge commit pinned to the reviewed head, and clean up its worktree and branches. It merges only when the user chose the merge in its one up-front batch of numbered A/B/C questions, pr-cycle's verdict is <code>APPROVE</code> and not review-only, and every CI check is green with the PR mergeable; a red, pending or missing check, a conflict or a moved head stops it. It never merges with <code>--admin</code>, force-pushes, pushes to the base or deploys, and runs an untrusted head's code only on its own yes. pr-cycle keeps "never merge"; every other skill still never merges a PR, and the guard still asks before <code>gh pr merge</code>.</li>
+<li><strong>Why:</strong> the owner typed the "review → fix all → merge → clean up" loop by hand in about 100 sessions, with 248 merge prompts and 134 clean-up prompts, through a personal skill that called a merge skill outside the plugin. Asking every decision once up front matches how the owner answers ("1A 2B"); the merge stays the user's choice, made before the work starts instead of after each step.</li>
+<li><strong>Alternatives rejected:</strong> a merge step inside pr-cycle (it would lose its "the user merges" stop point for everyone who runs it); a separate merge-when-green skill (one more description in the listing budget, D10, for a step that only follows pr-cycle).</li>
 </ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>

@@ -67,7 +67,7 @@ In scope for the first release:
 | Component | Count | Source |
 |---|---|---|
 | Brain skills | 8 | `plugin/skills/brain-*` |
-| Engineering skills | 15 | `plugin/skills/` |
+| Engineering skills | 16 | `plugin/skills/` |
 | Session skills | 3 (session-retro, skill-usage, setup-check) | `plugin/skills/` |
 | Conventions skills | 7 (`*-conventions`) | `plugin/skills/` |
 | Agents | 11 | `plugin/agents/` |

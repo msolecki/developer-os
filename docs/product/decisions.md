@@ -608,6 +608,24 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   throttled by markers and runs on `startup` only).
 - **Revisit when:** the 25-note cap hides the notes agents need in a large project, or brain-search use stays flat.
 
+## D31. A skill merges a PR only on a merge chosen up front
+
+- **Date:** 2026-11-19
+- **Decision:** the pr-finish skill runs pr-cycle and then may merge the PR, with a merge commit pinned to
+  the reviewed head, and clean up its worktree and branches. It merges only when the user chose the merge in
+  its one up-front batch of numbered A/B/C questions, pr-cycle's verdict is `APPROVE` and not review-only, and
+  every CI check is green with the PR mergeable; a red, pending or missing check, a conflict or a moved head
+  stops it. It never merges with `--admin`, force-pushes, pushes to the base or deploys, and runs an untrusted
+  head's code only on its own yes. pr-cycle keeps "never merge"; every other skill still never merges a PR, and
+  the guard still asks before `gh pr merge`.
+- **Why:** the owner typed the "review → fix all → merge → clean up" loop by hand in about 100 sessions, with
+  248 merge prompts and 134 clean-up prompts, through a personal skill that called a merge skill outside the
+  plugin. Asking every decision once up front matches how the owner answers ("1A 2B"); the merge stays the
+  user's choice, made before the work starts instead of after each step.
+- **Alternatives rejected:** a merge step inside pr-cycle (it would lose its "the user merges" stop point for
+  everyone who runs it); a separate merge-when-green skill (one more description in the listing budget, D10, for
+  a step that only follows pr-cycle).
+
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change

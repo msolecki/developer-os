@@ -50,6 +50,7 @@ skill nextjs-conventions
 skill parallel-lanes
 skill plan-status
 skill pr-cycle
+skill pr-finish
 skill project-baseline
 skill project-init
 skill session-retro

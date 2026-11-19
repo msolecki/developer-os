@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@030e48f92576">
+<meta name="dos-source" content="CHANGELOG.md@7f8afd0d8660">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -54,6 +54,10 @@ current project (the <code>Vault project slug:</code> line of the repository's <
 per note with its path and summary, newest first, at most 25 notes and 3000 bytes, with an instruction to read the
 note on a topic before touching it. Superseded, archived, rejected and expired inbox notes are left out; other
 inbox notes are marked unreviewed. <code>DEVELOPER_OS_BRAIN_INDEX=off</code> turns it off (D30).</li>
+<li>pr-finish skill: takes a PR from review to merge. It asks every decision once, up front, as numbered A/B/C
+questions, runs pr-cycle with those answers, then waits for green CI, merges with a merge commit pinned to the
+reviewed head, and removes the head's worktree and branches. It merges only when you chose the merge, the
+verdict is <code>APPROVE</code> and every check is green (D31).</li>
 </ul>
     <h3 id="unreleased-changed">Changed</h3>
 <ul>

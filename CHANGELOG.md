@@ -11,6 +11,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   per note with its path and summary, newest first, at most 25 notes and 3000 bytes, with an instruction to read the
   note on a topic before touching it. Superseded, archived, rejected and expired inbox notes are left out; other
   inbox notes are marked unreviewed. `DEVELOPER_OS_BRAIN_INDEX=off` turns it off (D30).
+- pr-finish skill: takes a PR from review to merge. It asks every decision once, up front, as numbered A/B/C
+  questions, runs pr-cycle with those answers, then waits for green CI, merges with a merge commit pinned to the
+  reviewed head, and removes the head's worktree and branches. It merges only when you chose the merge, the
+  verdict is `APPROVE` and every check is green (D31).
 
 ### Changed
 

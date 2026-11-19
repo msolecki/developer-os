@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@b7280691cb38">
+<meta name="dos-source" content="docs/architecture/overview.md@9ba933df3d3c">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -61,7 +61,7 @@ plugin/                           the installed payload
   hooks/patterns.py               PostToolUse: a note when an edit adds a risky construct
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/&lt;name&gt;/SKILL.md          33 skills
+  skills/&lt;name&gt;/SKILL.md          34 skills
   agents/&lt;name&gt;.md                11 agents
   output-styles/&lt;name&gt;.md         4 output styles
   vault-template/                 copied by brain-setup
@@ -84,7 +84,7 @@ site/                             public documentation site, published by .githu
           <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>About 8.9 KB</td><td>8900 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
           <tr><td>State card</td><td>After a compaction, resume or fork inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
           <tr><td>Project note index</td><td>On startup and <code>/clear</code>, inside a git repository whose <code>_Context.md</code> names a vault project slug that has notes</td><td>Up to 3000 bytes</td><td><code>CAP</code> and <code>MAX_NOTES</code> (25) in <code>brain-index.py</code>; a separate hook output, so it has its own 10,000-character cap (D30)</td></tr>
-          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing; a skill with <code>disable-model-invocation: true</code> lists no description</td><td>About 11,200 characters for 33 skills</td><td>80–1024 each, 12000 total of the listed ones (<code>scripts/check.sh</code>); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10)</td></tr>
+          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing; a skill with <code>disable-model-invocation: true</code> lists no description</td><td>About 11,650 characters for 34 skills</td><td>80–1024 each, 12000 total of the listed ones (<code>scripts/check.sh</code>); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10)</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
           <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.8–17.5 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
           <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–5.3 KB per file</td><td>-</td></tr>
