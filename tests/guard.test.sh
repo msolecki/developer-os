@@ -638,6 +638,10 @@ check ask "$(fw "$vd/_inbox/n.md" "$pw")" "secret"
 check ask "$(fd "$vd/DEV/n.md" 'old' "key $aws")" "secret"
 check ask "$(fm "$vd/DEV/n.md" 'old' "key $aws")" "secret"
 check pass "$(fw "$vd/_inbox/n.md" 'A lesson with no secret.')"
+# The vault path in another case is the same directory on a case-insensitive volume.
+vu=$(printf '%s' "$vd" | tr '[:lower:]' '[:upper:]')
+check ask "$(fw "$vu/_inbox/n.md" "key $aws")" "secret"
+check pass "$(fw "$vd/_inbox/n.md" "x://$(head -c 20000 /dev/zero | tr '\0' ':')")"
 check pass "$(fd "$vd/DEV/n.md" "key $aws" 'key redacted')"
 check pass "$(fw /x/notes/n.md "key $aws")"
 printf '{"pluginConfigs":{"developer-os@m":{"options":{"brain_vault":"%s"}}}}' "$vd/opt" > "$cfg/settings.json"

@@ -636,7 +636,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   each suppression names one rule, one skill and the reason a maintainer judged it a false positive. CI installs
   the pinned release with `pipx`; a missing scanner fails in CI and is skipped locally, like agnix (D18). The copies
   `tests/check.test.sh` makes skip it (about 5 s each) except in the cases that test it. A pull request that changes
-  `.skill-scanner.yaml` gets a CI warning that a maintainer reviews its suppressions.
+  `.skill-scanner.yaml` gets a CI warning that a maintainer reviews its suppressions; a warning, not the gitleaks
+  guard's failure, because a new finding's fix is often the suppression itself, reviewed in that same PR.
 - **Why:** agnix lints structure; nothing scanned the skills for injected instructions, obfuscated code or unsafe
   script patterns, which is the threat model of a plugin that ships prompts and scripts to other machines. The first
   run found two critical findings, both false positives (fix-pr's own Trust check read as coercive text, and a

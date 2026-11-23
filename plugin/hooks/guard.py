@@ -86,10 +86,11 @@ REASONS = {
     "tests": "This skips, focuses or removes a test; do not delete or skip tests to make a build pass.",
     "vault": "This writes what looks like a secret (a key, token, password or credential URL) into the knowledge vault; redact it first.",
 }
-# brain-capture's step 5 patterns: a backstop for its redaction, not a complete list.
+# brain-capture's step 5 patterns: a backstop for its redaction, not a complete list. The credential URL's parts are
+# bounded, so a long run of colons cannot backtrack past the hook timeout.
 SECRET = re.compile(r"-----BEGIN|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}"
                     r"|[sr]k_(live|test)_[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.eyJ|xox[baprs]-"
-                    r"|://[^/\s]+:[^@\s]+@|(password|passwd|secret|token|api_?key|PASSWORD|SECRET|TOKEN|API_KEY)\s*=\s*\"?[^\]\s\"\[]{6,}")
+                    r"|://[^/\s:]{1,256}:[^@\s]{1,256}@|(password|passwd|secret|token|api_?key|PASSWORD|SECRET|TOKEN|API_KEY)\s*=\s*\"?[^\]\s\"\[]{6,}")
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
 COMMIT = "Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."
@@ -1140,6 +1141,8 @@ def vault_secret(tool, inp, cwd, path):
     if not vault:
         return False
     where = target(cwd if isinstance(cwd, str) else os.getcwd(), path)
+    # Compared without case, as other_worktree() does: macOS volumes ignore it, so `Brain/` is `brain/`.
+    where, vault = where.lower(), vault.lower()
     if where != vault and not where.startswith(vault + os.sep):
         return False
     if tool == "Write":
