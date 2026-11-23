@@ -4,7 +4,7 @@ Usage: python3 -I lanes.py launch|status|conflicts <run-dir>
        python3 -I lanes.py resume <run-dir> <lane>
 
 lanes.json: {"root": "/abs/repo", "base": "<commit>", "max_turns": 200, "manifests": ["package.json"],
-             "lanes": [{"name": "api-retry", "budget_usd": 5, "fast_check": "pnpm lint",
+             "lanes": [{"name": "api-retry", "budget_usd": 5, "model": "sonnet", "fast_check": "pnpm lint",
                         "allow": ["Bash(pnpm test:*)"], "drop_deny": [".claude/**"]}]}
 A lane runs `claude -p` in <root>/.worktrees/<name> on branch lanes/<name>, in its own session, so it outlives the
 caller. Logs and reports are data: status prints them cut to one line and never acts on them.
@@ -49,6 +49,8 @@ FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "Read"}
 # No lane-chosen config may run a command when this script itself calls git.
 GIT_SAFE = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null")
 LANE = r"[a-z0-9][a-z0-9-]*"
+# A model alias (sonnet, opus) or a full model id; never a word that reads as an option.
+MODEL = r"[a-z0-9][a-z0-9.\[\]-]*"
 SESSION = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 FINAL = ("DONE", "REVIEW", "BLOCKED")
 START = 'p=${1}; shift; claude -p "$@" < "$p"; echo "EXIT=$?"'
@@ -145,9 +147,11 @@ def validate(cfg):
             errors.append("%s: named twice" % name)
         seen.add(name)
         errors += ["%s: unknown key %s" % (name, k)
-                   for k in sorted(set(lane) - {"name", "budget_usd", "fast_check", "allow", "drop_deny"})]
+                   for k in sorted(set(lane) - {"name", "budget_usd", "model", "fast_check", "allow", "drop_deny"})]
         if not (number(lane.get("budget_usd")) and lane["budget_usd"] > 0):
             errors.append("%s: budget_usd is required: a positive number of US dollars, there is no default" % name)
+        if "model" in lane and not (isinstance(lane["model"], str) and re.fullmatch(MODEL, lane["model"])):
+            errors.append("%s: model is not a model alias or id such as sonnet or claude-sonnet-5-5" % name)
         check = lane.get("fast_check")
         # Claude Code splits tool rules on commas and spaces: a bracket or comma would close this rule and open another.
         if not (isinstance(check, str) and check.strip() and not re.search(r"[\x00-\x1f\x7f(),]", check)):
@@ -213,8 +217,9 @@ def lane_args(cfg, lane):
     drop = lane.get("drop_deny", [])
     paths = [p for p in cfg["manifests"] + DENY if p not in drop] + GIT_DENY
     deny = [rule % p for p in paths for rule in ("Edit(%s)", "Write(%s)")]
-    args = ["--max-turns", str(int(cfg["max_turns"])), "--max-budget-usd", str(lane["budget_usd"]),
-            "--output-format", "json", "--permission-mode", "acceptEdits", "--allowedTools"] + tools
+    args = (["--model", lane["model"]] if "model" in lane else []) + [
+        "--max-turns", str(int(cfg["max_turns"])), "--max-budget-usd", str(lane["budget_usd"]),
+        "--output-format", "json", "--permission-mode", "acceptEdits", "--allowedTools"] + tools
     return args + (["--disallowedTools"] + deny if deny else [])
 
 

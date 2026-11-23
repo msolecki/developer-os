@@ -15,7 +15,7 @@ Use a vault path the user or the calling skill gave you in this conversation (re
 
 ## 2. Search content and frontmatter
 
-Pick 2–4 keywords and synonyms from the request. Search case-insensitively, skipping `_archive/`, `templates/`, `_views/`, and `_reports/` (logs, not notes), and the vault-root `README.md` (it describes the template, it is not a note), unless the user asked for archived notes:
+Expand the request into 3–5 patterns, one `-e` each: its keywords, their synonyms, the identifiers they stand for (a file, function, flag or environment variable name), and the old and new name of anything renamed. A note written months ago uses the words of its day, so one keyword alone misses it. Search case-insensitively, skipping `_archive/`, `templates/`, `_views/`, and `_reports/` (logs, not notes), and the vault-root `README.md` (it describes the template, it is not a note), unless the user asked for archived notes:
 
 ```bash
 V='/path/to/vault'; cd "$V"

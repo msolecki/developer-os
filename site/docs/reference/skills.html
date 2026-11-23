@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@1b3e7c55cb96">
+<meta name="dos-source" content="docs/reference/skills.md@d1a887474ff1">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -220,6 +220,20 @@ rounds). A <code>COMMENT</code> from a blocked reviewer is not a review: one ret
 push.</li>
 <li><strong>Gates:</strong> the fast check before each fix commit, the full suite once before the push.</li>
     </ul>
+    <h3 id="pr-finish">pr-finish</h3>
+    <p><a href="../../skills/pr-finish.html">Source</a>. Takes a PR from review to merge: pr-cycle, then CI,
+merge and clean-up.</p>
+    <ul>
+<li><strong>Questions:</strong> one up-front batch of numbered A/B/C questions: which findings to fix, whether to
+merge after an <code>APPROVE</code>, and, for an untrusted head, whether to run its code; pr-cycle's own stops
+(an unclear conflict, a red fast check, a new P0 or P1) still ask.</li>
+<li><strong>Merge gate:</strong> only with the merge chosen up front, an <code>APPROVE</code> that is not review-only, the
+reviewed head still on GitHub, and every CI check green and the PR mergeable; it waits on
+<code>gh pr checks --watch</code> in the background and merges with a merge commit pinned to the reviewed head.</li>
+<li><strong>Clean-up:</strong> removes the head's worktree (never a dirty one), deletes the local branch (<code>-D</code> only
+when its work is in the base) and the remote branch in this repository, then prunes and
+fast-forwards the base.</li>
+    </ul>
     <h3 id="fix-pr">fix-pr</h3>
     <p><a href="../../skills/fix-pr.html">Source</a>. Works through unresolved review threads (GraphQL
 <code>reviewThreads</code>, <code>isResolved: false</code>, paginated) or pasted findings. Flags authors who are not
@@ -264,7 +278,7 @@ for you to close, amend or keep; the batch is topped up from the next ready item
 <li><strong>Git-ignored backlog:</strong> the <code>Owner</code> lines stay uncommitted in the orchestrator's checkout, and
 each delegate's brief carries the full item text, so the batch can still run in parallel worktrees.</li>
 <li><strong>While running:</strong> runs each item's <code>Check</code> itself from the delegate's worktree root on a <code>DONE</code>
-report, the project's regeneration command for derived files after each merge, then the full build, types,
+report, the project's regeneration command for derived files once after the last merge, then the full build, types,
 tests and lint for the batch; classifies a failure before editing; stops after three failed
 repair cycles.</li>
 <li><strong>Review:</strong> the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
@@ -313,7 +327,8 @@ backlog items go to implement-backlog. Before a launch: a clean tree, <code>clau
 <code>PATH</code>, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
 lockfile belong to no lane), a budget in USD you name for each lane (there is no default), and a
 git-ignored run directory and <code>.worktrees/</code>. The skill writes <code>lanes.json</code> (the root, the base commit,
-the turn cap and, per lane, its budget, fast check and extra tools) and shows it with one command;
+the turn cap and, per lane, its budget, optional model, fast check and extra tools) and shows it with one command;
+a lane that only searches, collects or verifies gets <code>"model": "sonnet"</code>, passed as <code>--model</code>;
 <code>lanes.py</code>, a standard-library script beside the skill, launches, reports and resumes the lanes. Each
 lane is a detached <code>claude -p</code> in its own worktree and session, so it outlives the turn; the worktree
 starts from the base commit recorded in <code>lanes.json</code>, which the launch checks. Each lane runs with a
@@ -322,8 +337,8 @@ recorded <code>--session-id</code>, a <code>--max-turns</code> cap, <code>--max-
 <code>Makefile</code>, hook directories and <code>.claude/</code> unless it owns them, and always for <code>.git</code>, anything under
 it and a <code>.git</code> in a subdirectory: a lane that rewrote its worktree's <code>.git</code> file, or planted a repository in a
 subdirectory, could point git at a config of its own. <code>lanes.py</code>
-refuses a <code>lanes.json</code> with an unknown key, a budget or turn cap that is not a finite number, a
-<code>fast_check</code> holding a parenthesis, a comma or a control character, a <code>fast_check</code> or <code>allow</code> entry that runs git or
+refuses a <code>lanes.json</code> with an unknown key, a budget or turn cap that is not a finite number, a <code>model</code>
+that is not an alias or model id, a <code>fast_check</code> holding a parenthesis, a comma or a control character, a <code>fast_check</code> or <code>allow</code> entry that runs git or
 opens any command (a bare <code>Bash</code>, a shell, a wrapper or an interpreter with no script after it), an <code>allow</code> entry that
 is not one tool rule, or a file rule with an absolute, <code>~</code> or <code>..</code> path; its prompt allows only the lane's
 paths and commits in the worktree, and its report starts with a final status and lists what is not
@@ -344,8 +359,8 @@ worktree. Integration takes only finished <code>DONE</code> lanes whose fast che
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
 other lane goes to Needs you. Before the first merge it previews conflicts between the <code>DONE</code> lanes
 (<code>lanes.py conflicts</code>, git 2.38 or later; it moves no ref and changes no working-tree file, though git stores the trial merge's tree objects) and puts them on a <code>Conflicts:</code> line of the merge
-plan. After each lane merge it runs the project's regeneration command for
-derived files (in developer-os, <code>scripts/site-hashes.py</code>). After merging, it runs every merged lane's <code>Check</code> and the
+plan. A conflict only in derived lines takes either side; after the last lane merge it runs the project's
+regeneration command for derived files once (in developer-os, <code>scripts/site-hashes.py</code>). After merging, it runs every merged lane's <code>Check</code> and the
 repository-wide gate on <code>lanes/&lt;run&gt;</code>, and stops on a <code>REQUEST_CHANGES</code> review.</p>
     <h2 id="communication">Communication</h2>
     <h3 id="client-reply">client-reply</h3>

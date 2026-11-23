@@ -56,6 +56,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
 | agnix | `agnix --target claude-code --strict --config .agnix.toml .` reports an error or warning; the stage runs when `agnix` is on `PATH`, prints `SKIP agnix` otherwise, and fails when it is missing in CI; `AGNIX` overrides the command |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
+| Skill scan | `skill-scanner scan-all` over the tracked `plugin/skills/`, static analyzers only, with `.skill-scanner.yaml`, reports a high or critical finding or cannot run; the stage runs when `skill-scanner` is on `PATH`, prints `SKIP skill-scanner` otherwise, and fails when it is missing in CI; `SKILL_SCANNER` overrides the command (D32) |
 
 The file set is tracked plus untracked-not-ignored files, so a new doc is checked before it is
 committed.
@@ -129,7 +130,7 @@ first 12 hex digits of the source's SHA-256 with any `last-verified:` line remov
 doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style,
 the Site stage names the page to refresh: update its text, then its hash
 (`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). The regeneration command for
-these derived hashes, which implement-backlog and parallel-lanes run after each lane merge, is
+these derived hashes, which implement-backlog and parallel-lanes run once after the last lane merge, is
 `python3 scripts/site-hashes.py` from the repository root: it rewrites every `dos-source` hash to its
 source's current one and changes no page text. A page under `site/docs/` must
 carry its source's words in order, so a new hash on an unedited page still fails; skill, agent and
@@ -152,11 +153,13 @@ safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds c
 `tests/repeat-failure.test.sh` feeds failed tool calls to `repeat-failure.py` and expects the reminder only at the third failure of the same call;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code, the JSON output and the message;
 `tests/notices.test.sh` runs `notices.py` with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's `CLAUDE.md` is ignored, that the `brain_vault` option in the user-level `settings.json` wins over the line, an empty one falls back to it and its environment variable is ignored, and that no note name is printed;
+`tests/brain-index.test.sh` runs `brain-index.py` with a temporary config directory, vault and git repository and checks the hub-first, newest-first order, the skipped notes (superseded, archived, rejected, expired inbox, under `_archive/` or `templates/`, another project's, a symlink, a FIFO), the unreviewed marker, the plain and bold slug lines, silence for an invalid or missing slug, a symlinked `_Context.md`, outside git, on `resume`/`compact`, without a vault and with its off switch, the vault lookup order and a symlinked user-level `CLAUDE.md`, a block list under `project:`, frontmatter past 4 KB left out, the hub kept first past the 5000-file scan limit, the 140-character summary cut, and the 25-note and 3000-byte caps with the `+N more` line;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
 stage's message; it runs the whole check once per case (several minutes), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it), split into one shard per CPU run side by side, each in its own copy
 (`CHECK_TEST_SHARD=K/N` runs every Nth case from the Kth on): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
 it sets `CHECK_TEST_COPY`, so `tests/guard.test.sh` in its copies skips the CPU-time limits that the top-level run measures;
+a case never clears `CHECK_TEST_COPY`, since that brings back those limits on CPUs the shards share and fails `guard.test.sh`; to run a stage the copies skip, a case sets that stage's own variable, such as `SKILL_SCANNER`;
 a cancelled or timed-out job still prints what each shard wrote so far;
 `tests/check-shard.test.sh` passes malformed `CHECK_TEST_SHARD` specs to it and expects each to fail before any case runs,
 and with `CHECK_TEST_LIST=<file>` (each shard lists the cases it owns instead of running them) expects 4 shards to own

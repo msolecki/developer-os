@@ -17,14 +17,15 @@ plugin/                           the installed payload
   .claude-plugin/plugin.json      name, version, description, license, keywords
   rules/core.md                   core rules, printed by a SessionStart cat hook
   SURFACE.txt                     public names, checked against the disk
-  hooks/hooks.json                7 hooks, 10-second timeouts
+  hooks/hooks.json                8 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
+  hooks/brain-index.py            SessionStart: the project's vault notes on startup and /clear
   hooks/guard.py                  PreToolUse guard for Bash, Edit, Write and MultiEdit
   hooks/patterns.py               PostToolUse: a note when an edit adds a risky construct
   hooks/repeat-failure.py         PostToolUseFailure: stop retrying a call that failed 3 times
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/<name>/SKILL.md          33 skills
+  skills/<name>/SKILL.md          34 skills
   agents/<name>.md                11 agents
   output-styles/<name>.md         4 output styles
   vault-template/                 copied by brain-setup
@@ -49,7 +50,8 @@ What occupies the context of a session, and when:
 |---|---|---|---|
 | `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | About 8.9 KB | 8900 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
-| Skill names and descriptions | Every session, by Claude Code's skill listing; a skill with `disable-model-invocation: true` lists no description | About 11,200 characters for 33 skills | 80–1024 each, 12000 total of the listed ones (`scripts/check.sh`); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10) |
+| Project note index | On startup and `/clear`, inside a git repository whose `_Context.md` names a vault project slug that has notes | Up to 3000 bytes | `CAP` and `MAX_NOTES` (25) in `brain-index.py`; a separate hook output, so it has its own 10,000-character cap (D30) |
+| Skill names and descriptions | Every session, by Claude Code's skill listing; a skill with `disable-model-invocation: true` lists no description | About 11,650 characters for 34 skills | 80–1024 each, 12000 total of the listed ones (`scripts/check.sh`); the listing's own character budget, 1% of the context window, is shared with every other plugin and skill, and the least-invoked skills lose their descriptions first (D10) |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
 | A skill's body | When the model or the user invokes it | 0.8–17.5 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
 | An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–5.3 KB per file | - |
@@ -66,6 +68,7 @@ sequenceDiagram
   participant R as SessionStart: cat core.md
   participant SS as SessionStart: state-card.py
   participant NO as SessionStart: notices.py
+  participant BI as SessionStart: brain-index.py
   participant G as PreToolUse: guard.py
   participant P as PostToolUse: patterns.py
   participant F as PostToolUseFailure: repeat-failure.py
@@ -76,6 +79,8 @@ sequenceDiagram
   SS-->>CC: stdout = state card
   CC->>NO: new session (startup)
   NO-->>CC: nothing or systemMessage (user) + additionalContext (agent)
+  CC->>BI: new session (startup) or /clear
+  BI-->>CC: nothing, or stdout = the project's vault notes, one line each
   CC->>G: every Bash, Edit, Write and MultiEdit call, JSON on stdin
   G-->>CC: nothing (allow normal flow), {"permissionDecision":"ask", reason} or additionalContext (fast-check reminder) on git commit
   CC->>P: after every Edit, Write and MultiEdit call, JSON on stdin
@@ -94,6 +99,11 @@ sequenceDiagram
   update hook) and, when the user-level `CLAUDE.md` names a vault, counts `_inbox/` notes older than 7
   days and reads the last line of `_reports/garden-log.md`. It shows due notices to the user as a
   `systemMessage`, each throttled by its own marker.
+- `brain-index.py`, for `source` `startup` or `clear`, reads the `Vault project slug:` line of `_Context.md`
+  at the git root of `cwd` and the vault path the way `notices.py` does, reads the frontmatter of every vault
+  note outside `_archive/`, `templates/`, `_views/` and `_reports/` (the first 4 KB of each regular file), and
+  prints the notes of that project, the hub first, then newest `updated` first, within 25 lines and 3000 bytes.
+  It writes nothing.
 - `guard.py` extracts `tool_input.command` with a regular expression, unescapes JSON, joins line continuations,
   drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
   purpose, so a mention such as `echo "pnpm add zod"` also asks; a quoted commit message (`-m "..."`, or a quoted-delimiter heredoc inside `$(…)`) is read as one word. Any parse failure prints nothing. For Edit, Write and MultiEdit it reads
@@ -114,7 +124,7 @@ sequenceDiagram
   keeps the counts per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/repeat-failure/`,
   and at the third failure of the same hash, each within 10 minutes of the last, adds a "stop retrying" reminder. It stores no command text.
 
-The six scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
+The seven scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
 
 ## 4. Skill composition
 
@@ -122,6 +132,7 @@ Skills call each other by name and dispatch agents. The dependencies that exist 
 
 ```mermaid
 flowchart LR
+  pr-finish --> pr-cycle
   pr-cycle --> code-review
   pr-cycle --> fix-pr
   fix-pr --> code-review

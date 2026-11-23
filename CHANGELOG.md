@@ -4,10 +4,49 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A `SessionStart` hook on a new session and `/clear`, `brain-index.py`, gives the agent the vault notes of the
+  current project (the `Vault project slug:` line of the repository's `_Context.md`): the hub first, then one line
+  per note with its path and summary, newest first, at most 25 notes and 3000 bytes, with an instruction to read the
+  note on a topic before touching it. Superseded, archived, rejected and expired inbox notes are left out; other
+  inbox notes are marked unreviewed. `DEVELOPER_OS_BRAIN_INDEX=off` turns it off (D30).
+- pr-finish skill: takes a PR from review to merge. It asks every decision once, up front, as numbered A/B/C
+  questions, runs pr-cycle with those answers, then waits for green CI, merges with a merge commit pinned to the
+  reviewed head, and removes the head's worktree and branches. It merges only when you chose the merge, the
+  verdict is `APPROVE` and every check is green (D31).
+- Guard: an Edit, Write or MultiEdit into the knowledge vault asks when its new text matches brain-capture's
+  secret patterns (a key, token, password or credential URL), so a missed redaction no longer reaches the
+  vault unasked. The vault path is read from the user-level config only.
+- The check scans the shipped skills with Cisco skill-scanner 2.3.2 (static analyzers only, no network) and
+  fails on a high or critical finding; reviewed false positives are suppressed in `.skill-scanner.yaml` with
+  their reasons. CI installs the pinned release (D32).
+
+### Changed
+
+- Core rules: open decisions are asked up front in one batch of numbered A/B/C questions, one option marked
+  recommended, answerable in one line ("1A 2B"), and the agent no longer asks a confirmation the user's or the
+  project's rules already settle. Other lines are worded shorter to stay under the 8900-byte cap; no rule is
+  dropped.
+- audit-to-backlog: the types, architecture, UI and accessibility passes, when delegated, run in a
+  general-purpose agent on Sonnet (`model: "sonnet"`) instead of the session's model.
+- brain-search expands a request into 3–5 search patterns: keywords, synonyms, the identifiers they stand
+  for, and the old and new name of anything renamed, so an older note in other words is still found.
+- parallel-lanes: a lane in `lanes.json` may name a `model` (an alias such as `sonnet`, or a model id),
+  passed to `claude -p` as `--model` on launch and resume; a lane that only searches, collects or
+  verifies gets `sonnet`. A model that reads as an option is refused.
+- implement-backlog and parallel-lanes regenerate derived files once, after the last merge, instead of
+  after every merge; a conflict only in derived lines takes either side.
+- parallel-lanes: without a project worktree script, the git-ignored files a lane's fast check needs (an
+  `.env`, a local config) are named in the launch question and copied into each worktree after the yes,
+  and a lane that starts a server gets its own ports.
+
 ### Fixed
 
 - brain-setup dates the new vault's example inbox note today, so brain-search no longer skips it as
   expired and the setup smoke test finds it.
+- `scripts/check.sh` lists an unresolved path once during a merge, not once per stage, so a conflicted
+  skill no longer triples its description in the 12000-character total.
 
 ## [0.3.0] - 2026-11-17
 

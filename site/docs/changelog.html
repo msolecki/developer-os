@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@77f3fb3d3d24">
+<meta name="dos-source" content="CHANGELOG.md@58bfc15d3981">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -47,10 +47,49 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h3 id="unreleased-added">Added</h3>
+<ul>
+<li>A <code>SessionStart</code> hook on a new session and <code>/clear</code>, <code>brain-index.py</code>, gives the agent the vault notes of the
+current project (the <code>Vault project slug:</code> line of the repository's <code>_Context.md</code>): the hub first, then one line
+per note with its path and summary, newest first, at most 25 notes and 3000 bytes, with an instruction to read the
+note on a topic before touching it. Superseded, archived, rejected and expired inbox notes are left out; other
+inbox notes are marked unreviewed. <code>DEVELOPER_OS_BRAIN_INDEX=off</code> turns it off (D30).</li>
+<li>pr-finish skill: takes a PR from review to merge. It asks every decision once, up front, as numbered A/B/C
+questions, runs pr-cycle with those answers, then waits for green CI, merges with a merge commit pinned to the
+reviewed head, and removes the head's worktree and branches. It merges only when you chose the merge, the
+verdict is <code>APPROVE</code> and every check is green (D31).</li>
+<li>Guard: an Edit, Write or MultiEdit into the knowledge vault asks when its new text matches brain-capture's
+secret patterns (a key, token, password or credential URL), so a missed redaction no longer reaches the
+vault unasked. The vault path is read from the user-level config only.</li>
+<li>The check scans the shipped skills with Cisco skill-scanner 2.3.2 (static analyzers only, no network) and
+fails on a high or critical finding; reviewed false positives are suppressed in <code>.skill-scanner.yaml</code> with
+their reasons. CI installs the pinned release (D32).</li>
+</ul>
+    <h3 id="unreleased-changed">Changed</h3>
+<ul>
+<li>Core rules: open decisions are asked up front in one batch of numbered A/B/C questions, one option marked
+recommended, answerable in one line ("1A 2B"), and the agent no longer asks a confirmation the user's or the
+project's rules already settle. Other lines are worded shorter to stay under the 8900-byte cap; no rule is
+dropped.</li>
+<li>audit-to-backlog: the types, architecture, UI and accessibility passes, when delegated, run in a
+general-purpose agent on Sonnet (<code>model: "sonnet"</code>) instead of the session's model.</li>
+<li>brain-search expands a request into 3–5 search patterns: keywords, synonyms, the identifiers they stand
+for, and the old and new name of anything renamed, so an older note in other words is still found.</li>
+<li>parallel-lanes: a lane in <code>lanes.json</code> may name a <code>model</code> (an alias such as <code>sonnet</code>, or a model id),
+passed to <code>claude -p</code> as <code>--model</code> on launch and resume; a lane that only searches, collects or
+verifies gets <code>sonnet</code>. A model that reads as an option is refused.</li>
+<li>implement-backlog and parallel-lanes regenerate derived files once, after the last merge, instead of
+after every merge; a conflict only in derived lines takes either side.</li>
+<li>parallel-lanes: without a project worktree script, the git-ignored files a lane's fast check needs (an
+<code>.env</code>, a local config) are named in the launch question and copied into each worktree after the yes,
+and a lane that starts a server gets its own ports.</li>
+</ul>
     <h3 id="unreleased-fixed">Fixed</h3>
 <ul>
 <li>brain-setup dates the new vault's example inbox note today, so brain-search no longer skips it as
 expired and the setup smoke test finds it.</li>
+<li><code>scripts/check.sh</code> lists an unresolved path once during a merge, not once per stage, so a conflicted
+skill no longer triples its description in the 12000-character total.</li>
 </ul>
     <h2 id="030---2026-11-17">[0.3.0] - 2026-11-17</h2>
     <h3 id="030-added">Added</h3>

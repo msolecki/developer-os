@@ -108,7 +108,7 @@
       <article class="layer">
         <span class="k">guard rails</span>
         <h3>Hooks that ask, never deny</h3>
-        <p>Seven small hooks: two load the rules and, after a compaction, resume or fork, the state card, one shows version and vault-upkeep notices on a new session, one asks before risky commands, one notes a risky construct an edit adds, one tells the agent to stop retrying a call that failed three times, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
+        <p>Eight small hooks: two load the rules and, after a compaction, resume or fork, the state card, one shows version and vault-upkeep notices on a new session, one lists the project's vault notes for the agent on a new session or <code>/clear</code>, one asks before risky commands, one notes a risky construct an edit adds, one tells the agent to stop retrying a call that failed three times, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
         <ul>
           <li><span>Network calls</span><span>none</span></li>
           <li><span>On a parse error</span><span>exit silently</span></li>
@@ -205,7 +205,7 @@
       <li>Agent-written code is reviewed by a fresh agent that did not write it.</li>
       <li>"Works" and "fixed" need evidence: test output, a command result or a screenshot.</li>
       <li>One git worktree per parallel agent; one orchestrator pushes.</li>
-      <li>Open decisions are asked as A/B/C options, not assumed.</li>
+      <li>Open decisions are asked up front, in one batch of numbered A/B/C questions with a recommended option, answerable as "1A 2B"; nothing a rule already settles is asked.</li>
       <li>Every task ends with a status: Done, Not done, Needs you.</li>
     </ul>
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">Read core.md</a>. Disagree with a rule? Override it in your own <code>~/.claude/CLAUDE.md</code>, which loads alongside it.</p>

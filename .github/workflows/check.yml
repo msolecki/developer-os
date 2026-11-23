@@ -69,6 +69,12 @@ jobs:
           npm install -g --ignore-scripts --fetch-retries=5 @anthropic-ai/claude-code@2.1.322
           node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
           claude --version
+      # skill-scanner: static security scan of the skills, run by scripts/check.sh (D32); policy in .skill-scanner.yaml.
+      # pipx installs the pinned release into its own environment; its dependencies resolve from PyPI at that time.
+      - name: Install skill-scanner
+        run: |
+          pipx install --pip-args=--retries=5 cisco-ai-skill-scanner==2.3.2
+          skill-scanner --version
       - name: gitleaks over the pull request's commits
         if: github.event_name == 'pull_request'
         env:
@@ -78,6 +84,10 @@ jobs:
           # A pull request must not loosen its own scan. BASE...HEAD diffs from the merge base: only the PR's own changes.
           if git diff --name-only "$BASE...$HEAD" | grep -E '(^|/)\.gitleaks(\.toml|ignore)$'; then
             echo "gitleaks configuration changed in this pull request; a maintainer reviews it by hand" >&2; exit 1
+          fi
+          # The same for the skill-scanner policy: a suppression added in the PR it silences is reviewed by hand.
+          if git diff --name-only "$BASE...$HEAD" | grep -E '^\.skill-scanner\.yaml$'; then
+            echo "::warning::.skill-scanner.yaml changed in this pull request; a maintainer reviews its suppressions by hand"
           fi
           # The bracket keeps this line from matching itself, so this file stays scanned.
           if git diff "$BASE...$HEAD" | grep -E '^\+.*gitleaks:[a]llow'; then

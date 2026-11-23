@@ -190,6 +190,21 @@ runs brain-search on the audited area first and reads the top note.
   push.
 - **Gates:** the fast check before each fix commit, the full suite once before the push.
 
+### pr-finish
+
+[Source](../../plugin/skills/pr-finish/SKILL.md). Takes a PR from review to merge: pr-cycle, then CI,
+merge and clean-up.
+
+- **Questions:** one up-front batch of numbered A/B/C questions: which findings to fix, whether to
+  merge after an `APPROVE`, and, for an untrusted head, whether to run its code; pr-cycle's own stops
+  (an unclear conflict, a red fast check, a new P0 or P1) still ask.
+- **Merge gate:** only with the merge chosen up front, an `APPROVE` that is not review-only, the
+  reviewed head still on GitHub, and every CI check green and the PR mergeable; it waits on
+  `gh pr checks --watch` in the background and merges with a merge commit pinned to the reviewed head.
+- **Clean-up:** removes the head's worktree (never a dirty one), deletes the local branch (`-D` only
+  when its work is in the base) and the remote branch in this repository, then prunes and
+  fast-forwards the base.
+
 ### fix-pr
 
 [Source](../../plugin/skills/fix-pr/SKILL.md). Works through unresolved review threads (GraphQL
@@ -240,7 +255,7 @@ clarification marker under open questions. It can turn the steps into `FEAT-` ba
 - **Git-ignored backlog:** the `Owner` lines stay uncommitted in the orchestrator's checkout, and
   each delegate's brief carries the full item text, so the batch can still run in parallel worktrees.
 - **While running:** runs each item's `Check` itself from the delegate's worktree root on a `DONE`
-  report, the project's regeneration command for derived files after each merge, then the full build, types,
+  report, the project's regeneration command for derived files once after the last merge, then the full build, types,
   tests and lint for the batch; classifies a failure before editing; stops after three failed
   repair cycles.
 - **Review:** the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
@@ -295,7 +310,8 @@ backlog items go to implement-backlog. Before a launch: a clean tree, `claude` a
 `PATH`, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
 lockfile belong to no lane), a budget in USD you name for each lane (there is no default), and a
 git-ignored run directory and `.worktrees/`. The skill writes `lanes.json` (the root, the base commit,
-the turn cap and, per lane, its budget, fast check and extra tools) and shows it with one command;
+the turn cap and, per lane, its budget, optional model, fast check and extra tools) and shows it with one command;
+a lane that only searches, collects or verifies gets `"model": "sonnet"`, passed as `--model`;
 `lanes.py`, a standard-library script beside the skill, launches, reports and resumes the lanes. Each
 lane is a detached `claude -p` in its own worktree and session, so it outlives the turn; the worktree
 starts from the base commit recorded in `lanes.json`, which the launch checks. Each lane runs with a
@@ -304,8 +320,8 @@ recorded `--session-id`, a `--max-turns` cap, `--max-budget-usd`, `--output-form
 `Makefile`, hook directories and `.claude/` unless it owns them, and always for `.git`, anything under
 it and a `.git` in a subdirectory: a lane that rewrote its worktree's `.git` file, or planted a repository in a
 subdirectory, could point git at a config of its own. `lanes.py`
-refuses a `lanes.json` with an unknown key, a budget or turn cap that is not a finite number, a
-`fast_check` holding a parenthesis, a comma or a control character, a `fast_check` or `allow` entry that runs git or
+refuses a `lanes.json` with an unknown key, a budget or turn cap that is not a finite number, a `model`
+that is not an alias or model id, a `fast_check` holding a parenthesis, a comma or a control character, a `fast_check` or `allow` entry that runs git or
 opens any command (a bare `Bash`, a shell, a wrapper or an interpreter with no script after it), an `allow` entry that
 is not one tool rule, or a file rule with an absolute, `~` or `..` path; its prompt allows only the lane's
 paths and commits in the worktree, and its report starts with a final status and lists what is not
@@ -326,8 +342,8 @@ worktree. Integration takes only finished `DONE` lanes whose fast check and `Che
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
 other lane goes to Needs you. Before the first merge it previews conflicts between the `DONE` lanes
 (`lanes.py conflicts`, git 2.38 or later; it moves no ref and changes no working-tree file, though git stores the trial merge's tree objects) and puts them on a `Conflicts:` line of the merge
-plan. After each lane merge it runs the project's regeneration command for
-derived files (in developer-os, `scripts/site-hashes.py`). After merging, it runs every merged lane's `Check` and the
+plan. A conflict only in derived lines takes either side; after the last lane merge it runs the project's
+regeneration command for derived files once (in developer-os, `scripts/site-hashes.py`). After merging, it runs every merged lane's `Check` and the
 repository-wide gate on `lanes/<run>`, and stops on a `REQUEST_CHANGES` review.
 
 ## Communication
