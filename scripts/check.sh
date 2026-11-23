@@ -6,9 +6,10 @@ cd "$(dirname "$0")/.."
 # The ruby stages read UTF-8 files; under LC_ALL=C they would default to ASCII and die.
 export RUBYOPT=-Eutf-8
 
-# Tracked plus untracked-not-ignored files, null-delimited, minus deleted-but-unstaged ones.
+# Tracked plus untracked-not-ignored files, null-delimited, minus deleted-but-unstaged ones. --deduplicate lists an
+# unresolved path once during a merge, not once per stage (base, ours, theirs).
 files() {
-  git ls-files -z --cached --others --exclude-standard "$@" |
+  git ls-files -z --deduplicate --cached --others --exclude-standard "$@" |
     while IFS= read -r -d '' f; do if [ -e "$f" ]; then printf '%s\0' "$f"; fi; done
 }
 fail() { echo "$1: $2: $3" >&2; exit 1; }

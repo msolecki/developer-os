@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@e964dd9be186">
+<meta name="dos-source" content="CHANGELOG.md@3c81ce452d97">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -75,6 +75,8 @@ verifies gets <code>sonnet</code>. A model that reads as an option is refused.</
 <ul>
 <li>brain-setup dates the new vault's example inbox note today, so brain-search no longer skips it as
 expired and the setup smoke test finds it.</li>
+<li><code>scripts/check.sh</code> lists an unresolved path once during a merge, not once per stage, so a conflicted
+skill no longer triples its description in the 12000-character total.</li>
 </ul>
     <h2 id="030---2026-11-17">[0.3.0] - 2026-11-17</h2>
     <h3 id="030-added">Added</h3>

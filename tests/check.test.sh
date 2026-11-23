@@ -160,6 +160,23 @@ for f in "$r"/plugin/skills/brain-*/SKILL.md; do
 done
 run "descriptions of skills with disable-model-invocation do not count toward 12000" fail "changed since the page was written"
 
+# Mid-merge, git ls-files prints every stage of an unresolved path (base, ours, theirs): with every skill unresolved,
+# counting each stage would triple the description total past 12000 (CHECK-01).
+if mine; then
+  g ls-files -s -- 'plugin/skills/*/SKILL.md' |
+    awk -F '\t' '{ split($(1), m, " "); printf "0 %040d\t%s\n", 0, $(2); for (s = 1; s <= 3; s++) printf "%s %s %d\t%s\n", m[1], m[2], s, $(2) }' |
+    g update-index --index-info
+  if [ -n "$(g ls-files -u)" ]; then
+    out=$(cd "$r" && bash scripts/check.sh 2>&1) && got=pass || got=fail
+    case $out in *"limit 12000"*) got="$got with the description total" ;; esac
+  else
+    got="no unmerged paths"
+  fi
+  if [ "$got" = pass ]; then echo "ok   an unmerged skill counts once"; else echo "FAIL an unmerged skill counts once: got $got" >&2; printf '%s\n' "$out" | tail -5 >&2; failed=1; fi
+fi
+g reset -q
+reset
+
 mkdir "$r/plugin/skills/zzz-new"
 # a short description, so the skill-descriptions budget does not fail first
 sed -e 's/^name: spec$/name: zzz-new/' -e 's/^description: .*/description: A placeholder skill that exists only so the check can see one missing from SURFACE.txt./' \
