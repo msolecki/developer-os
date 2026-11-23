@@ -22,6 +22,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   recommended, answerable in one line ("1A 2B"), and the agent no longer asks a confirmation the user's or the
   project's rules already settle. Other lines are worded shorter to stay under the 8900-byte cap; no rule is
   dropped.
+- audit-to-backlog: the types, architecture, UI and accessibility passes, when delegated, run in a
+  general-purpose agent on Sonnet (`model: "sonnet"`) instead of the session's model.
 
 ### Fixed
 

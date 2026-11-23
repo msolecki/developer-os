@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@7f8afd0d8660">
+<meta name="dos-source" content="CHANGELOG.md@552a19134641">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -65,6 +65,8 @@ verdict is <code>APPROVE</code> and every check is green (D31).</li>
 recommended, answerable in one line ("1A 2B"), and the agent no longer asks a confirmation the user's or the
 project's rules already settle. Other lines are worded shorter to stay under the 8900-byte cap; no rule is
 dropped.</li>
+<li>audit-to-backlog: the types, architecture, UI and accessibility passes, when delegated, run in a
+general-purpose agent on Sonnet (<code>model: "sonnet"</code>) instead of the session's model.</li>
 </ul>
     <h3 id="unreleased-fixed">Fixed</h3>
 <ul>

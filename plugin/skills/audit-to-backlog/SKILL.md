@@ -31,10 +31,10 @@ Run the requested perspectives in parallel:
 | correctness | `developer-os:code-reviewer` |
 | data (migrations, schema, queries; skip without a database) | `developer-os:database-reviewer` |
 | infra (IaC and CI workflows; skip without either) | `developer-os:infra-reviewer` |
-| types | inline pass or a general-purpose agent |
-| arch (architecture, dead code) | inline pass or a general-purpose agent |
-| ui | inline pass or a general-purpose agent |
-| a11y | inline pass or a general-purpose agent |
+| types | inline pass or a general-purpose agent with `model: "sonnet"` |
+| arch (architecture, dead code) | inline pass or a general-purpose agent with `model: "sonnet"` |
+| ui | inline pass or a general-purpose agent with `model: "sonnet"` |
+| a11y | inline pass or a general-purpose agent with `model: "sonnet"` |
 
 Give each reviewer the objective, an explicit scope (directories or a file list), constraints, stack, output format, a `Not read:` line listing the in-scope paths it did not open, and the cap: every P0 and P1, plus at most 15 P2/P3 findings ordered by impact, and the impact rubric: KEEP a finding that changes behavior, data, security or a measured cost; DROP style, comment wording, a refactor wish, an unused constant and unmeasured performance, however true. Fewer findings beat a filled quota.
 
