@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-24
+
 ### Added
 
 - A `SessionStart` hook on a new session and `/clear`, `brain-index.py`, gives the agent the vault notes of the
