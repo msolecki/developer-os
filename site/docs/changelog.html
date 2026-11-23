@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@987564c8e7c1">
+<meta name="dos-source" content="CHANGELOG.md@c76cc7d445cb">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -75,6 +75,11 @@ for, and the old and new name of anything renamed, so an older note in other wor
 <li>parallel-lanes: a lane in <code>lanes.json</code> may name a <code>model</code> (an alias such as <code>sonnet</code>, or a model id),
 passed to <code>claude -p</code> as <code>--model</code> on launch and resume; a lane that only searches, collects or
 verifies gets <code>sonnet</code>. A model that reads as an option is refused.</li>
+<li>implement-backlog and parallel-lanes regenerate derived files once, after the last merge, instead of
+after every merge; a conflict only in derived lines takes either side.</li>
+<li>parallel-lanes: without a project worktree script, the git-ignored files a lane's fast check needs (an
+<code>.env</code>, a local config) are named in the launch question and copied into each worktree after the yes,
+and a lane that starts a server gets its own ports.</li>
 </ul>
     <h3 id="unreleased-fixed">Fixed</h3>
 <ul>

@@ -129,7 +129,7 @@ first 12 hex digits of the source's SHA-256 with any `last-verified:` line remov
 doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style,
 the Site stage names the page to refresh: update its text, then its hash
 (`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). The regeneration command for
-these derived hashes, which implement-backlog and parallel-lanes run after each lane merge, is
+these derived hashes, which implement-backlog and parallel-lanes run once after the last lane merge, is
 `python3 scripts/site-hashes.py` from the repository root: it rewrites every `dos-source` hash to its
 source's current one and changes no page text. A page under `site/docs/` must
 carry its source's words in order, so a new hash on an unedited page still fails; skill, agent and

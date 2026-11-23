@@ -255,7 +255,7 @@ clarification marker under open questions. It can turn the steps into `FEAT-` ba
 - **Git-ignored backlog:** the `Owner` lines stay uncommitted in the orchestrator's checkout, and
   each delegate's brief carries the full item text, so the batch can still run in parallel worktrees.
 - **While running:** runs each item's `Check` itself from the delegate's worktree root on a `DONE`
-  report, the project's regeneration command for derived files after each merge, then the full build, types,
+  report, the project's regeneration command for derived files once after the last merge, then the full build, types,
   tests and lint for the batch; classifies a failure before editing; stops after three failed
   repair cycles.
 - **Review:** the batch diff through code-review (at most two rounds); a P0/P1 whose fix neither
@@ -342,8 +342,8 @@ worktree. Integration takes only finished `DONE` lanes whose fast check and `Che
 orchestrator re-runs them, with no uncommitted change and no file changed outside the owned paths; any
 other lane goes to Needs you. Before the first merge it previews conflicts between the `DONE` lanes
 (`lanes.py conflicts`, git 2.38 or later; it moves no ref and changes no working-tree file, though git stores the trial merge's tree objects) and puts them on a `Conflicts:` line of the merge
-plan. After each lane merge it runs the project's regeneration command for
-derived files (in developer-os, `scripts/site-hashes.py`). After merging, it runs every merged lane's `Check` and the
+plan. A conflict only in derived lines takes either side; after the last lane merge it runs the project's
+regeneration command for derived files once (in developer-os, `scripts/site-hashes.py`). After merging, it runs every merged lane's `Check` and the
 repository-wide gate on `lanes/<run>`, and stops on a `REQUEST_CHANGES` review.
 
 ## Communication

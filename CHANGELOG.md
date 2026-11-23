@@ -32,6 +32,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - parallel-lanes: a lane in `lanes.json` may name a `model` (an alias such as `sonnet`, or a model id),
   passed to `claude -p` as `--model` on launch and resume; a lane that only searches, collects or
   verifies gets `sonnet`. A model that reads as an option is refused.
+- implement-backlog and parallel-lanes regenerate derived files once, after the last merge, instead of
+  after every merge; a conflict only in derived lines takes either side.
+- parallel-lanes: without a project worktree script, the git-ignored files a lane's fast check needs (an
+  `.env`, a local config) are named in the launch question and copied into each worktree after the yes,
+  and a lane that starts a server gets its own ports.
 
 ### Fixed
 

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@8b0ec4907575">
+<meta name="dos-source" content="docs/product/decisions.md@0860e072bdbe">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -433,6 +433,7 @@ its changes with Read and <code>git status</code>.</li>
 <tr><td>2026-11-17</td><td>A <code>Check</code> for a test the fix adds is guarded so it exits 1 until the test exists; triage reads that exit as red</td><td><code>audit-to-backlog</code>, <code>implement-backlog</code></td><td>A bare test id that does not exist yet exits 4 with &quot;no tests ran&quot;, which triage classed as a broken <code>Check</code> (#146)</td></tr>
 <tr><td>2026-11-17</td><td>A lane gets no <code>git diff</code>, and <code>lanes.json</code> refuses a <code>fast_check</code> or <code>allow</code> entry that runs git (D23 amended)</td><td><code>parallel-lanes</code></td><td><code>git diff --output=&lt;file&gt;</code> let a lane overwrite the main checkout's <code>.git/config</code> (PR #141 review)</td></tr>
 <tr><td>2026-11-19</td><td>Open decisions are asked up front in one batch of numbered A/B/C questions, one option marked recommended, answerable in one line ("1A 2B"); a decision that surfaces later is asked the same way, never assumed; no confirmation the user's or project's rules already settle. To fit the 8900-byte cap, without dropping a rule: the fast-check source, subagent-bypass, subagent-diff, external-repository, worktree, dispatch, per-worktree-resource, language, plan-step estimate, fresh-reviewer, handoff, brain-search and report-back lines are reworded shorter (8892 bytes)</td><td><code>plugin/rules/core.md</code></td><td>914 interactive sessions (2026-10-20 to 11-18): 1814 AskUserQuestion calls; 61–67 % of single-choice answers took the recommended option; the owner asks for all questions at once and answers "1A 2B 3A"; the most common questions were mechanical and already settled by rules (commit/push 235, backlog or plan location 215, Jira key 90, dependency install 79)</td></tr>
+<tr><td>2026-11-23</td><td>Integration regenerates derived files once after the last lane merge, taking either side of a conflict only in derived lines (amends the 2026-11-08 row); a lane may name a <code>model</code>, and a lane or audit pass that only searches, collects or verifies runs on sonnet; without a project worktree script, the git-ignored files a lane's fast check needs are copied only after the launch question's yes</td><td><code>implement-backlog</code>, <code>parallel-lanes</code>, <code>audit-to-backlog</code></td><td>Regenerating after every merge committed hashes that the next merge made stale again (IDEA-05); a general-purpose agent or lane runs on the session's model; a fresh worktree lacks the <code>.env</code> its fast check reads (IDEA-06)</td></tr>
 </tbody>
 </table>
 </div>
