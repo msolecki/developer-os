@@ -88,7 +88,7 @@ mkrepo() {
   "max_turns": 50,
   "manifests": ["package.json"],
   "lanes": [
-    {"name": "a", "budget_usd": 3, "fast_check": "sh check.sh", "allow": ["Bash(node checks/a.mjs:*)"], "drop_deny": [".claude/**"]},
+    {"name": "a", "budget_usd": 3, "model": "sonnet", "fast_check": "sh check.sh", "allow": ["Bash(node checks/a.mjs:*)"], "drop_deny": [".claude/**"]},
     {"name": "b", "budget_usd": 1.5, "fast_check": "sh check.sh"}
   ]
 }
@@ -138,6 +138,13 @@ err=$(l launch "$R" 2>&1)
 expect "a tool that reads as a flag is refused" 1 $?
 [ ! -e "$R/pids.txt" ] && ok "nothing starts with a flag in allow" || bad "pids.txt written with a flag in allow"
 
+mkrepo badmodel
+sed 's/"model": "sonnet"/"model": "--settings=x"/' "$R/lanes.json" > "$R/lanes.tmp" && mv "$R/lanes.tmp" "$R/lanes.json"
+err=$(l launch "$R" 2>&1)
+expect "a model that reads as a flag is refused" 1 $?
+has "the refusal names the model" "a: model" "$err"
+[ ! -e "$R/pids.txt" ] && ok "nothing starts with a flag as the model" || bad "pids.txt written with a flag as the model"
+
 mkrepo moved
 printf 'two\n' > "$repo/.worktrees/a/f.txt"
 commit "$repo/.worktrees/a" "moved"
@@ -162,6 +169,7 @@ args=$(tr '\n' ' ' < "$STUB/args-a")
 has "the lane gets its session id" "--session-id $ida " "$args"
 has "the lane gets max turns" "--max-turns 50 " "$args"
 has "the lane gets its budget" "--max-budget-usd 3 " "$args"
+has "the lane runs on its model" "--model sonnet " "$args"
 has "the lane may not rewrite its .git file" "Write(.git) " "$args"
 has "the lane may not write inside a .git directory" "Write(.git/**)" "$args"
 has "the lane prints a JSON result" "--output-format json " "$args"
@@ -175,6 +183,7 @@ hasnt "no permission bypass" "skip-permissions" "$args"
 argsb=$(tr '\n' ' ' < "$STUB/args-b")
 has "the other lane has its own budget" "--max-budget-usd 1.5 " "$argsb"
 hasnt "the other lane lacks the extra tool" "checks/a.mjs" "$argsb"
+hasnt "a lane without a model runs on the default one" "--model" "$argsb"
 has "the other lane keeps the whole deny list" "Edit(.claude/**) Write(.claude/**)" "$argsb"
 expect "the log ends with the EXIT line" "EXIT=0" "$(tail -1 "$R/log-a.txt")"
 
@@ -200,6 +209,7 @@ settle
 expect "resume adds a pids.txt line with the same session id" 2 "$(grep -c "^a [0-9]* $ida\$" "$R/pids.txt")"
 args=$(tr '\n' ' ' < "$STUB/args-a")
 has "resume continues the session" "--resume $ida " "$args"
+has "resume keeps the model" "--model sonnet " "$args"
 has "resume keeps the budget and the tools" "--max-budget-usd 3 --output-format json --permission-mode acceptEdits --allowedTools Read Edit Write Glob Grep " "$args"
 has "the log marks the resume" "--- resumed " "$(cat "$R/log-a.txt")"
 out=$(l status "$R")

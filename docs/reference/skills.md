@@ -310,7 +310,8 @@ backlog items go to implement-backlog. Before a launch: a clean tree, `claude` a
 `PATH`, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
 lockfile belong to no lane), a budget in USD you name for each lane (there is no default), and a
 git-ignored run directory and `.worktrees/`. The skill writes `lanes.json` (the root, the base commit,
-the turn cap and, per lane, its budget, fast check and extra tools) and shows it with one command;
+the turn cap and, per lane, its budget, optional model, fast check and extra tools) and shows it with one command;
+a lane that only searches, collects or verifies gets `"model": "sonnet"`, passed as `--model`;
 `lanes.py`, a standard-library script beside the skill, launches, reports and resumes the lanes. Each
 lane is a detached `claude -p` in its own worktree and session, so it outlives the turn; the worktree
 starts from the base commit recorded in `lanes.json`, which the launch checks. Each lane runs with a
@@ -319,8 +320,8 @@ recorded `--session-id`, a `--max-turns` cap, `--max-budget-usd`, `--output-form
 `Makefile`, hook directories and `.claude/` unless it owns them, and always for `.git`, anything under
 it and a `.git` in a subdirectory: a lane that rewrote its worktree's `.git` file, or planted a repository in a
 subdirectory, could point git at a config of its own. `lanes.py`
-refuses a `lanes.json` with an unknown key, a budget or turn cap that is not a finite number, a
-`fast_check` holding a parenthesis, a comma or a control character, a `fast_check` or `allow` entry that runs git or
+refuses a `lanes.json` with an unknown key, a budget or turn cap that is not a finite number, a `model`
+that is not an alias or model id, a `fast_check` holding a parenthesis, a comma or a control character, a `fast_check` or `allow` entry that runs git or
 opens any command (a bare `Bash`, a shell, a wrapper or an interpreter with no script after it), an `allow` entry that
 is not one tool rule, or a file rule with an absolute, `~` or `..` path; its prompt allows only the lane's
 paths and commits in the worktree, and its report starts with a final status and lists what is not

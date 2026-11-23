@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@c2b1428fc9c6">
+<meta name="dos-source" content="docs/reference/skills.md@c44d75e7fc93">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -327,7 +327,8 @@ backlog items go to implement-backlog. Before a launch: a clean tree, <code>clau
 <code>PATH</code>, a known fast check, 2–6 lanes whose owned paths do not overlap (shared files such as a
 lockfile belong to no lane), a budget in USD you name for each lane (there is no default), and a
 git-ignored run directory and <code>.worktrees/</code>. The skill writes <code>lanes.json</code> (the root, the base commit,
-the turn cap and, per lane, its budget, fast check and extra tools) and shows it with one command;
+the turn cap and, per lane, its budget, optional model, fast check and extra tools) and shows it with one command;
+a lane that only searches, collects or verifies gets <code>"model": "sonnet"</code>, passed as <code>--model</code>;
 <code>lanes.py</code>, a standard-library script beside the skill, launches, reports and resumes the lanes. Each
 lane is a detached <code>claude -p</code> in its own worktree and session, so it outlives the turn; the worktree
 starts from the base commit recorded in <code>lanes.json</code>, which the launch checks. Each lane runs with a
@@ -336,8 +337,8 @@ recorded <code>--session-id</code>, a <code>--max-turns</code> cap, <code>--max-
 <code>Makefile</code>, hook directories and <code>.claude/</code> unless it owns them, and always for <code>.git</code>, anything under
 it and a <code>.git</code> in a subdirectory: a lane that rewrote its worktree's <code>.git</code> file, or planted a repository in a
 subdirectory, could point git at a config of its own. <code>lanes.py</code>
-refuses a <code>lanes.json</code> with an unknown key, a budget or turn cap that is not a finite number, a
-<code>fast_check</code> holding a parenthesis, a comma or a control character, a <code>fast_check</code> or <code>allow</code> entry that runs git or
+refuses a <code>lanes.json</code> with an unknown key, a budget or turn cap that is not a finite number, a <code>model</code>
+that is not an alias or model id, a <code>fast_check</code> holding a parenthesis, a comma or a control character, a <code>fast_check</code> or <code>allow</code> entry that runs git or
 opens any command (a bare <code>Bash</code>, a shell, a wrapper or an interpreter with no script after it), an <code>allow</code> entry that
 is not one tool rule, or a file rule with an absolute, <code>~</code> or <code>..</code> path; its prompt allows only the lane's
 paths and commits in the worktree, and its report starts with a final status and lists what is not
