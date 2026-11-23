@@ -27,6 +27,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   dropped.
 - audit-to-backlog: the types, architecture, UI and accessibility passes, when delegated, run in a
   general-purpose agent on Sonnet (`model: "sonnet"`) instead of the session's model.
+- brain-search expands a request into 3–5 search patterns: keywords, synonyms, the identifiers they stand
+  for, and the old and new name of anything renamed, so an older note in other words is still found.
 - parallel-lanes: a lane in `lanes.json` may name a `model` (an alias such as `sonnet`, or a model id),
   passed to `claude -p` as `--model` on launch and resume; a lane that only searches, collects or
   verifies gets `sonnet`. A model that reads as an option is refused.

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@b5742fc93172">
+<meta name="dos-source" content="CHANGELOG.md@987564c8e7c1">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -70,6 +70,8 @@ project's rules already settle. Other lines are worded shorter to stay under the
 dropped.</li>
 <li>audit-to-backlog: the types, architecture, UI and accessibility passes, when delegated, run in a
 general-purpose agent on Sonnet (<code>model: "sonnet"</code>) instead of the session's model.</li>
+<li>brain-search expands a request into 3–5 search patterns: keywords, synonyms, the identifiers they stand
+for, and the old and new name of anything renamed, so an older note in other words is still found.</li>
 <li>parallel-lanes: a lane in <code>lanes.json</code> may name a <code>model</code> (an alias such as <code>sonnet</code>, or a model id),
 passed to <code>claude -p</code> as <code>--model</code> on launch and resume; a lane that only searches, collects or
 verifies gets <code>sonnet</code>. A model that reads as an option is refused.</li>

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@acf7f0ab443a">
+<meta name="dos-source" content="docs/reference/hooks.md@d7d00e868bf0">
 <link rel="preload" as="font" type="font/woff2" href="../../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../../assets/site.css">
 </head>
@@ -180,7 +180,7 @@ PROJECTS/&lt;slug&gt;.md — &lt;summary&gt;
     SDK sessions too, so a headless lane gets the same notes.</p>
     <h2 id="pretooluse-on-bash-edit-write-and-multiedit--guardpy">PreToolUse on Bash, Edit, Write and MultiEdit - <code>guard.py</code></h2>
     <p><strong>Matcher:</strong> <code>Bash|Edit|Write|MultiEdit</code>.</p>
-    <p><strong>Input:</strong> the hook JSON on stdin; <code>tool_input.command</code> for Bash, <code>tool_name</code> and <code>tool_input.file_path</code> for Edit, Write and MultiEdit, <code>old_string</code>/<code>new_string</code> for Edit, <code>edits</code> for MultiEdit and <code>content</code> for Write (for a test file, also the first MiB of the file on disk); <code>agent_type</code>, present when a subagent makes the call; <code>cwd</code>, the session's working directory when the hook runs (Claude Code's hooks reference lists it among the fields every event receives; it follows a <code>cd</code> and is the worktree root after the session enters a worktree), used for the worktree boundary and the project rules. Without <code>cwd</code> those two checks are skipped.</p>
+    <p><strong>Input:</strong> the hook JSON on stdin; <code>tool_input.command</code> for Bash, <code>tool_name</code> and <code>tool_input.file_path</code> for Edit, Write and MultiEdit, <code>old_string</code>/<code>new_string</code> for Edit, <code>edits</code> for MultiEdit and <code>content</code> for Write (for a test file, also the first MiB of the file on disk); <code>agent_type</code>, present when a subagent makes the call; <code>cwd</code>, the session's working directory when the hook runs (Claude Code's hooks reference lists it among the fields every event receives; it follows a <code>cd</code> and is the worktree root after the session enters a worktree), used for the worktree boundary and the project rules. Without <code>cwd</code> those two checks are skipped. Claude Code's tools reference no longer lists a MultiEdit tool (checked on 2026-11-23 against 2.1.330); the matchers and checks keep it, at no cost, for older versions that still send it.</p>
     <p><strong>Decision:</strong> prints one line and exits 0:</p>
 <pre><code>{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"&lt;reason&gt;"}}</code></pre>
     <p>or prints nothing and exits 0, which leaves Claude Code's normal permission flow in charge. It never

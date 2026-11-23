@@ -170,7 +170,7 @@ SDK sessions too, so a headless lane gets the same notes.
 
 **Matcher:** `Bash|Edit|Write|MultiEdit`.
 
-**Input:** the hook JSON on stdin; `tool_input.command` for Bash, `tool_name` and `tool_input.file_path` for Edit, Write and MultiEdit, `old_string`/`new_string` for Edit, `edits` for MultiEdit and `content` for Write (for a test file, also the first MiB of the file on disk); `agent_type`, present when a subagent makes the call; `cwd`, the session's working directory when the hook runs (Claude Code's hooks reference lists it among the fields every event receives; it follows a `cd` and is the worktree root after the session enters a worktree), used for the worktree boundary and the project rules. Without `cwd` those two checks are skipped.
+**Input:** the hook JSON on stdin; `tool_input.command` for Bash, `tool_name` and `tool_input.file_path` for Edit, Write and MultiEdit, `old_string`/`new_string` for Edit, `edits` for MultiEdit and `content` for Write (for a test file, also the first MiB of the file on disk); `agent_type`, present when a subagent makes the call; `cwd`, the session's working directory when the hook runs (Claude Code's hooks reference lists it among the fields every event receives; it follows a `cd` and is the worktree root after the session enters a worktree), used for the worktree boundary and the project rules. Without `cwd` those two checks are skipped. Claude Code's tools reference no longer lists a MultiEdit tool (checked on 2026-11-23 against 2.1.330); the matchers and checks keep it, at no cost, for older versions that still send it.
 
 **Decision:** prints one line and exits 0:
 
