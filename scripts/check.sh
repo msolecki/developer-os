@@ -490,7 +490,7 @@ gitleaks dir --no-banner --redact "$tmp"
 # Static security scan of the shipped skills with Cisco skill-scanner (D32): static analyzers only, no LLM and no
 # network; policy and reviewed suppressions in .skill-scanner.yaml. It scans the tracked copy above, so a local
 # __pycache__ is not read. CI installs the pinned release; locally it runs when on PATH. SKILL_SCANNER overrides
-# the command; the copies tests/check.test.sh makes skip it (about 5 s each), unless a case sets SKILL_SCANNER.
+# the command; the copies tests/check.test.sh makes (CHECK_TEST_COPY) skip it, about 5 s each, unless a case sets SKILL_SCANNER.
 scanner=${SKILL_SCANNER:-skill-scanner}
 if [ -n "${CHECK_TEST_COPY:-}" ] && [ -z "${SKILL_SCANNER:-}" ]; then
   :
