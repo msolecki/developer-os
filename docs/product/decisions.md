@@ -627,6 +627,29 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   everyone who runs it); a separate merge-when-green skill (one more description in the listing budget, D10, for
   a step that only follows pr-cycle).
 
+## D32. The skills pass a static security scan in the check
+
+- **Date:** 2026-11-23
+- **Decision:** `scripts/check.sh` runs Cisco skill-scanner 2.3.2 (`cisco-ai-skill-scanner`, Apache-2.0) over a
+  tracked copy of `plugin/skills/`, static analyzers only (no `--use-llm`, VirusTotal, AI Defense or OSV, so no key
+  and no network), with the `low-noise` preset and `--fail-on-severity high`. Its policy is `.skill-scanner.yaml`:
+  each suppression names one rule, one skill and the reason a maintainer judged it a false positive. CI installs
+  the pinned release with `pipx`; a missing scanner fails in CI and is skipped locally, like agnix (D18). The copies
+  `tests/check.test.sh` makes skip it (about 5 s each) except in the cases that test it. A pull request that changes
+  `.skill-scanner.yaml` gets a CI warning that a maintainer reviews its suppressions.
+- **Why:** agnix lints structure; nothing scanned the skills for injected instructions, obfuscated code or unsafe
+  script patterns, which is the threat model of a plugin that ships prompts and scripts to other machines. The first
+  run found two critical findings, both false positives (fix-pr's own Trust check read as coercive text, and a
+  `.worktrees/<name>` join in `lanes.py` whose name `validate()` restricts), now suppressed with their reasons.
+- **Trust:** the scanner's own dependencies (about 100 packages) resolve from PyPI at install time and are not
+  hash-pinned, unlike the release tarballs of D29; it runs only in CI and on the maintainer's machine, never in a
+  user's session. Its releases came about weekly when adopted, so a version bump is a deliberate change here.
+- **Alternatives rejected:** its reusable GitHub workflow (a second job and status, against D29, and its recommended
+  setup runs the LLM judge); a non-blocking SARIF upload (a gate that cannot fail checks nothing); the `balanced`
+  preset (it adds bytecode findings for a local `__pycache__` that the tracked copy already excludes).
+- **Revisit when:** a release changes findings on unchanged skills, the suppressions grow past a handful, or the
+  install time dominates the CI run.
+
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change

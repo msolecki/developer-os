@@ -135,6 +135,26 @@ if mine; then
 fi
 reset
 
+# skill-scanner (D32): a finding fails the check, and in CI a missing scanner fails, never skips. agnix is a stub that
+# passes, so the agnix stage does not fail first.
+mkdir -p "$tmp/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$tmp/bin/agnix"
+printf '%s\n' '#!/bin/sh' 'echo "CRITICAL: 1"; exit 1' > "$tmp/bin/scanner"
+chmod +x "$tmp/bin/agnix" "$tmp/bin/scanner"
+if mine; then
+  out=$(cd "$r" && CHECK_TEST_COPY= AGNIX="$tmp/bin/agnix" SKILL_SCANNER="$tmp/bin/scanner" bash scripts/check.sh 2>&1) && got=pass || got=fail
+  case $out in *"skill-scanner: plugin/skills: skill-scanner found"*) ;; *) got="$got without the scanner message" ;; esac
+  if [ "$got" = fail ]; then echo "ok   a skill-scanner finding fails the check"; else echo "FAIL a skill-scanner finding fails the check: got $got" >&2; printf '%s\n' "$out" | tail -5 >&2; failed=1; fi
+fi
+reset
+if mine; then
+  out=$(cd "$r" && CI=1 CHECK_TEST_COPY= AGNIX="$tmp/bin/agnix" SKILL_SCANNER="$tmp/no-scanner" bash scripts/check.sh 2>&1) && got=pass || got=fail
+  case $out in *"skill-scanner not found; CI must set it up"*) ;; *) got="$got without the scanner message" ;; esac
+  if [ "$got" = fail ]; then echo "ok   skill-scanner missing in CI fails"; else echo "FAIL skill-scanner missing in CI fails: got $got" >&2; printf '%s\n' "$out" | tail -5 >&2; failed=1; fi
+fi
+reset
+rm -f "$tmp/bin/agnix" "$tmp/bin/scanner"
+
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'
 run "an action skill without ## Never" fail "plugin/skills/spec/SKILL.md: skill has no ## Never section"
 

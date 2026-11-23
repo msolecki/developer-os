@@ -18,6 +18,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Guard: an Edit, Write or MultiEdit into the knowledge vault asks when its new text matches brain-capture's
   secret patterns (a key, token, password or credential URL), so a missed redaction no longer reaches the
   vault unasked. The vault path is read from the user-level config only.
+- The check scans the shipped skills with Cisco skill-scanner 2.3.2 (static analyzers only, no network) and
+  fails on a high or critical finding; reviewed false positives are suppressed in `.skill-scanner.yaml` with
+  their reasons. CI installs the pinned release (D32).
 
 ### Changed
 

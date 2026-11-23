@@ -56,6 +56,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
 | agnix | `agnix --target claude-code --strict --config .agnix.toml .` reports an error or warning; the stage runs when `agnix` is on `PATH`, prints `SKIP agnix` otherwise, and fails when it is missing in CI; `AGNIX` overrides the command |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
+| Skill scan | `skill-scanner scan-all` over the tracked `plugin/skills/`, static analyzers only, with `.skill-scanner.yaml`, reports a high or critical finding or cannot run; the stage runs when `skill-scanner` is on `PATH`, prints `SKIP skill-scanner` otherwise, and fails when it is missing in CI; `SKILL_SCANNER` overrides the command (D32) |
 
 The file set is tracked plus untracked-not-ignored files, so a new doc is checked before it is
 committed.

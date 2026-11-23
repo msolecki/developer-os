@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@00ff7bd6466a">
+<meta name="dos-source" content="docs/development.md@ba80ddb17810">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -87,6 +87,7 @@
           <tr><td>Plugin validation</td><td><code>claude plugin validate . --strict</code> or <code>claude plugin validate plugin --strict</code> fails when <code>--strict</code> exits non-zero, that is on any error or warning (such as an unknown manifest key)</td></tr>
           <tr><td>agnix</td><td><code>agnix --target claude-code --strict --config .agnix.toml .</code> reports an error or warning; the stage runs when <code>agnix</code> is on <code>PATH</code>, prints <code>SKIP agnix</code> otherwise, and fails when it is missing in CI; <code>AGNIX</code> overrides the command</td></tr>
           <tr><td>Secrets</td><td><code>gitleaks dir</code> finds a secret in tracked or untracked-not-ignored files</td></tr>
+          <tr><td>Skill scan</td><td><code>skill-scanner scan-all</code> over the tracked <code>plugin/skills/</code>, static analyzers only, with <code>.skill-scanner.yaml</code>, reports a high or critical finding or cannot run; the stage runs when <code>skill-scanner</code> is on <code>PATH</code>, prints <code>SKIP skill-scanner</code> otherwise, and fails when it is missing in CI; <code>SKILL_SCANNER</code> overrides the command (D32)</td></tr>
         </tbody>
       </table>
     </div>

@@ -1,0 +1,12 @@
+# Scan policy for Cisco skill-scanner, run by scripts/check.sh (D32). Static analyzers only: no LLM, no network.
+# Each suppression names one reviewed false positive; a new finding fails the check until it is fixed or reviewed here.
+policy_name: developer-os
+policy_version: '1'
+preset_base: low-noise
+suppressions:
+  - rule_id: YARA_coercive_injection_generic
+    skills: [fix-pr]
+    reason: "'stop if it lists anything ..., then apply the Trust check' is the skill's own safety step, not injected text (reviewed 2026-11-23)."
+  - rule_id: PATH_TRAVERSAL_OPEN
+    skills: [parallel-lanes]
+    reason: "lanes.py joins .worktrees/<name> only after validate() matched the name against [a-z0-9][a-z0-9-]* (reviewed 2026-11-23)."
