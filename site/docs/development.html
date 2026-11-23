@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@ba80ddb17810">
+<meta name="dos-source" content="docs/development.md@d068cd5bdced">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -146,6 +146,7 @@ stage's message; it runs the whole check once per case (several minutes), so <co
 only when <code>CI</code> is set (GitHub Actions sets it), split into one shard per CPU run side by side, each in its own copy
 (<code>CHECK_TEST_SHARD=K/N</code> runs every Nth case from the Kth on): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;
 it sets <code>CHECK_TEST_COPY</code>, so <code>tests/guard.test.sh</code> in its copies skips the CPU-time limits that the top-level run measures;
+a case never clears <code>CHECK_TEST_COPY</code>, since that brings back those limits on CPUs the shards share and fails <code>guard.test.sh</code>; to run a stage the copies skip, a case sets that stage's own variable, such as <code>SKILL_SCANNER</code>;
 a cancelled or timed-out job still prints what each shard wrote so far;
 <code>tests/check-shard.test.sh</code> passes malformed <code>CHECK_TEST_SHARD</code> specs to it and expects each to fail before any case runs,
 and with <code>CHECK_TEST_LIST=&lt;file&gt;</code> (each shard lists the cases it owns instead of running them) expects 4 shards to own
