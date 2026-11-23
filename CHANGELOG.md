@@ -15,6 +15,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   questions, runs pr-cycle with those answers, then waits for green CI, merges with a merge commit pinned to the
   reviewed head, and removes the head's worktree and branches. It merges only when you chose the merge, the
   verdict is `APPROVE` and every check is green (D31).
+- Guard: an Edit, Write or MultiEdit into the knowledge vault asks when its new text matches brain-capture's
+  secret patterns (a key, token, password or credential URL), so a missed redaction no longer reaches the
+  vault unasked. The vault path is read from the user-level config only.
 
 ### Changed
 

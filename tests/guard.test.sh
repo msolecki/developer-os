@@ -626,6 +626,29 @@ check pass "$(fw "$wd/big.test.ts" "$xs\\nit.skip(a)")"
 rm -rf "$wd"
 grep -q '"Bash|Edit|Write|MultiEdit"' "$(dirname "$0")/../plugin/hooks/hooks.json" || { fail=1; echo "FAIL: hooks.json matcher lacks MultiEdit"; }
 
+# IDEA-03: a write into the vault that holds a secret pattern asks. Tokens are built at run time, so this file
+# holds none for gitleaks to find.
+cfg=$(mktemp -d) && vd=$(mktemp -d)
+printf 'Brain vault: %s\n' "$vd" > "$cfg/CLAUDE.md"
+aws="AKIA$(printf 'ABCDEFGHIJKLMNOP')"
+pw="$(printf 'pass')word = hunter2hunter"
+export CLAUDE_CONFIG_DIR="$cfg"
+check ask "$(fw "$vd/_inbox/n.md" "key $aws")" "secret"
+check ask "$(fw "$vd/_inbox/n.md" "$pw")" "secret"
+check ask "$(fd "$vd/DEV/n.md" 'old' "key $aws")" "secret"
+check ask "$(fm "$vd/DEV/n.md" 'old' "key $aws")" "secret"
+check pass "$(fw "$vd/_inbox/n.md" 'A lesson with no secret.')"
+check pass "$(fd "$vd/DEV/n.md" "key $aws" 'key redacted')"
+check pass "$(fw /x/notes/n.md "key $aws")"
+printf '{"pluginConfigs":{"developer-os@m":{"options":{"brain_vault":"%s"}}}}' "$vd/opt" > "$cfg/settings.json"
+mkdir "$vd/opt"
+check ask "$(fw "$vd/opt/n.md" "key $aws")" "secret"
+check pass "$(fw "$vd/other.md" "key $aws")"
+rm -f "$cfg/settings.json" "$cfg/CLAUDE.md"
+check pass "$(fw "$vd/_inbox/n.md" "key $aws")"
+unset CLAUDE_CONFIG_DIR
+rm -rf "$cfg" "$vd"
+
 # D2 (2026-11-12): cloud deletes
 for c in 'aws ec2 terminate-instances --instance-ids i-1' 'aws s3api delete-bucket --bucket b' \
   'aws --profile p --region r cloudformation delete-stack --stack-name s' 'aws s3 rm s3://b/x --recursive' \

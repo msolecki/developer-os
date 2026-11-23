@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@3c81ce452d97">
+<meta name="dos-source" content="CHANGELOG.md@b5742fc93172">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -58,6 +58,9 @@ inbox notes are marked unreviewed. <code>DEVELOPER_OS_BRAIN_INDEX=off</code> tur
 questions, runs pr-cycle with those answers, then waits for green CI, merges with a merge commit pinned to the
 reviewed head, and removes the head's worktree and branches. It merges only when you chose the merge, the
 verdict is <code>APPROVE</code> and every check is green (D31).</li>
+<li>Guard: an Edit, Write or MultiEdit into the knowledge vault asks when its new text matches brain-capture's
+secret patterns (a key, token, password or credential URL), so a missed redaction no longer reaches the
+vault unasked. The vault path is read from the user-level config only.</li>
 </ul>
     <h3 id="unreleased-changed">Changed</h3>
 <ul>

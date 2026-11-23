@@ -32,7 +32,8 @@ or anything under `~/.claude/hooks`, `rules`, `agents`, `skills`, `commands`, `p
 markers (SKIP_MARK, see skips_added()), and so does `rm`/`git rm` of one or `mv` of one to
 `.bak`, `.disabled` or `.skip`. When the hook input's `cwd` is inside a linked git worktree, an Edit, Write or
 MultiEdit also asks before a `file_path` in another worktree of the same repository, the main checkout or a
-sibling (other_worktree()); a session in the main checkout is never asked for it.
+sibling (other_worktree()); a session in the main checkout is never asked for it. A write into the knowledge vault
+(the path notices.py reads, never one from the project) asks when its new text matches SECRET (vault_secret()).
 
 A project can add questions, never remove one: `.claude/developer-os-guard.json` at the project root (the git
 top level above `cwd`) holds `{"ask": [{"command": ["make", "deploy"]}, {"path": "infra/prod/**"}]}`, literal
@@ -83,7 +84,12 @@ REASONS = {
     "noverify": "This skips the repository's git hooks (--no-verify, commit -n, HUSKY=0, LEFTHOOK=0, SKIP=, core.hooksPath).",
     "infra": "This destroys infrastructure or data, or deploys to production; git cannot bring it back.",
     "tests": "This skips, focuses or removes a test; do not delete or skip tests to make a build pass.",
+    "vault": "This writes what looks like a secret (a key, token, password or credential URL) into the knowledge vault; redact it first.",
 }
+# brain-capture's step 5 patterns: a backstop for its redaction, not a complete list.
+SECRET = re.compile(r"-----BEGIN|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}"
+                    r"|[sr]k_(live|test)_[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.eyJ|xox[baprs]-"
+                    r"|://[^/\s]+:[^@\s]+@|(password|passwd|secret|token|api_?key|PASSWORD|SECRET|TOKEN|API_KEY)\s*=\s*\"?[^\]\s\"\[]{6,}")
 INSTALL = {"i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall", "it", "add", "a",
            "update", "up", "upgrade", "remove", "rm", "uninstall", "un"}
 COMMIT = "Before this commit, run the project's fast check (lint, types, tests of the changed area) if you have not."
@@ -1102,6 +1108,48 @@ def skips_added(tool, inp, path):
     return sum(count(e.get("new_string")) - count(e.get("old_string")) for e in pairs) > 0
 
 
+def vault_path():
+    """The vault directory, read as notices.py reads it: the brain_vault option in the user-level settings.json, else
+    the `Brain vault:` line of the user-level CLAUDE.md; never from the project. None when unset or not a directory."""
+    config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    v = ""
+    try:
+        with open(os.path.join(config, "settings.json"), "rb") as f:
+            configs = json.loads(f.read(1 << 20).decode("utf-8", "replace")).get("pluginConfigs") or {}
+        for key, entry in configs.items():
+            if key.split("@")[0] == "developer-os":
+                o = (entry.get("options") or {}).get("brain_vault")
+                v = o.strip() if isinstance(o, str) else ""
+                break
+    except (OSError, ValueError, AttributeError):
+        pass
+    if not v:
+        try:
+            with open(os.path.join(config, "CLAUDE.md"), "rb") as f:
+                m = re.search(r"^Brain vault:[ \t]*(\S.*?)[ \t]*$", f.read(65536).decode("utf-8", "replace"), re.M)
+        except OSError:
+            return None
+        v = m.group(1) if m else ""
+    v = os.path.expanduser(v)
+    return os.path.realpath(v) if os.path.isabs(v) and os.path.isdir(v) else None
+
+
+def vault_secret(tool, inp, cwd, path):
+    """A Write, Edit or MultiEdit into the vault whose new text matches SECRET."""
+    vault = vault_path()
+    if not vault:
+        return False
+    where = target(cwd if isinstance(cwd, str) else os.getcwd(), path)
+    if where != vault and not where.startswith(vault + os.sep):
+        return False
+    if tool == "Write":
+        texts = [inp.get("content")]
+    else:
+        edits = inp.get("edits") if tool == "MultiEdit" else [inp]
+        texts = [e.get("new_string") for e in edits if isinstance(e, dict)] if isinstance(edits, list) else []
+    return any(isinstance(t, str) and SECRET.search(t) for t in texts)
+
+
 def ask(reason, rule=None, tool="Bash"):
     """Print the ask, then log it: the decision is out before the log is touched, so a log failure changes nothing."""
     print(json.dumps({"hookSpecificOutput": {
@@ -1125,6 +1173,8 @@ def main():
             ask(kind, kind, name)
         elif TEST_PATH.search(path) and skips_added(name, inp, path):
             ask("tests", "tests", name)
+        elif safe(vault_secret, name, inp, cwd, path):
+            ask("vault", "vault", name)
         elif safe(other_worktree, cwd, path):
             ask("worktree", "worktree", name)
         elif safe(project_path, cwd, path):
