@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-17
+last-verified: 2026-11-25
 ---
 
 # How to work: brain + code
@@ -213,7 +213,7 @@ rejected options are still on screen.
 ### 4. End of session: wrap up
 
 End the session with **session-retro**: it checks for unpushed or unmerged work, proposes cleanup,
-prints the status block, closes or updates the plan, and offers findings to apply, at most three under each of seven headings (lessons, rule candidates, check candidates, plan update, docs, developer-os feedback, skill or hook candidates). Apply only
+prints the status block, closes or updates the plan, and offers findings to apply, only the ones worth acting on under each of seven headings (lessons, rule candidates, check candidates, plan update, docs, developer-os feedback, skill or hook candidates). Apply only
 what you approve. After a long session (30+ tool calls) the `Stop` hook offers this wrap-up once;
 you approve each item.
 

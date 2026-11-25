@@ -132,8 +132,8 @@ standard.
 [Source](../../plugin/skills/audit-to-backlog/SKILL.md). A broad code audit by parallel
 specialists: security (`security-auditor`), performance (`performance-engineer`), tests
 (`qa-expert`, assessment only), correctness (`code-reviewer`), data (`database-reviewer`, skipped without a database), infra
-(`infra-reviewer`, skipped without IaC or CI), and inline passes for types,
-architecture and dead code, UI and accessibility. Every finding needs `file:line`, current-code
+(`infra-reviewer`, skipped without IaC or CI), and passes for types,
+architecture and dead code, UI and accessibility, each run inline or in a general-purpose agent with model `sonnet`. Every finding needs `file:line`, current-code
 evidence, a fix, a `Done when` and a runnable `Check` (a negated grep paired with `test -f`, no
 error swallowed into a default; not two commands joined by prose, a trailing `| head`, a test that
 already passes or a restatement of the current code); unsupported claims are rejected. Reviewers keep
@@ -254,7 +254,7 @@ clarification marker under open questions. It can turn the steps into `FEAT-` ba
   for you to close, amend or keep; the batch is topped up from the next ready items.
 - **Git-ignored backlog:** the `Owner` lines stay uncommitted in the orchestrator's checkout, and
   each delegate's brief carries the full item text, so the batch can still run in parallel worktrees.
-- **While running:** runs each item's `Check` itself from the delegate's worktree root on a `DONE`
+- **While running:** delegates for `S` and `M` items run on model `sonnet`; it runs each item's `Check` itself from the delegate's worktree root on a `DONE`
   report, the project's regeneration command for derived files once after the last merge, then the full build, types,
   tests and lint for the batch; classifies a failure before editing; stops after three failed
   repair cycles.

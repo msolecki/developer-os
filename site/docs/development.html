@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@d068cd5bdced">
+<meta name="dos-source" content="docs/development.md@a7c59df76991">
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-sans-latin-wght.woff2" crossorigin>
 <link rel="stylesheet" href="../assets/site.css">
 </head>
@@ -110,11 +110,13 @@
     removed inside one PR still fails. The same step fails a PR that changes <code>.gitleaks.toml</code> or
     <code>.gitleaksignore</code> or adds a <code>gitleaks&#58;allow</code> marker; the workflow file itself comes from the PR, so
     only a branch ruleset that requires review of <code>.github/</code> stops a PR that edits the step away.
+    It also installs the pinned skill-scanner (<code>cisco-ai-skill-scanner==2.3.2</code>, with <code>pipx</code>) for the Skill scan stage, and on a pull request
+    that changes <code>.skill-scanner.yaml</code> it prints a warning for a maintainer to review the suppressions by hand.
     <code>.github/dependabot.yml</code> proposes weekly updates of the SHA-pinned actions, each release at least 7 days old, as pull requests to <code>development</code>.
     GitHub reads that file from the default branch, so the target takes effect once a release brings it to <code>main</code>, and
     <code>target-branch</code> covers version updates only: a Dependabot security update still opens its pull request against
     <code>main</code>. Close it and carry the bump into <code>development</code> instead, since <code>main</code> moves only on a release (D20).
-    Dependabot does not read the agnix, gitleaks, ripgrep and claude-code versions in the run steps: bump them by hand, and
+    Dependabot does not read the agnix, gitleaks, ripgrep, claude-code and skill-scanner versions in the run steps: bump them by hand, and
     the claude-code one together with <code>claude_code</code> in <code>.agnix.toml</code> (the Tool versions stage).</p>
     <h2 id="the-site">The site</h2>
     <p><code>site/</code> is the public documentation site, hand-written HTML with no build:</p>
@@ -221,7 +223,9 @@ the ids. Set the release in the landing page's "Is it stable?" answer; the Count
 with <code>plugin.json</code>.</li>
       <li>When <code>check</code> is green on <code>development</code>: <code>git push origin origin/development:main</code>. Only a fast-forward is accepted; the <code>main</code> ruleset lets the repository admin push without a pull request (bypass mode "Always"), so <code>main</code> keeps the same SHAs as <code>development</code>.</li>
       <li><code>git tag -a v&lt;version&gt; -m v&lt;version&gt; origin/main &amp;&amp; git push origin v&lt;version&gt;</code> at once (a fetch prunes an unpushed tag; a lightweight <code>git tag</code> stops with "no tag message?" where <code>tag.gpgSign</code> is set), then <code>gh release create v&lt;version&gt; --notes-file &lt;the changelog section&gt;</code>. The <code>release-tags</code> ruleset forbids moving or deleting a <code>v*</code> tag.</li>
-      <li>Pushing <code>main</code> publishes <code>site/</code> to GitHub Pages.</li>
+      <li>Pushing <code>main</code> publishes <code>site/</code> to GitHub Pages. Then confirm that the <code>pages</code> run passed
+(<code>gh run list --workflow pages.yml -L 1</code>) and, when its deploy step failed, rerun it (<code>gh run rerun &lt;id&gt;</code>);
+the 0.3.1 deploy failed with "Deployment failed, try again later" and went unnoticed.</li>
     </ol>
     <h2 id="plans">Plans</h2>
     <p><code>docs/plans/</code> is git-ignored. Plans for this repository live there while a task runs and are deleted
