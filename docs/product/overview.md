@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-17
+last-verified: 2026-11-25
 ---
 
 # Product overview
@@ -100,7 +100,7 @@ Out of scope, on purpose:
 
 ## Status
 
-Release 0.2.8; installs follow `main`, which moves only on a release. See [CHANGELOG.md](../../CHANGELOG.md) for what each
+Release 0.3.1; installs follow `main`, which moves only on a release. See [CHANGELOG.md](../../CHANGELOG.md) for what each
 release changed.
 
 ## Primary risks

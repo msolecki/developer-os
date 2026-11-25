@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-17
+last-verified: 2026-11-25
 ---
 
 # Architecture overview
@@ -96,7 +96,7 @@ sequenceDiagram
   7 days) and the worktrees, cut to whole lines within 1024 bytes.
 - `notices.py`, for `source` `startup`, compares the plugin version with a marker in
   `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/notices/` (Claude Code has no install or
-  update hook) and, when the user-level `CLAUDE.md` names a vault, counts `_inbox/` notes older than 7
+  update hook) and, when a vault is configured (the `brain_vault` option in the user-level `settings.json`, else the `Brain vault:` line of the user-level `CLAUDE.md`), counts `_inbox/` notes older than 7
   days and reads the last line of `_reports/garden-log.md`. It shows due notices to the user as a
   `systemMessage`, each throttled by its own marker.
 - `brain-index.py`, for `source` `startup` or `clear`, reads the `Vault project slug:` line of `_Context.md`
@@ -108,7 +108,7 @@ sequenceDiagram
   drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
   purpose, so a mention such as `echo "pnpm add zod"` also asks; a quoted commit message (`-m "..."`, or a quoted-delimiter heredoc inside `$(…)`) is read as one word. Any parse failure prints nothing. For Edit, Write and MultiEdit it reads
   `tool_input.file_path` (and an Edit's `old_string`/`new_string`, a MultiEdit's `edits`, a Write's `content`) instead and asks when the path is a secret file or part of the user-level Claude config
-  (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops, or when an Edit, MultiEdit or Write adds a skip or focus marker to a test file (a Write against the file on disk; vendored `node_modules/`, `vendor/` and `.venv/` paths are not test files). A Bash call from one of the
+  (also under `CLAUDE_CONFIG_DIR`), compared without case and through up to 8 symlink hops, or when an Edit, MultiEdit or Write adds a skip or focus marker to a test file (a Write against the file on disk; vendored `node_modules/`, `vendor/` and `.venv/` paths are not test files), or when the path is inside the knowledge vault and the new text matches brain-capture's secret patterns. A Bash call from one of the
   read-only review agents, named by `agent_type`, also asks when it writes. A `git commit` that hits no category gets an
   `additionalContext` reminder to run the fast check, with no decision.
 - `patterns.py`, after an Edit, Write or MultiEdit, scans only the text the edit adds against a closed
@@ -181,7 +181,7 @@ implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to
 | Brain search | Vault Markdown (`rg`), skipping `_archive/`, `templates/`, `_views/` | - | Notes read go to the model provider |
 | Capture / compile | Session context; vault for duplicates | One file in `_inbox/` | Only as context |
 | Review / garden | Vault | Named moves and edits; `_reports/garden-log.md` | Only as context |
-| Notices hook | `plugin.json`, the user-level `CLAUDE.md`, `_inbox/*.md` (first 2 KB), `_reports/garden-log.md` (last 4 KB) | Markers in the plugin data directory | Counts and dates only, to the user and as context |
+| Notices hook | `plugin.json`, the user-level `settings.json` and `CLAUDE.md` (for the vault path), `_inbox/*.md` (first 2 KB), `_reports/garden-log.md` (last 4 KB) | Markers in the plugin data directory | Counts and dates only, to the user and as context |
 | Setup | `vault-template/`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` | Vault files; the two config edits | No |
 | Skill usage | `~/.claude/projects/**/*.jsonl` (counts only, `--no-filename`) | - | Counts only, as context |
 | Session retro | `git`, `gh pr list` (read-only) | Approved items only | `gh` queries GitHub |
@@ -202,12 +202,12 @@ web tools could send it further, which the plugin cannot prevent ([SECURITY.md](
 | External repositories | `.claude/settings.json`, hooks, `.mcp.json` of a client or OSS repo | Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread |
 | Subagent output | A delegate's edits | Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare `git status` and `git diff` |
 | Plugin updates | A new commit's hooks and rules | `SECURITY.md`: review the diff from the installed commit before updating; auto-update is off by default |
-| Project instructions | A cloned repository's `CLAUDE.md` naming a vault | The brain skills and the notices hook read the `Brain vault:` line from the user-level `CLAUDE.md` only (D5, D22); the hook prints counts, never note names |
+| Project instructions | A cloned repository's `CLAUDE.md` naming a vault | The brain skills and the notices hook read the `brain_vault` option from the user-level `settings.json`, else the `Brain vault:` line from the user-level `CLAUDE.md`, never a project file (D5, D22); the hook prints counts, never note names |
 | Session transcripts | Past conversations | skill-usage reads them and reports only counts; the capture-nudge hook reads the current session's transcript for its tool-call count and background-task and Monitor state, never printing its content; session-retro and docs-sync never open them |
 
 ## 7. Validation
 
 `scripts/check.sh` is the single local gate, run before every commit and by
-`.github/workflows/check.yml` (after an agnix lint step) on pushes to `development` and `main` and on pull requests. Its stages
+`.github/workflows/check.yml` (which sets up agnix, gitleaks and ripgrep first; the agnix lint runs inside the script) on pushes to `development` and `main` and on pull requests. Its stages
 and prerequisites are in [development.md](../development.md#the-check). Behavior is checked
 separately by the evals, by hand ([evals/README.md](../../evals/README.md)).

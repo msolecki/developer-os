@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-17
+last-verified: 2026-11-25
 ---
 
 # Development guide
@@ -79,11 +79,13 @@ and, on a pull request, runs `gitleaks git` over the PR's commits, so a secret a
 removed inside one PR still fails. The same step fails a PR that changes `.gitleaks.toml` or
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
 only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
+It also installs the pinned skill-scanner (`cisco-ai-skill-scanner==2.3.2`, with `pipx`) for the Skill scan stage, and on a pull request
+that changes `.skill-scanner.yaml` it prints a warning for a maintainer to review the suppressions by hand.
 `.github/dependabot.yml` proposes weekly updates of the SHA-pinned actions, each release at least 7 days old, as pull requests to `development`.
 GitHub reads that file from the default branch, so the target takes effect once a release brings it to `main`, and
 `target-branch` covers version updates only: a Dependabot security update still opens its pull request against
 `main`. Close it and carry the bump into `development` instead, since `main` moves only on a release (D20).
-Dependabot does not read the agnix, gitleaks, ripgrep and claude-code versions in the run steps: bump them by hand, and
+Dependabot does not read the agnix, gitleaks, ripgrep, claude-code and skill-scanner versions in the run steps: bump them by hand, and
 the claude-code one together with `claude_code` in `.agnix.toml` (the Tool versions stage).
 
 ## The site
@@ -255,7 +257,9 @@ Release, by hand:
 3. `git tag -a v<version> -m v<version> origin/main && git push origin v<version>` at once (a fetch
    prunes an unpushed tag; a lightweight `git tag` stops with "no tag message?" where `tag.gpgSign` is set),
    then `gh release create v<version> --notes-file <the changelog section>`. The `release-tags` ruleset forbids moving or deleting a `v*` tag.
-4. Pushing `main` publishes `site/` to GitHub Pages.
+4. Pushing `main` publishes `site/` to GitHub Pages. Then confirm that the `pages` run passed
+   (`gh run list --workflow pages.yml -L 1`) and, when its deploy step failed, rerun it (`gh run rerun <id>`);
+   the 0.3.1 deploy failed with "Deployment failed, try again later" and went unnoticed.
 
 ## Plans
 

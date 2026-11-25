@@ -7,7 +7,7 @@ A Claude Code plugin for working with an AI coding agent and an Obsidian vault a
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
-agents, output styles and rules) plus six small Python 3 hook scripts (standard library only), with no server, no database and
+agents, output styles and rules) plus seven small Python 3 hook scripts (standard library only), with no server, no database and
 nothing to install beyond `python3`.
 
 ## Install (Claude Code)
@@ -85,7 +85,7 @@ four one-line notices: after an install or update, the version and a link to the
 [changelog](https://msolecki.github.io/developer-os/docs/changelog.html) (an install adds a line on vault upkeep or on brain-setup); when inbox notes are older
 than 7 days, a brain-review reminder (at most weekly); when brain-garden has not run for 30 days, a
 garden reminder (at most monthly). Vault upkeep never runs on its own: the hook only reminds. It reads
-the vault path from your user-level `CLAUDE.md` only and prints counts, never note names. Set
+the vault path from the `brain_vault` option in your user-level `settings.json`, else from the `Brain vault:` line of your user-level `CLAUDE.md`, never from a project file, and prints counts, never note names. Set
 `DEVELOPER_OS_NOTICES=off` to turn it off.
 
 On a new session or after `/clear`, inside a git repository whose root `_Context.md` has a `Vault project slug:`
@@ -113,7 +113,7 @@ that destroys uncommitted or untracked work: `rm` with both a recursive and a fo
 `git reset --hard`, `git clean -f`, `git checkout`/`git restore` of `.`, `:/` or `*`, `git checkout -f`,
 `git switch -f`/`--discard-changes`, `git worktree remove --force`, `git rm -f`, `git stash drop`/`clear` or `find … -delete` (`git restore --staged .` and `git clean -n` pass), and an infrastructure, data or deploy destroy (`terraform destroy`, `prisma migrate reset`, `kubectl delete`, `vercel --prod` and the like), a cloud delete (`aws s3 rm --recursive`, `gcloud … delete`), a database drop (`psql -c "DROP …"`, `redis-cli FLUSHALL`), `docker system prune`, a publish or merge command (`npm publish`, `gh pr merge`, `gh release create`, `gh repo delete`) and a downloaded script piped into a shell (`curl … | sh`). A session in a linked git worktree is asked before an Edit or Write into the main checkout or a sibling worktree. A project can add its own questions in `.claude/developer-os-guard.json` (literal command prefixes and path globs; it can never remove one), and every ask is logged locally with its reason and rule, never the command (`DEVELOPER_OS_GUARD_LOG=off` disables the log). An Edit or Write asks when its file is a `.env`, `.envrc` or `.env.*` (not
 `.example`, `.sample`, `.template`, `.dist`), is under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube` or `~/.config/gh`, is `~/.npmrc`, `~/.pypirc`, `~/.git-credentials` or `~/.docker/config.json`, is under `~/.claude/` `hooks`,
-`rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`, or is `~/.claude.json`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` or `settings.local.json` (also under `$CLAUDE_CONFIG_DIR`). An Edit that adds a skip or focus marker (`it.skip(`, `.only(`, `@pytest.mark.skip`) to a test file asks, and so does `rm`, `git rm` or `mv … .bak` of one. Inside the six read-only agents (the five reviewers and dependency-upgrader), a Bash
+`rules`, `agents`, `skills`, `commands`, `plugins` or `output-styles`, or is `~/.claude.json`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` or `settings.local.json` (also under `$CLAUDE_CONFIG_DIR`). An Edit that adds a skip or focus marker (`it.skip(`, `.only(`, `@pytest.mark.skip`) to a test file asks, and so does `rm`, `git rm` or `mv … .bak` of one. An Edit, Write or MultiEdit into the knowledge vault asks when its new text matches brain-capture's secret patterns (a private key header, a cloud or API key, a JWT, a URL with a password, `password=` and the like). Inside the seven read-only agents (the five reviewers, dependency-upgrader and scout), a Bash
 call that writes outside the temp directories (`sed -i`, `tee`, `rm`, `mv`, `cp`, a redirect into a file, `prettier --write`, `eslint --fix`, `gh pr checkout`, a git command that changes the
 tree, history or remotes) asks too. A `git commit` that asks for nothing gets a one-line reminder, as context for
 the agent, to run the fast check first. `$IFS`
