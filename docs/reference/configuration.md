@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-11-17
+last-verified: 2026-11-25
 ---
 
 # Configuration reference
@@ -14,8 +14,8 @@ optional file of guard rules. This page lists every one of them.
 
 | Setting | Where | Read by | Written by |
 |---|---|---|---|
-| Plugin option `brain_vault` (optional, a directory) | `pluginConfigs` in user or managed settings; Claude Code ignores project and local entries (D5) | All brain skills and the notices and note-index hooks, before the `Brain vault:` line | The user, in the plugin's configuration dialog or `/config` |
-| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` only; a project's `CLAUDE.md`/`AGENTS.md` is never read for it (D5) | All brain skills, unless you or a calling skill name the path; the core rule that runs brain-search before large tasks; the notices and note-index hooks | brain-setup, after approval |
+| Plugin option `brain_vault` (optional, a directory) | `pluginConfigs` in user or managed settings; Claude Code ignores project and local entries (D5) | All brain skills and the notices, note-index and guard hooks, before the `Brain vault:` line | The user, in the plugin's configuration dialog or `/config` |
+| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` only; a project's `CLAUDE.md`/`AGENTS.md` is never read for it (D5) | All brain skills, unless you or a calling skill name the path; the core rule that runs brain-search before large tasks; the notices, note-index and guard hooks | brain-setup, after approval |
 | Vault in `permissions.additionalDirectories` | `~/.claude/settings.json` | Claude Code, so the vault can be read from any project | brain-setup, after approval |
 | `"autoMemoryEnabled": false` (recommended, D24) | `~/.claude/settings.json`; `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the environment wins over it | Claude Code: no auto-memory files are created or loaded; existing ones stay on disk | brain-setup, after a separate yes; brain-import-memory, as one of its numbered items; the `/memory` toggle writes the same key |
 | Auto-memory folder | `~/.claude/projects/<project>/memory/`, or `autoMemoryDirectory` | brain-import-memory, which never edits or deletes it | Claude Code, while auto memory is on |

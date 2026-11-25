@@ -22,7 +22,7 @@ list of stages is in [docs/development.md](docs/development.md#the-check). CI ru
 
 Hook tests live in `tests/*.test.sh` and run with `sh` (they call `python3`); after changing a hook script, run its test
 directly from the repository root, for example `sh tests/guard.test.sh`,
-`sh tests/capture-nudge.test.sh`, `sh tests/notices.test.sh`, `sh tests/patterns.test.sh`, `sh tests/repeat-failure.test.sh` or `sh tests/state-card.test.sh`.
+`sh tests/brain-index.test.sh`, `sh tests/capture-nudge.test.sh`, `sh tests/notices.test.sh`, `sh tests/patterns.test.sh`, `sh tests/repeat-failure.test.sh` or `sh tests/state-card.test.sh`.
 
 Prerequisites on `PATH`:
 

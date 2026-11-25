@@ -171,8 +171,9 @@
           <tr><td>Delete a note</td><td><span class="badge never">never</span></td><td>No skill deletes; notes retire to <code>_archive/</code></td></tr>
           <tr><td>Edit <code>~/.claude/CLAUDE.md</code> or <code>settings.json</code></td><td><span class="badge ok">diff first</span></td><td>brain-setup, brain-import-memory</td></tr>
           <tr><td>Edit an instruction file, create backlog files or add backlog items</td><td><span class="badge ok">after approval</span></td><td>instruction-review and session-retro show the diff; audit-to-backlog, project-baseline, project-init and spec write the backlog</td></tr>
-          <tr><td>Edit code for review findings, commit, push</td><td><span class="badge ask">asks you</span></td><td>fix-pr asks per edit, per commit and before each push; pr-cycle commits the base merge after a green fast check and fixes after one A/B/C answer, then asks before pushing; implement-backlog commits only green batch work and never pushes</td></tr>
-          <tr><td>Merge a PR, push to a base branch, force-push, rebase a pushed branch</td><td><span class="badge never">never</span></td><td>No skill does this</td></tr>
+          <tr><td>Edit code for review findings, commit, push</td><td><span class="badge ask">asks you</span></td><td>fix-pr asks per edit, per commit and before each push; pr-cycle commits the base merge after a green fast check and fixes after one A/B/C answer, then asks before pushing; pr-finish asks the push once, up front; implement-backlog commits only green batch work and never pushes</td></tr>
+          <tr><td>Merge a PR</td><td><span class="badge ask">asks you</span></td><td>Only pr-finish, and only when you chose the merge in its up-front questions, the verdict is APPROVE and CI is green; no other skill merges</td></tr>
+          <tr><td>Push to a base branch, force-push, rebase a pushed branch</td><td><span class="badge never">never</span></td><td>No skill does this</td></tr>
           <tr><td>Send email, chat messages or issues</td><td><span class="badge never">never</span></td><td>client-reply drafts; session-retro prints a command for you</td></tr>
           <tr><td>Install a dependency</td><td><span class="badge ask">asks you</span></td><td>A core rule, and the guard hook</td></tr>
         </tbody>
@@ -194,7 +195,7 @@
       <li>The state card is at most 1 KB.</li>
       <li>The Stop hook reads tool-call counts and background-task ids, paths and times, never message content.</li>
     </ul>
-    <p class="small">The rules load with a plain <code>cat</code>; the other six are Python 3 scripts with the standard library only and no network calls, and they fail open: on an error they exit silently and the normal permission flow applies. <a href="docs/reference/hooks.html">Hooks reference</a>, <a href="docs/workflow.html#privacy">privacy</a>, <a href="docs/security.html">security policy</a>.</p>
+    <p class="small">The rules load with a plain <code>cat</code>; the other seven are Python 3 scripts with the standard library only and no network calls, and they fail open: on an error they exit silently and the normal permission flow applies. <a href="docs/reference/hooks.html">Hooks reference</a>, <a href="docs/workflow.html#privacy">privacy</a>, <a href="docs/security.html">security policy</a>.</p>
 
     <h2 id="engineering-rules-in-every-session">Engineering rules in every session</h2>
     <p>An agent commits without the right checks, claims "fixed" without evidence and reviews its own code. The core rules load at session start and are capped at 8900 bytes, so they do not crowd out your own context.</p>
@@ -241,7 +242,7 @@
         <ul class="checklist no">
           <li>you want memory that writes itself with no review: approval is the point;</li>
           <li>you need a server, a search index or a shared team knowledge base: there is no runtime;</li>
-          <li>you want agents to merge, push to a base branch or send messages on their own: no skill does;</li>
+          <li>you want agents to merge without an up-front yes from you, push to a base branch or send messages on their own: no skill does;</li>
           <li>you work mainly in another agent than Claude Code: developer-os supports Claude Code only.</li>
         </ul>
       </div>
