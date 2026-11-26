@@ -1,0 +1,250 @@
+WEBVTT
+
+1
+00:00:00.648 --> 00:00:04.168
+This is developer-os: long-term memory for Claude Code,
+
+2
+00:00:04.168 --> 00:00:06.600
+and the discipline to actually use it.
+
+3
+00:00:07.568 --> 00:00:10.084
+Every Claude Code session starts from zero.
+
+4
+00:00:10.369 --> 00:00:14.729
+On Monday, you explain why webhooks are deduplicated by event ID.
+
+5
+00:00:15.020 --> 00:00:17.091
+On Tuesday, you explain it again.
+
+6
+00:00:17.321 --> 00:00:18.679
+And on Wednesday…
+
+7
+00:00:18.679 --> 00:00:19.159
+again.
+
+8
+00:00:19.825 --> 00:00:23.876
+Decisions, lessons, and the reasons behind them simply evaporate.
+
+9
+00:00:24.303 --> 00:00:28.286
+developer-os gives the agent a long-term memory that you control.
+
+10
+00:00:29.136 --> 00:00:34.786
+developer-os plugs into Claude Code as a set of rules, skills, agents, and hooks.
+
+11
+00:00:35.169 --> 00:00:39.785
+Next to it sits your brain: an Obsidian vault of plain Markdown files.
+
+12
+00:00:40.182 --> 00:00:44.594
+Before it starts work, the agent searches the vault, and cites the notes it used.
+
+13
+00:00:44.994 --> 00:00:48.346
+New knowledge goes in only as drafts, into the inbox.
+
+14
+00:00:49.795 --> 00:00:53.825
+You review those drafts, and only what you approve becomes a real note.
+
+15
+00:00:56.302 --> 00:01:00.932
+Code facts, plans, and ADRs stay in the repository, next to the code.
+
+16
+00:01:02.733 --> 00:01:08.623
+Inside, it's all plain files: one core rules file, loaded into every session.
+
+17
+00:01:08.623 --> 00:01:10.076
+Thirty-four skills.
+
+18
+00:01:10.076 --> 00:01:11.988
+Eleven specialist agents.
+
+19
+00:01:11.988 --> 00:01:14.206
+And eight small Python hooks.
+
+20
+00:01:14.206 --> 00:01:17.265
+No server, no database, nothing to host.
+
+21
+00:01:17.721 --> 00:01:21.544
+During a session, developer-os steps in at five moments.
+
+22
+00:01:21.904 --> 00:01:24.359
+When a session starts, it loads the core rules,
+
+23
+00:01:24.359 --> 00:01:26.971
+and a list of your project's notes from the vault.
+
+24
+00:01:27.462 --> 00:01:31.329
+Before a risky command, like a force push or a dependency install,
+
+25
+00:01:31.329 --> 00:01:33.497
+the guard asks for your confirmation.
+
+26
+00:01:34.431 --> 00:01:37.856
+When an edit adds a risky pattern, like shell=True,
+
+27
+00:01:37.856 --> 00:01:40.275
+the agent hears about it right away.
+
+28
+00:01:41.415 --> 00:01:45.213
+When the same call fails three times, it's told to stop retrying,
+
+29
+00:01:45.213 --> 00:01:46.323
+and find the cause.
+
+30
+00:01:48.424 --> 00:01:51.442
+And after a long session, it suggests a proper wrap-up.
+
+31
+00:01:54.679 --> 00:01:55.495
+Hooks ask.
+
+32
+00:01:55.495 --> 00:01:56.881
+They never block.
+
+33
+00:01:59.005 --> 00:02:00.468
+This is the knowledge loop.
+
+34
+00:02:00.911 --> 00:02:02.297
+You work in a session.
+
+35
+00:02:02.712 --> 00:02:06.872
+When something is worth keeping, brain-capture writes a draft note to the inbox.
+
+36
+00:02:07.209 --> 00:02:12.076
+Secrets are redacted, and the draft expires in thirty days if nobody reviews it.
+
+37
+00:02:13.812 --> 00:02:17.673
+Then you run brain-review: promote, merge, or reject, but only the notes you name.
+
+38
+00:02:17.856 --> 00:02:19.486
+A promoted note becomes active.
+
+39
+00:02:22.813 --> 00:02:29.411
+In the next session, the agent finds it, and reads it before touching that topic.
+
+40
+00:02:31.981 --> 00:02:36.858
+And once a month, brain-garden flags stale notes, duplicates, and broken links.
+
+41
+00:02:38.636 --> 00:02:41.138
+Day to day, the workflow looks like this.
+
+42
+00:02:41.506 --> 00:02:44.883
+spec turns an idea into a specification and a plan.
+
+43
+00:02:45.338 --> 00:02:48.525
+implement-backlog builds it in small, checked batches.
+
+44
+00:02:48.906 --> 00:02:51.719
+code-review rates findings from P0 to P3,
+
+45
+00:02:51.719 --> 00:02:55.837
+and every serious one is double-checked by a fresh verifier.
+
+46
+00:02:56.223 --> 00:03:02.028
+fix-pr applies the fixes you approve, and pr-finish waits for green CI, merges,
+
+47
+00:03:02.028 --> 00:03:03.056
+and cleans up.
+
+48
+00:03:03.517 --> 00:03:06.692
+At the end of the session, session-retro tells you what's done,
+
+49
+00:03:06.692 --> 00:03:07.952
+and what's worth keeping.
+
+50
+00:03:08.322 --> 00:03:10.321
+Every week, review the inbox.
+
+51
+00:03:10.523 --> 00:03:12.445
+Every month, garden the vault.
+
+52
+00:03:21.535 --> 00:03:26.764
+Altogether, thirty-four skills: memory, planning, building, review and shipping,
+
+53
+00:03:26.764 --> 00:03:32.059
+repository health, and conventions that load on their own, when they're relevant.
+
+54
+00:03:35.810 --> 00:03:37.219
+So, what do you get?
+
+55
+00:03:37.510 --> 00:03:40.787
+Context from minute one, instead of starting from zero.
+
+56
+00:03:41.137 --> 00:03:45.180
+Knowledge you control: nothing becomes a fact until you approve it.
+
+57
+00:03:45.569 --> 00:03:48.274
+Guardrails that ask before anything risky.
+
+58
+00:03:49.559 --> 00:03:51.448
+Reviews backed by evidence.
+
+59
+00:03:53.640 --> 00:03:57.195
+And nothing to host: just Markdown, and a few Python scripts.
+
+60
+00:04:02.323 --> 00:04:04.336
+Install it with two commands.
+
+61
+00:04:04.336 --> 00:04:05.586
+The agent forgets.
+
+62
+00:04:05.586 --> 00:04:06.906
+Your vault doesn't.
+

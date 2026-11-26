@@ -2,6 +2,8 @@
 
 <a href="https://www.producthunt.com/products/developer-os-2?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-developer-os-2" target="_blank" rel="noopener noreferrer"><img alt="Developer OS - Long-term memory and engineering rules for Claude Code | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1286380&amp;theme=light&amp;t=1792582595920"></a>
 
+<p align="center"><a href="https://msolecki.github.io/developer-os/#video"><img src="site/assets/video/explainer-thumb.jpg" alt="Watch the 4-minute developer-os explainer, with voice-over" width="720"></a></p>
+
 
 A Claude Code plugin for working with an AI coding agent and an Obsidian vault as its long-term
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
