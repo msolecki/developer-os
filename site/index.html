@@ -70,6 +70,7 @@
     </nav>
     <a class="btn btn-solid" href="#install">Get started</a>
   </div>
+  <div class="status-strip" aria-hidden="true"><span>Plain Markdown + Python 3</span><span class="live">Actively maintained</span><span>MIT licensed</span></div>
 </header>
 
 <main id="main" class="land">
@@ -109,9 +110,10 @@
     </div>
   </div>
 
-  <section id="video">
+  <section id="video" class="dark">
     <div class="wrap">
-      <h2>Four minutes: how it fits together.</h2>
+      <p class="sec-label"><b>01</b>watch</p>
+      <h2><span>Four minutes:</span> how it fits together.</h2>
       <p class="section-copy">An animated walk-through with voice-over: how the agent connects to your vault, what each hook does in a session, the knowledge loop, which command to run when, and what you gain. Captions are available in the player.</p>
       <figure class="video-frame">
         <video controls preload="none" playsinline poster="assets/video/explainer-poster.jpg" width="1920" height="1080">
@@ -123,9 +125,16 @@
     </div>
   </section>
 
+  <section class="statement" aria-label="What it does">
+    <div class="wrap">
+      <p>Most of what it does, you never see: <b>the note read before a change, the force push that waits for your yes, the lesson that outlives the session.</b> <span>The part that becomes knowledge, you approve.</span></p>
+    </div>
+  </section>
+
   <section id="session" class="alt">
     <div class="wrap">
-      <h2>One task, from first prompt to wrap-up.</h2>
+      <p class="sec-label"><b>02</b>a session</p>
+      <h2><span>One task,</span> from first prompt to wrap-up.</h2>
       <p class="section-copy">One session, played back. The task is an example; the lines marked by a hook or the guard are the plugin's own wording. Pick a moment to jump to it.</p>
       <div class="wf-term-wrap">
         <div>
@@ -143,7 +152,8 @@
 
   <section id="inside">
     <div class="wrap">
-      <h2>What ships in the plugin.</h2>
+      <p class="sec-label"><b>03</b>inside</p>
+      <h2><span>What ships</span> in the plugin.</h2>
       <p class="section-copy">Skills load only when a task calls for them: name one, or describe the situation the way you would to a colleague. Each skill page says when it runs, what it writes, where it stops and what it never does.</p>
       <ul class="ship-facts">
         <li><span>Skills, all groups</span><span>34</span></li>
@@ -183,9 +193,10 @@
   </section>
 
   <section id="install" class="alt">
+    <div class="wrap"><p class="sec-label"><b>04</b>install</p></div>
     <div class="wrap install-cols">
       <div>
-        <h2>Running in about five minutes.</h2>
+        <h2><span>Running</span> in about five minutes.</h2>
         <ol class="steps">
           <li>
             <h3>Install the plugin in Claude Code</h3>
